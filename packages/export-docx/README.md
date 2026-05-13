@@ -16,4 +16,4 @@ const blob = await documentToDocxBlob(editor.snapshot, { title: 'My document' })
 
 ## License
 
-[AGPL-3.0-or-later](./LICENSE) © Sofer Contributors. Part of the [Sofer](https://github.com/rafael145a/sofer) editor monorepo.
+[AGPL-3.0-or-later](./LICENSE) © Rafael Marreca. Part of the [Sofer](https://github.com/rafael145a/sofer) editor monorepo.

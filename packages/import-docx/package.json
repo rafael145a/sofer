@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "@sofer/import-docx — Parse .docx (OOXML) in browser or Node into a SerializedDocument loadable by the Sofer editor.",
   "license": "AGPL-3.0-or-later",
-  "author": "Sofer Contributors",
+  "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/import-docx#readme",
   "repository": {
     "type": "git",

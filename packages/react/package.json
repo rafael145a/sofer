@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "@sofer/react — React renderer + useEditor hook + <Editor>/<Toolbar> components with built-in A4 pagination for the Sofer editor.",
   "license": "AGPL-3.0-or-later",
-  "author": "Sofer Contributors",
+  "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/react#readme",
   "repository": {
     "type": "git",
