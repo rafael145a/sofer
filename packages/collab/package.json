@@ -1,6 +1,6 @@
 {
   "name": "@sofer/collab",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "@sofer/collab — Hocuspocus binding for real-time collaboration with the Sofer editor. Bidirectional Y.Doc sync + awareness.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
@@ -21,7 +21,6 @@
     "hocuspocus",
     "sofer"
   ],
-  "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",

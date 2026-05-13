@@ -1,6 +1,6 @@
 {
   "name": "@sofer/export-docx",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "@sofer/export-docx — Emit .docx from a Sofer SerializedDocument. Round-trip with @sofer/import-docx.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
@@ -21,7 +21,6 @@
     "word",
     "sofer"
   ],
-  "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@sofer/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "@sofer/core — Y.js-backed document model: blocks, marks, commands, history. Framework-agnostic foundation of the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
@@ -21,7 +21,6 @@
     "document-model",
     "sofer"
   ],
-  "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
