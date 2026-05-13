@@ -1,0 +1,107 @@
+name: Publish @sofer/* to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # cria tags por pacote após publicar
+      id-token: write   # OIDC pro npm Trusted Publisher + provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Garante npm >= 11.5.1 (Trusted Publisher OIDC)
+        run: |
+          npm install -g npm@latest --force
+          npm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Sequencial e em ordem topológica: core publica antes dos demais, porque
+      # pnpm publish reescreve `workspace:*` pra `^<version>` real (a do core
+      # precisa existir no npm quando o consumidor for instalar @sofer/react).
+      - name: Publica pacotes (skip private / já publicados)
+        id: publish
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: |
+          set -euo pipefail
+          : > /tmp/sofer-published-tags
+          PKGS="core react collab import-docx export-docx export-pdf"
+          for pkg in $PKGS; do
+            cd "packages/$pkg"
+            NAME=$(node -p "require('./package.json').name")
+            VERSION=$(node -p "require('./package.json').version")
+            PRIVATE=$(node -p "require('./package.json').private || false")
+            if [ "$PRIVATE" = "true" ]; then
+              echo "::notice title=Skip private::$NAME marcado private — não publica"
+              cd - >/dev/null
+              continue
+            fi
+            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "::notice title=Já publicado::$NAME@$VERSION — skip"
+            else
+              echo "::notice title=Publicando::$NAME@$VERSION"
+              pnpm publish --access public --no-git-checks
+              echo "${NAME}@${VERSION}" >> /tmp/sofer-published-tags
+            fi
+            cd - >/dev/null
+          done
+          if [ -s /tmp/sofer-published-tags ]; then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tagged=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cria tags git pros pacotes publicados
+        if: steps.publish.outputs.tagged == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('/tmp/sofer-published-tags', 'utf8');
+            const tags = raw.split('\n').map(s => s.trim()).filter(Boolean);
+            for (const tag of tags) {
+              try {
+                await github.rest.git.createRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `refs/tags/${tag}`,
+                  sha: context.sha,
+                });
+                core.notice(`Tag ${tag} criada`);
+              } catch (e) {
+                if (e.status === 422) {
+                  core.notice(`Tag ${tag} já existe — skip`);
+                } else {
+                  throw e;
+                }
+              }
+            }
