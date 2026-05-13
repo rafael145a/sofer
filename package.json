@@ -1,0 +1,27 @@
+{
+  "name": "editor-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Custom rich text editor with real pagination, collaboration and Word-style image layout",
+  "scripts": {
+    "dev": "pnpm --filter playground dev",
+    "build": "pnpm -r --filter=./packages/* build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r exec rm -rf dist node_modules/.cache .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@10.11.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

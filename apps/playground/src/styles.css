@@ -1,0 +1,655 @@
+:root {
+  --bg: #f4f4f7;
+  --paper: #ffffff;
+  --ink: #1a1a1f;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --border: #e5e7eb;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); }
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+header {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header h1 { margin: 0 0 4px; font-size: 18px; }
+.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.hint kbd {
+  background: #eef0f3;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.toolbar { display: flex; gap: 8px; }
+.toolbar button {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toolbar button:hover { background: #f8f9fb; }
+
+.ed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.ed-toolbar-group {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  background: #f8f9fb;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.ed-toolbar-btn {
+  background: var(--paper);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 28px;
+  color: var(--ink);
+}
+.ed-toolbar-btn:hover { background: #eef0f3; }
+.ed-toolbar-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--paper);
+  border-color: var(--accent);
+}
+.ed-toolbar-btn[aria-pressed="true"] strong,
+.ed-toolbar-btn[aria-pressed="true"] em,
+.ed-toolbar-btn[aria-pressed="true"] u,
+.ed-toolbar-btn[aria-pressed="true"] s { color: inherit; }
+
+.ed-toolbar-select {
+  background: var(--paper);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 13px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.ed-toolbar-select:hover { background: #eef0f3; }
+
+.ed-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.ed-toolbar-label input[type="color"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.ed-toolbar-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.ed-history-controls {
+  display: flex;
+  gap: 8px;
+}
+.ed-history-controls button {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ed-history-controls button:hover { background: #f8f9fb; }
+.ed-history-controls .export-sep {
+  width: 1px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.snapshot-status {
+  font-size: 12px;
+  padding: 0 8px;
+  align-self: center;
+}
+.snapshot-status-ok { color: #166534; }
+.snapshot-status-err { color: #b91c1c; }
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  padding: 24px;
+}
+
+/* The page viewport. .ed-root is block-level so .ed-page can margin:auto-center. */
+.page-frame {
+  padding: 24px 0;
+}
+
+.ed-root {
+  outline: none;
+  font-family: "Arial", "Helvetica", sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: var(--ink);
+  /* Preserve consecutive whitespace and explicit newlines typed by the user.
+     Inherited by all blocks, so .ed-paragraph/.ed-heading/etc. don't need it. */
+  white-space: pre-wrap;
+  /* Establish positioning context for floating overlays (e.g. image resize). */
+  position: relative;
+}
+.ed-root:focus { outline: none; }
+
+/* Pagination — Sub-phase 3.1
+   IMPORTANT: the contenteditable (.ed-root) must NOT be display:flex —
+   Chromium/Safari fail to render the caret when contenteditable is a flex
+   container. Use block layout with margin-based centering instead. */
+.ed-root--paged {
+  display: block;
+}
+.ed-page {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  width: var(--ed-page-width, 794px);
+  height: var(--ed-page-height, 1123px);
+  margin: 0 auto 24px;
+  overflow: hidden;
+  position: relative;
+}
+.ed-page-content {
+  height: 100%;
+  padding:
+    var(--ed-page-margin-top, 96px)
+    var(--ed-page-margin-right, 96px)
+    var(--ed-page-margin-bottom, 96px)
+    var(--ed-page-margin-left, 96px);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+/* Link dialog (native <dialog>). */
+.ed-link-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 360px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.ed-link-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.25);
+}
+.ed-link-dialog-form { display: flex; flex-direction: column; gap: 12px; }
+.ed-link-dialog-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.ed-link-dialog-row input {
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+}
+.ed-link-dialog-row input:focus { border-color: var(--accent); }
+.ed-link-dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ed-link-dialog-confirm { display: flex; gap: 8px; }
+.ed-link-dialog button {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  cursor: pointer;
+}
+.ed-link-dialog button:hover { background: #f8f9fb; }
+.ed-link-dialog-apply {
+  background: var(--accent) !important;
+  color: var(--paper);
+  border-color: var(--accent) !important;
+}
+.ed-link-dialog-apply:hover { filter: brightness(1.05); }
+.ed-link-dialog-remove {
+  color: #b91c1c;
+  border-color: #fecaca !important;
+}
+
+/* Page header/footer rendered as real DOM with contentEditable={false}. */
+.ed-page-header,
+.ed-page-footer {
+  position: absolute;
+  inset-inline:
+    var(--ed-page-margin-left, 96px)
+    var(--ed-page-margin-right, 96px);
+  font-size: 9pt;
+  color: var(--muted);
+  user-select: none;
+}
+.ed-page-header { top: 24px; }
+.ed-page-footer { bottom: 24px; text-align: center; }
+
+/* ------------------------------------------------------------------
+   Print / Export PDF
+   Each .ed-page maps 1:1 to one physical A4 page. Pagination decisions
+   computed by usePageLayout transfer verbatim to the PDF.
+   ------------------------------------------------------------------ */
+/* Print rules for the playground only hide UI chrome. Page sizing and break
+ * rules come from `serializePaginatedHtml` (in `@editor/export-pdf`) so the
+ * same logic governs both the in-app print dialog and server-side rendering.
+ */
+@media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  header,
+  aside,
+  .toolbar,
+  .ed-toolbar,
+  .ed-history-controls,
+  .ed-link-dialog,
+  .hint,
+  .ed-image-overlay {
+    display: none !important;
+  }
+  .layout,
+  main {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    grid-template-columns: none !important;
+    background: white !important;
+  }
+  .page-frame {
+    padding: 0 !important;
+    background: white !important;
+  }
+  .ed-root {
+    display: block !important;
+    background: white !important;
+  }
+}
+
+.ed-paragraph {
+  margin: 0 0 0.5em;
+  min-height: 1.5em; /* keep empty paragraphs visible */
+}
+
+.ed-heading {
+  margin: 0.5em 0 0.25em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.ed-heading-1 { font-size: 28pt; }
+.ed-heading-2 { font-size: 22pt; }
+.ed-heading-3 { font-size: 18pt; }
+.ed-heading-4 { font-size: 14pt; }
+.ed-heading-5 { font-size: 12pt; }
+.ed-heading-6 { font-size: 11pt; color: var(--muted); }
+
+.ed-blockquote {
+  margin: 0 0 0.5em;
+  padding: 0.25em 12px;
+  border-inline-start: 3px solid var(--border);
+  color: var(--muted);
+  min-height: 1.5em;
+}
+
+.ed-codeblock {
+  margin: 0 0 0.5em;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11pt;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  min-height: 1.5em;
+  overflow-x: auto;
+}
+.ed-codeblock code {
+  font-family: inherit;
+  background: transparent;
+  color: inherit;
+}
+
+.ed-block[dir="rtl"] { text-align: start; }
+.ed-align-left { text-align: left; }
+.ed-align-center { text-align: center; }
+.ed-align-right { text-align: right; }
+.ed-align-justify { text-align: justify; }
+
+/*
+ * Lists — the model is flat; the renderer builds a true nested <ol>/<ul> tree
+ * so the browser counts each level independently. Indentation comes from the
+ * native padding-inline-start of nested lists.
+ */
+.ed-list {
+  margin: 0 0 0.5em;
+  padding-inline-start: 28px;
+}
+/* Nested lists get tighter vertical spacing. */
+.ed-list .ed-list {
+  margin-block: 0;
+}
+.ed-list-bullet { list-style-type: disc; }
+.ed-list-bullet .ed-list-bullet { list-style-type: circle; }
+.ed-list-bullet .ed-list-bullet .ed-list-bullet { list-style-type: square; }
+.ed-list-bullet .ed-list-bullet .ed-list-bullet .ed-list-bullet { list-style-type: disc; }
+.ed-list-bullet .ed-list-bullet .ed-list-bullet .ed-list-bullet .ed-list-bullet { list-style-type: circle; }
+
+.ed-list-ordered { list-style-type: decimal; }
+.ed-list-ordered .ed-list-ordered { list-style-type: lower-alpha; }
+.ed-list-ordered .ed-list-ordered .ed-list-ordered { list-style-type: lower-roman; }
+.ed-list-ordered .ed-list-ordered .ed-list-ordered .ed-list-ordered { list-style-type: decimal; }
+.ed-list-ordered .ed-list-ordered .ed-list-ordered .ed-list-ordered .ed-list-ordered { list-style-type: lower-alpha; }
+
+.ed-listitem {
+  margin: 0;
+  min-height: 1.5em;
+}
+
+/* Tables — Phase 4 */
+.ed-table-wrap {
+  position: relative;
+  margin: 0 0 0.5em;
+}
+.ed-col-resize-handle {
+  /* Subtle by default; visible on hover. */
+  background: transparent;
+  transition: background 0.1s ease-in;
+  touch-action: none;
+}
+.ed-col-resize-handle:hover {
+  background: rgba(37, 99, 235, 0.25);
+}
+.ed-col-resize-handle:active {
+  background: rgba(37, 99, 235, 0.5);
+}
+.ed-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.ed-cell {
+  border: 1px solid #cbd5e1;
+  padding: 6px 8px;
+  vertical-align: top;
+  min-height: 1.5em;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.ed-cell:focus,
+.ed-cell:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ed-cell--selected {
+  background: rgba(37, 99, 235, 0.18);
+}
+.ed-cell--selected:focus,
+.ed-cell--selected:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Toolbar table popover. */
+.ed-toolbar-tablemenu {
+  position: relative;
+}
+.ed-table-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  z-index: 20;
+  min-width: 220px;
+}
+.ed-table-picker-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.ed-table-picker-grid {
+  display: grid;
+  gap: 2px;
+}
+.ed-table-picker-cell {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.ed-table-picker-cell.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.ed-table-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+.ed-table-actions hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 0 6px;
+}
+.ed-table-actions button {
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ed-table-actions button:hover {
+  background: #eef0f3;
+}
+.ed-table-actions .ed-table-delete {
+  color: #b91c1c;
+}
+.ed-table-actions .ed-table-delete:hover {
+  background: #fef2f2;
+}
+
+aside {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 80vh;
+}
+aside h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+aside pre {
+  margin: 0 0 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+/* ---- Fase 5: imagens inline + overlay de resize ---- */
+img[data-embed="image"] {
+  user-select: none;
+  max-width: 100%;
+}
+.ed-image-overlay {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  outline: 2px solid #4a8cff;
+  outline-offset: -1px;
+  z-index: 5;
+}
+.ed-image-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #4a8cff;
+  border: 1px solid #fff;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+.ed-image-handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.ed-image-handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.ed-image-handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.ed-image-handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+
+/* ---- Fase 6: imagens flutuantes (wrap + z-order) ---- */
+/*
+ * Every block becomes a positioning context so behind/front images are
+ * positioned relative to their anchor paragraph.
+ *
+ * `isolation: isolate` is the critical bit: it creates a self-contained
+ * stacking context so an image with `z-index: -1` ("behind text") stays behind
+ * its block's own text but does NOT fall behind the page's white background
+ * (which would happen if z-index escaped to the document root stacking context).
+ */
+.ed-page-content .ed-block {
+  position: relative;
+  isolation: isolate;
+}
+img[data-embed="image"][data-embed-layout="behind"] {
+  user-select: none;
+}
+img[data-embed="image"][data-embed-layout="front"] {
+  user-select: none;
+}
+/*
+ * The center "move" area of the resize overlay. Only visible when the embed
+ * isn't inline; pointer-events: auto lets it intercept drags without
+ * interfering with text selection on inline images.
+ */
+.ed-image-move {
+  position: absolute;
+  inset: 0;
+  cursor: move;
+  pointer-events: auto;
+}
+
+/* Page-config dialog (Fase 9.6). */
+.ed-page-config-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 480px;
+  max-width: 640px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.ed-page-config-dialog::backdrop { background: rgba(0, 0, 0, 0.25); }
+.ed-page-config-form { display: flex; flex-direction: column; gap: 12px; }
+.ed-page-config-form h2 { margin: 0 0 4px; font-size: 16px; }
+.ed-page-config-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0;
+}
+.ed-page-config-form legend { font-size: 12px; font-weight: 600; padding: 0 6px; }
+.ed-page-config-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 13px; }
+.ed-page-config-row label { display: inline-flex; align-items: center; gap: 4px; }
+.ed-page-config-row input[type="number"] { width: 84px; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; }
+.ed-page-config-row input[type="number"]:disabled { opacity: 0.5; }
+.ed-page-config-preview { font-size: 12px; opacity: 0.6; }
+.ed-page-config-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.ed-page-config-dialog button { padding: 6px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; background: white; cursor: pointer; }
+.ed-page-config-apply { background: var(--accent) !important; color: white; border-color: var(--accent) !important; }
+
+/* Image captions (Fase 9.6+). */
+.ed-figure {
+  margin: 0;
+  padding: 0;
+}
+.ed-figcaption {
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.65);
+  padding: 4px 0 2px;
+  line-height: 1.3;
+  word-wrap: break-word;
+  /* text-align is set inline from `ImageEmbed.captionAlign` (default: center). */
+}
+.ed-caption-align-group {
+  display: inline-flex;
+  gap: 12px;
+}
+.ed-caption-align-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.ed-figure[data-embed-layout="behind"] .ed-figcaption,
+.ed-figure[data-embed-layout="front"] .ed-figcaption {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
