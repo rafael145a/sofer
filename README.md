@@ -4,7 +4,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](./LICENSE)
 
-Sofer is the document model and React renderer the [Alef Peretz](https://alefperetz.org.br) school built for teacher-facing exam authoring. The engine is independent of any framework editor; the React layer is a thin renderer on top.
+Sofer is a document model and React renderer originally built for teacher-facing exam authoring. The engine is independent of any framework editor; the React layer is a thin renderer on top.
 
 > **Status:** early development. APIs may change between 0.x releases.
 

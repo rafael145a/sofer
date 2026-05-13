@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "@sofer/export-docx — Emit .docx from a Sofer SerializedDocument. Round-trip with @sofer/import-docx.",
   "license": "AGPL-3.0-or-later",
-  "author": "Alef Peretz",
+  "author": "Sofer Contributors",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/export-docx#readme",
   "repository": {
     "type": "git",

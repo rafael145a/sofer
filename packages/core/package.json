@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "@sofer/core — Y.js-backed document model: blocks, marks, commands, history. Framework-agnostic foundation of the Sofer editor.",
   "license": "AGPL-3.0-or-later",
-  "author": "Alef Peretz",
+  "author": "Sofer Contributors",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/core#readme",
   "repository": {
     "type": "git",

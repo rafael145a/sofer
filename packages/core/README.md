@@ -18,4 +18,4 @@ doc.loadFromJSON(json);
 
 ## License
 
-[AGPL-3.0-or-later](./LICENSE) © Alef Peretz. Part of the [Sofer](https://github.com/rafael145a/sofer) editor monorepo.
+[AGPL-3.0-or-later](./LICENSE) © Sofer Contributors. Part of the [Sofer](https://github.com/rafael145a/sofer) editor monorepo.

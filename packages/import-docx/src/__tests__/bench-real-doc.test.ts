@@ -12,7 +12,7 @@ import { docxBlobToDocument } from "../docx";
  * Skips silently when the file isn't present (CI / other developers).
  */
 const DOC_PATH = path.resolve(
-  // packages/import-docx → editor-monorepo → AlefPeretz → docs-auxiliares
+  // packages/import-docx → editor-monorepo → <repo-parent> → docs-auxiliares
   __dirname,
   "../../../../../docs-auxiliares/P1  -  1 º SEMESTRE - MATEMÁTICA_ok .docx",
 );
