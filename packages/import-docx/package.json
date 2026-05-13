@@ -1,6 +1,26 @@
 {
   "name": "@sofer/import-docx",
   "version": "0.0.0",
+  "description": "@sofer/import-docx — Parse .docx (OOXML) in browser or Node into a SerializedDocument loadable by the Sofer editor.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Alef Peretz",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/import-docx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/import-docx"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "docx",
+    "import",
+    "ooxml",
+    "word",
+    "sofer"
+  ],
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -25,7 +45,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

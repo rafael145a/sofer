@@ -1,42 +1,184 @@
-# editor-monorepo
+# Sofer
 
-Custom rich text editor for the Alef Peretz ecosystem. Google Docs-like experience built from scratch in TypeScript, backed by Y.js for collaboration.
+> A Google Docs–style rich text editor for the web, built from scratch on top of [Y.js](https://github.com/yjs/yjs). Real pagination, real collaboration, real DOCX/PDF — no ProseMirror, no TipTap, no Slate, no Lexical, no Quill.
 
-## Status
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](./LICENSE)
 
-Early development. Phase 6 (floating images: wrap + z-order) of the [plan](../../../.claude-alef/plans/preciso-desenvolver-um-google-cryptic-lake.md).
+Sofer is the document model and React renderer the [Alef Peretz](https://alefperetz.org.br) school built for teacher-facing exam authoring. The engine is independent of any framework editor; the React layer is a thin renderer on top.
+
+> **Status:** early development. APIs may change between 0.x releases.
+
+---
+
+## Why a new editor
+
+Existing rich-text frameworks pay a cost we couldn't afford for our use case:
+
+- **ProseMirror / TipTap** — their schema is HTML-ish; collaboration with Y.js requires `y-prosemirror` which fights the CRDT on every list/table operation.
+- **Lexical / Slate** — fast UIs, but the Y.js integrations are second-class and there is no "real" page-break engine.
+- **Quill** — flat document model, no nested structures.
+
+Sofer's document model **is** the Y.Doc: blocks live in a `Y.Array`, each block carries a `Y.Text` and a `Y.Map` of attributes, and tables are first-class with row-major `Y.Array<Y.Map>` cells. Conflicts converge through the same CRDT machinery that powers Google Docs and Notion.
+
+---
 
 ## Packages
 
-| Package | Role |
+All packages are published under `@sofer/*` on npm.
+
+| Package | What it does |
 |---|---|
-| `@editor/core` | Document model on Y.js, schema, selection, commands, input layer |
-| `@editor/react` | React renderer, hooks, editor component |
-| `@editor/pagination` | Real page-break engine (A4/Letter) |
-| `@editor/layout-images` | Anchored images, wrap, z-order |
-| `@editor/collab` | Y.js + Hocuspocus client binding |
-| `@editor/math` | MathLive integration |
-| `@editor/tables` | Table model and commands |
-| `@editor/export-pdf` | PDF export pipeline |
-| `@editor/export-docx` | DOCX export pipeline |
-| `server-hocuspocus` | Reference WebSocket server (not published) |
+| [`@sofer/core`](./packages/core) | Document model on Y.js: blocks, marks, commands, history. Framework-agnostic. |
+| [`@sofer/react`](./packages/react) | React renderer, `useEditor` hook, `<Editor>` and `<Toolbar>` components, built-in A4 pagination. |
+| [`@sofer/collab`](./packages/collab) | Hocuspocus binding for real-time collaboration. Awareness exposed for cursor overlays. |
+| [`@sofer/import-docx`](./packages/import-docx) | Parse `.docx` (OOXML) in the browser or Node into a `SerializedDocument`. |
+| [`@sofer/export-docx`](./packages/export-docx) | Emit `.docx` from a `SerializedDocument`. |
+| [`@sofer/export-pdf`](./packages/export-pdf) | Serialize the paginated DOM to HTML; consumers run Puppeteer for PDF. |
 
-## Apps
+Placeholder packages reserved for future modules: `@sofer/pagination`, `@sofer/tables`, `@sofer/math`, `@sofer/layout-images`, `@sofer/server-hocuspocus`.
 
-| App | Role |
-|---|---|
-| `playground` | Vite + React dev/demo app |
+---
 
-## Develop
+## Quick start
+
+```bash
+npm install @sofer/core @sofer/react yjs
+```
+
+```tsx
+import { Editor, EditorProvider, Toolbar, useEditor, A4_PAGE } from "@sofer/react";
+
+export function MyEditor() {
+  const editor = useEditor();
+  return (
+    <EditorProvider editor={editor}>
+      <Toolbar />
+      <Editor
+        editor={editor}
+        pageGeometry={A4_PAGE}
+        renderPageFooter={({ pageNumber, pageCount }) => (
+          <span>Page {pageNumber} of {pageCount}</span>
+        )}
+      />
+    </EditorProvider>
+  );
+}
+```
+
+### With collaboration
+
+```bash
+npm install @sofer/collab @hocuspocus/provider
+```
+
+```tsx
+import * as Y from "yjs";
+import { EditorDocument } from "@sofer/core";
+import { useEditor } from "@sofer/react";
+import { useCollab } from "@sofer/collab";
+
+const ydoc = new Y.Doc();
+const editor = useEditor({ document: new EditorDocument(ydoc) });
+useCollab({
+  ydoc,
+  url: "wss://your-hocuspocus-server",
+  name: "doc-id",
+  token: jwt,
+  user: { name: "Ada", color: "#f59e0b" },
+});
+```
+
+### External image storage (S3, Azure Blob, etc.)
+
+```tsx
+const editor = useEditor({
+  uploadImage: async (file) => {
+    const { url } = await myApi.uploadImage(file);
+    return url;
+  },
+});
+```
+
+`insertImageFromFile`, paste, and drag-and-drop all route through `uploadImage`; the Y.Doc stores URLs instead of base64.
+
+### Import/export
+
+```tsx
+import { docxBlobToDocument } from "@sofer/import-docx";
+import { documentToDocxBlob } from "@sofer/export-docx";
+import { exportPdfFromElement } from "@sofer/export-pdf";
+
+const serialized = await docxBlobToDocument(file);
+editor.doc.loadFromJSON(serialized);
+
+const docxBlob = await documentToDocxBlob(editor.snapshot);
+await exportPdfFromElement(editorRootEl, { title: "My document" });
+```
+
+---
+
+## Architecture
+
+```
++----------------------+         +----------------------+
+|     @sofer/core      |  ydoc   |     @sofer/collab    |
+|  blocks / marks /    |<------->|  HocuspocusProvider  |
+|  commands / history  |         |  awareness           |
++----------+-----------+         +----------+-----------+
+           |                                |
+           v                                v
++----------+-----------+         +----------------------+
+|    @sofer/react      |         |  Hocuspocus server   |
+|  <Editor> renders    |         |  (your backend)      |
+|  paginated DOM       |         +----------------------+
++----------+-----------+
+           |
+           v
++----------+-----------+
+|  @sofer/export-pdf   |
+|  serializes DOM →    |
+|  HTML for Puppeteer  |
++----------------------+
+```
+
+---
+
+## Development
+
+This is a [pnpm workspace](https://pnpm.io/workspaces). All packages live under `packages/`; the demo app lives under `apps/playground`.
 
 ```bash
 pnpm install
-pnpm dev          # runs the playground
-pnpm typecheck
-pnpm test
-pnpm build        # builds all publishable packages
+pnpm dev          # runs the playground app
+pnpm typecheck    # tsc --noEmit per package
+pnpm test         # vitest per package
+pnpm build        # tsup builds for all publishable packages
 ```
 
-## Dependencies
+Running a single package's task:
 
-Zero TipTap / ProseMirror / Lexical / Slate / Quill. Engine custom on top of Y.js.
+```bash
+pnpm --filter @sofer/core test
+pnpm --filter @sofer/react build
+```
+
+---
+
+## License
+
+Sofer is released under the [**GNU AGPL v3.0**](./LICENSE) (or later).
+
+If you run a modified version of Sofer over a network to provide a service, the AGPL requires you to make your source available to the users of that service. If that does not fit your use case, a commercial license is available — reach out via the project's issue tracker.
+
+### Third-party licenses
+
+All runtime dependencies of `@sofer/*` packages are released under permissive licenses (MIT, ISC, BSD, BlueOak, Zlib); none are copyleft. Key dependencies:
+
+- [`yjs`](https://github.com/yjs/yjs) — MIT
+- [`y-protocols`](https://github.com/yjs/y-protocols) — MIT
+- [`@hocuspocus/provider`](https://github.com/ueberdosis/hocuspocus) — MIT
+- [`docx`](https://github.com/dolanmiu/docx) — MIT
+- [`fast-xml-parser`](https://github.com/NaturalIntelligence/fast-xml-parser) — MIT
+- [`jszip`](https://github.com/Stuk/jszip) — MIT (or GPL 3.0+ at your choice)
+
+Full transitive tree: `pnpm licenses list --prod`.

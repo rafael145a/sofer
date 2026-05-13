@@ -1,6 +1,26 @@
 {
   "name": "@sofer/collab",
   "version": "0.0.0",
+  "description": "@sofer/collab — Hocuspocus binding for real-time collaboration with the Sofer editor. Bidirectional Y.Doc sync + awareness.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Alef Peretz",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/collab#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/collab"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "collaboration",
+    "crdt",
+    "yjs",
+    "hocuspocus",
+    "sofer"
+  ],
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -25,7 +45,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -36,7 +58,9 @@
     "react": ">=18"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true }
+    "react": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@sofer/core": "workspace:*",

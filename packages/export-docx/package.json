@@ -1,6 +1,26 @@
 {
   "name": "@sofer/export-docx",
   "version": "0.0.0",
+  "description": "@sofer/export-docx — Emit .docx from a Sofer SerializedDocument. Round-trip with @sofer/import-docx.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Alef Peretz",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/export-docx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/export-docx"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "docx",
+    "export",
+    "ooxml",
+    "word",
+    "sofer"
+  ],
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

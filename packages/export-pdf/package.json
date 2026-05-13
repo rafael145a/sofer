@@ -1,6 +1,25 @@
 {
   "name": "@sofer/export-pdf",
   "version": "0.0.0",
+  "description": "@sofer/export-pdf — Serialize the paginated Sofer DOM to self-contained HTML, ready for Puppeteer PDF rendering.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Alef Peretz",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/export-pdf#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/export-pdf"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "pdf",
+    "export",
+    "puppeteer",
+    "sofer"
+  ],
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

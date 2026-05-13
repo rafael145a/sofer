@@ -1,6 +1,26 @@
 {
   "name": "@sofer/core",
   "version": "0.0.0",
+  "description": "@sofer/core — Y.js-backed document model: blocks, marks, commands, history. Framework-agnostic foundation of the Sofer editor.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Alef Peretz",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "rich-text",
+    "yjs",
+    "crdt",
+    "document-model",
+    "sofer"
+  ],
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -25,7 +45,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

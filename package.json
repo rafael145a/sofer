@@ -1,8 +1,31 @@
 {
-  "name": "editor-monorepo",
+  "name": "sofer",
   "private": true,
   "version": "0.0.0",
-  "description": "Custom rich text editor with real pagination, collaboration and Word-style image layout",
+  "description": "Sofer — Google Docs-style rich text editor on top of Y.js. Real pagination, collaboration and DOCX/PDF import/export. Monorepo for the @sofer/* packages.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://github.com/rafael145a/sofer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "rich-text",
+    "wysiwyg",
+    "yjs",
+    "crdt",
+    "collaboration",
+    "hocuspocus",
+    "react",
+    "docx",
+    "pdf",
+    "pagination",
+    "a4"
+  ],
   "scripts": {
     "dev": "pnpm --filter playground dev",
     "build": "pnpm -r --filter=./packages/* build",
