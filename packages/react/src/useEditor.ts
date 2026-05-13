@@ -51,6 +51,15 @@ import {
 
 export interface UseEditorOptions {
   document?: EditorDocument;
+  /**
+   * Quando definido, `insertImageFromFile` chama esta função pra obter a URL
+   * final em vez de embutir o arquivo como data URL base64 no Y.Doc.
+   *
+   * Use isto quando o app tem storage externo (S3, Azure Blob, etc.) e não quer
+   * inflar o documento com imagens base64. O componente `<Editor>` propaga o
+   * mesmo upload para paste/drop/file picker.
+   */
+  uploadImage?: (file: File) => Promise<string>;
 }
 
 export type PendingMarks = Partial<Record<MarkName, MarkAttrs[MarkName] | null>>;
@@ -558,8 +567,13 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     },
     [],
   );
+  const uploadImageRef = useRef(opts.uploadImage);
+  uploadImageRef.current = opts.uploadImage;
   const insertImageFromFile = useCallback(async (file: File): Promise<void> => {
     if (!file.type.startsWith("image/")) return;
+    // Lê dimensões a partir de um dataUrl temporário em ambos os caminhos
+    // (lê o arquivo só uma vez; o uploadImage decide se persiste essa data
+    // ou faz upload pra um storage externo).
     const dataUrl = await readAsDataURL(file);
     const dims = await readImageDimensions(dataUrl);
     let w = dims.width;
@@ -568,7 +582,9 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
       h = Math.round((h * MAX_INSERT_WIDTH) / w);
       w = MAX_INSERT_WIDTH;
     }
-    cmdInsertImage(ctxRef.current, { type: "image", src: dataUrl, width: w, height: h });
+    const upload = uploadImageRef.current;
+    const src = upload ? await upload(file) : dataUrl;
+    cmdInsertImage(ctxRef.current, { type: "image", src, width: w, height: h });
   }, []);
   const getSelectedEmbed = useCallback(() => {
     const sel = selectionRef.current;
