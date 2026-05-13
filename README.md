@@ -12,13 +12,19 @@ Sofer is the document model and React renderer the [Alef Peretz](https://alefper
 
 ## Why a new editor
 
-Existing rich-text frameworks pay a cost we couldn't afford for our use case:
+Existing rich-text frameworks pay costs we couldn't afford for our use case:
 
 - **ProseMirror / TipTap** — their schema is HTML-ish; collaboration with Y.js requires `y-prosemirror` which fights the CRDT on every list/table operation.
 - **Lexical / Slate** — fast UIs, but the Y.js integrations are second-class and there is no "real" page-break engine.
 - **Quill** — flat document model, no nested structures.
 
-Sofer's document model **is** the Y.Doc: blocks live in a `Y.Array`, each block carries a `Y.Text` and a `Y.Map` of attributes, and tables are first-class with row-major `Y.Array<Y.Map>` cells. Conflicts converge through the same CRDT machinery that powers Google Docs and Notion.
+But the deeper reason we built Sofer is **print fidelity**. Exams, contracts, and academic papers exist to be printed; teachers reject editors that "shift a line" between screen and PDF. Sofer treats the page as a first-class concept:
+
+- **Real A4/Letter pagination** — the layout engine fragments blocks into pages at the same break points the printer will, with `break-inside: avoid` honored on tables, images, list items. No "preview mode" diverging from the editing surface.
+- **Stable across server-side rendering** — the paginated DOM is self-contained HTML the editor produces directly. Hand it to Puppeteer (or any HTML-to-PDF renderer) and the resulting PDF is **byte-equivalent** to what the user saw on screen: same font metrics, same margins, same page breaks. No "round-trip" through a different layout engine.
+- **Metric-compatible fonts and styling** — the same CSS that styles the editor styles the PDF; there is no second template to drift out of sync.
+
+Sofer's document model **is** the Y.Doc: blocks live in a `Y.Array`, each block carries a `Y.Text` and a `Y.Map` of attributes, and tables are first-class with row-major `Y.Array<Y.Map>` cells. Conflicts converge through the same CRDT machinery that powers Google Docs and Notion — and the result still prints exactly as you laid it out.
 
 ---
 
