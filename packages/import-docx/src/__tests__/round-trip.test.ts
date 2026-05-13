@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { LegacySerializedDocument, SerializedBlock } from "@sofer/core";
-import { documentToDocxBuffer } from "@sofer/export-docx";
+import type { LegacySerializedDocument, SerializedBlock } from "@sofereditor/core";
+import { documentToDocxBuffer } from "@sofereditor/export-docx";
 import { docxBlobToDocument } from "../docx";
 
 const PNG_1PX =

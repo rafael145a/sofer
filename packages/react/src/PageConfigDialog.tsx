@@ -7,7 +7,7 @@ import {
   pxToMm,
   type PageSettings,
   type PagePreset,
-} from "@sofer/core";
+} from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
 
 type MarginPreset = "normal" | "narrow" | "wide" | "custom";

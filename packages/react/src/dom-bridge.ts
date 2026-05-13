@@ -1,4 +1,4 @@
-import type { Position, Selection } from "@sofer/core";
+import type { Position, Selection } from "@sofereditor/core";
 
 /**
  * Mapping between the model and the contenteditable DOM.

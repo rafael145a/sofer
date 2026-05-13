@@ -1,4 +1,4 @@
-import { Editor, EditorProvider, Toolbar, useEditor } from "@sofer/react";
+import { Editor, EditorProvider, Toolbar, useEditor } from "@sofereditor/react";
 import { useRef, useState, type JSX } from "react";
 import {
   documentToHtml,
@@ -7,10 +7,10 @@ import {
   downloadString,
   exportPdfFromElement,
   serializePaginatedHtml,
-} from "@sofer/export-pdf";
-import { documentToDocxBlob } from "@sofer/export-docx";
-import { docxBlobToDocument } from "@sofer/import-docx";
-import type { SerializedDocument } from "@sofer/core";
+} from "@sofereditor/export-pdf";
+import { documentToDocxBlob } from "@sofereditor/export-docx";
+import { docxBlobToDocument } from "@sofereditor/import-docx";
+import type { SerializedDocument } from "@sofereditor/core";
 import { saveSnapshot } from "./saveSnapshot";
 
 function summarizeSnapshot(snap: SerializedDocument): string {

@@ -20,19 +20,19 @@ importers:
 
   apps/playground:
     dependencies:
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@sofer/export-docx':
+      '@sofereditor/export-docx':
         specifier: workspace:*
         version: link:../../packages/export-docx
-      '@sofer/export-pdf':
+      '@sofereditor/export-pdf':
         specifier: workspace:*
         version: link:../../packages/export-pdf
-      '@sofer/import-docx':
+      '@sofereditor/import-docx':
         specifier: workspace:*
         version: link:../../packages/import-docx
-      '@sofer/react':
+      '@sofereditor/react':
         specifier: workspace:*
         version: link:../../packages/react
       react:
@@ -66,7 +66,7 @@ importers:
       '@hocuspocus/provider':
         specifier: ^3.4.4
         version: 3.4.4(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../core
       y-protocols:
@@ -110,7 +110,7 @@ importers:
 
   packages/export-docx:
     dependencies:
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../core
       docx:
@@ -129,7 +129,7 @@ importers:
 
   packages/export-pdf:
     dependencies:
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -145,7 +145,7 @@ importers:
 
   packages/import-docx:
     dependencies:
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../core
       fast-xml-parser:
@@ -155,7 +155,7 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
     devDependencies:
-      '@sofer/export-docx':
+      '@sofereditor/export-docx':
         specifier: workspace:*
         version: link:../export-docx
       tsup:
@@ -188,7 +188,7 @@ importers:
 
   packages/react:
     dependencies:
-      '@sofer/core':
+      '@sofereditor/core':
         specifier: workspace:*
         version: link:../core
       yjs:

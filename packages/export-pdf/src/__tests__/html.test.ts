@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { LegacySerializedDocument } from "@sofer/core";
+import type { LegacySerializedDocument } from "@sofereditor/core";
 import { documentToHtml, documentToHtmlFragment, documentToJson } from "../html";
 
 function frag(doc: LegacySerializedDocument): string {

@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "es2022",
-  external: ["@sofer/core", "jszip", "fast-xml-parser"],
+  external: ["@sofereditor/core", "jszip", "fast-xml-parser"],
 });

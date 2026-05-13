@@ -1,7 +1,7 @@
 {
-  "name": "@sofer/import-docx",
+  "name": "@sofereditor/import-docx",
   "version": "0.1.0",
-  "description": "@sofer/import-docx — Parse .docx (OOXML) in browser or Node into a SerializedDocument loadable by the Sofer editor.",
+  "description": "@sofereditor/import-docx — Parse .docx (OOXML) in browser or Node into a SerializedDocument loadable by the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/import-docx#readme",
@@ -54,12 +54,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@sofer/core": "workspace:*",
+    "@sofereditor/core": "workspace:*",
     "fast-xml-parser": "^4.5.0",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@sofer/export-docx": "workspace:*",
+    "@sofereditor/export-docx": "workspace:*",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

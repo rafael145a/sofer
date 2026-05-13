@@ -2,12 +2,12 @@ import { describe, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
-import { EditorDocument } from "@sofer/core";
+import { EditorDocument } from "@sofereditor/core";
 import { docxBlobToDocument } from "../docx";
 
 /**
  * Microbenchmark on the real "P1 - 1º SEMESTRE - MATEMÁTICA" exam (7 images,
- * ~2.16 MB raw). Run with `pnpm --filter @sofer/import-docx test bench`.
+ * ~2.16 MB raw). Run with `pnpm --filter @sofereditor/import-docx test bench`.
  *
  * Skips silently when the file isn't present (CI / other developers).
  */

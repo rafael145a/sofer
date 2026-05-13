@@ -18,7 +18,7 @@ import {
   type ListKind,
   type MarkName,
   type SerializedBlock,
-} from "@sofer/core";
+} from "@sofereditor/core";
 import { applyDomSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { EditorProvider } from "./EditorContext";
 import { ImageResizeOverlay } from "./ImageResizeOverlay";

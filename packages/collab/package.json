@@ -1,7 +1,7 @@
 {
-  "name": "@sofer/collab",
+  "name": "@sofereditor/collab",
   "version": "0.1.0",
-  "description": "@sofer/collab — Hocuspocus binding for real-time collaboration with the Sofer editor. Bidirectional Y.Doc sync + awareness.",
+  "description": "@sofereditor/collab — Hocuspocus binding for real-time collaboration with the Sofer editor. Bidirectional Y.Doc sync + awareness.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/collab#readme",
@@ -62,7 +62,7 @@
     }
   },
   "dependencies": {
-    "@sofer/core": "workspace:*",
+    "@sofereditor/core": "workspace:*",
     "@hocuspocus/provider": "^3.4.4",
     "y-protocols": "^1.0.6",
     "yjs": "^13.6.20"

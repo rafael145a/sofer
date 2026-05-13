@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
-import type { ImageEmbed } from "@sofer/core";
+import type { ImageEmbed } from "@sofereditor/core";
 import { getFragmentForOffset } from "./dom-bridge";
 
 interface ImageResizeOverlayProps {

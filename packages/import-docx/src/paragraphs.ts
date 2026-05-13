@@ -1,4 +1,4 @@
-import type { AlignValue, BlockAttrs, BlockType, DeltaOp, SerializedBlock } from "@sofer/core";
+import type { AlignValue, BlockAttrs, BlockType, DeltaOp, SerializedBlock } from "@sofereditor/core";
 import {
   attr,
   childrenOf,
@@ -14,7 +14,7 @@ import { parseAlign } from "./units";
  * Map a `<w:p>` element to a SerializedBlock. Decides between
  * `paragraph / heading / blockquote / codeBlock / listItem` based on the
  * paragraph style + `w:pPr` properties — mirrors the heuristics encoded in
- * `@sofer/export-docx/src/docx.ts`.
+ * `@sofereditor/export-docx/src/docx.ts`.
  */
 export function paragraphToBlock(
   p: OoxmlNode,

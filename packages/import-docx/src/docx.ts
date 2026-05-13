@@ -1,4 +1,4 @@
-import { EditorDocument, type SerializedBlock, type SerializedDocument } from "@sofer/core";
+import { EditorDocument, type SerializedBlock, type SerializedDocument } from "@sofereditor/core";
 import { readDocx, childrenOf, tagOf, findChild, type OoxmlNode } from "./parse-xml";
 import { paragraphToBlock } from "./paragraphs";
 import { tableToBlock } from "./tables";
@@ -11,7 +11,7 @@ import type { RunContext } from "./runs";
  * `SerializedDocument` ready to feed `EditorDocument.fromJSON` (or
  * `loadFromJSON` on an existing instance).
  *
- * The mapping is the inverse of `@sofer/export-docx`. Round-trip is exact for
+ * The mapping is the inverse of `@sofereditor/export-docx`. Round-trip is exact for
  * documents the editor produced; documents authored externally (Word, Google
  * Docs export) load with marks/lists/tables/images recognized and unsupported
  * features dropped silently.

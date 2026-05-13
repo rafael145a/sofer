@@ -11,8 +11,8 @@ import type {
   SerializedBlock,
   SerializedCell,
   SerializedDocument,
-} from "@sofer/core";
-import { isImageEmbed, isLegacySerializedDocument, pxToMm } from "@sofer/core";
+} from "@sofereditor/core";
+import { isImageEmbed, isLegacySerializedDocument, pxToMm } from "@sofereditor/core";
 
 function normalize(doc: SerializedDocument | LegacySerializedDocument): SerializedDocument {
   return isLegacySerializedDocument(doc) ? { blocks: doc } : doc;
@@ -48,7 +48,7 @@ const DEFAULT_PAGE = {
 /**
  * Serialize a `SerializedDocument` to standalone HTML.
  *
- * Output structure mirrors what `@sofer/react` paints at runtime: each
+ * Output structure mirrors what `@sofereditor/react` paints at runtime: each
  * top-level block becomes one element (`<p>`, `<h1..6>`, `<blockquote>`, `<pre>`,
  * `<table>`), consecutive `listItem` blocks are reconstructed into nested
  * `<ul>`/`<ol>` trees, and image embeds are emitted as `<img>` tags carrying the
@@ -415,7 +415,7 @@ function baseStylesheet(page: NonNullable<DocumentToHtmlOptions["page"]>): strin
   // Margins are owned by `@page` only. Chromium honors that block both for
   // `window.print()` (client-side `exportPdfFromDocument`) and for
   // `page.pdf({ preferCSSPageSize: true })` (server-side `renderPdf` in
-  // `@sofer/export-pdf-server`). Adding the same offsets via `body { padding }`
+  // `@sofereditor/export-pdf-server`). Adding the same offsets via `body { padding }`
   // would compound and double the margin in the output PDF.
   return `
 @page {

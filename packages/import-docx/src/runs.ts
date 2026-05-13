@@ -1,4 +1,4 @@
-import type { DeltaOp, MarkAttrs } from "@sofer/core";
+import type { DeltaOp, MarkAttrs } from "@sofereditor/core";
 import {
   attr,
   childrenOf,

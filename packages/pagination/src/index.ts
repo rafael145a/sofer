@@ -1,2 +1,2 @@
-// @sofer/pagination — placeholder. Implementation pending.
-export const PACKAGE_NAME = "@sofer/pagination";
+// @sofereditor/pagination — placeholder. Implementation pending.
+export const PACKAGE_NAME = "@sofereditor/pagination";

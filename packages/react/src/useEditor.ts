@@ -47,7 +47,7 @@ import {
   type Selection,
   type TableLocation,
   type TableRect,
-} from "@sofer/core";
+} from "@sofereditor/core";
 
 export interface UseEditorOptions {
   document?: EditorDocument;
