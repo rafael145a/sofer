@@ -272,6 +272,9 @@ function applyMarks(text: string, attrs: MarkAttrs | undefined): string {
     const t = attrs.link.title ? ` title="${escapeAttr(attrs.link.title)}"` : "";
     html = `<a href="${escapeAttr(attrs.link.href)}"${t} rel="noopener noreferrer" target="_blank">${html}</a>`;
   }
+  if (attrs.comment?.markId) {
+    html = `<span data-comment-id="${escapeAttr(attrs.comment.markId)}">${html}</span>`;
+  }
   return html;
 }
 

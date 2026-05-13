@@ -87,11 +87,17 @@ export type MarkName =
   | "color"
   | "fontFamily"
   | "fontSize"
-  | "link";
+  | "link"
+  | "comment";
 
 export interface LinkAttr {
   href: string;
   title?: string;
+}
+
+export interface CommentAttr {
+  /** Identificador estável compartilhado com o backend (ProvaDocumentoComentario.markId). */
+  markId: string;
 }
 
 export interface MarkAttrs {
@@ -103,6 +109,7 @@ export interface MarkAttrs {
   fontFamily?: string;
   fontSize?: string;
   link?: LinkAttr;
+  comment?: CommentAttr;
 }
 
 export type MarkValue<K extends MarkName = MarkName> = NonNullable<MarkAttrs[K]>;

@@ -254,5 +254,13 @@ function wrap(text: string, attrs?: MarkAttrs): ReactNode {
     );
   }
 
+  if (attrs.comment?.markId) {
+    node = (
+      <span data-comment-id={attrs.comment.markId} className="ed-comment">
+        {node}
+      </span>
+    );
+  }
+
   return node;
 }
