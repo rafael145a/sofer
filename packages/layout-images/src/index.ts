@@ -1,2 +1,2 @@
-// @editor/layout-images — placeholder. Implementation pending.
-export const PACKAGE_NAME = "@editor/layout-images";
+// @sofer/layout-images — placeholder. Implementation pending.
+export const PACKAGE_NAME = "@sofer/layout-images";

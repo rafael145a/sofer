@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@editor/core": "workspace:*",
-    "@editor/export-docx": "workspace:*",
-    "@editor/import-docx": "workspace:*",
-    "@editor/export-pdf": "workspace:*",
-    "@editor/react": "workspace:*",
+    "@sofer/core": "workspace:*",
+    "@sofer/export-docx": "workspace:*",
+    "@sofer/import-docx": "workspace:*",
+    "@sofer/export-pdf": "workspace:*",
+    "@sofer/react": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "yjs": "^13.6.20"

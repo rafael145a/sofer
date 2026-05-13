@@ -1,5 +1,5 @@
 {
-  "name": "@editor/react",
+  "name": "@sofer/react",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -37,7 +37,7 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@editor/core": "workspace:*",
+    "@sofer/core": "workspace:*",
     "yjs": "^13.6.20"
   },
   "devDependencies": {

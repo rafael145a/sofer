@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useEditorContext } from "./EditorContext";
-import type { AlignValue, BlockType, DirValue, ImageLayout, MarkName } from "@editor/core";
+import type { AlignValue, BlockType, DirValue, ImageLayout, MarkName } from "@sofer/core";
 
 // School standard: Arial only. The dropdown is kept (instead of removed) so
 // that the surrounding font-size / color UI stays balanced and future font

@@ -1,5 +1,5 @@
 {
-  "name": "@editor/export-docx",
+  "name": "@sofer/export-docx",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@editor/core": "workspace:*",
+    "@sofer/core": "workspace:*",
     "docx": "^9.6.1"
   },
   "devDependencies": {

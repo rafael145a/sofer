@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { LegacySerializedDocument } from "@editor/core";
+import type { LegacySerializedDocument } from "@sofer/core";
 import { documentToDocxBuffer } from "../docx";
 
 const PNG_1PX =

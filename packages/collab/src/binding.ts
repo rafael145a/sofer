@@ -52,7 +52,7 @@ export function bindCollab(opts: BindCollabOptions): CollabBinding {
       const a = provider.awareness;
       if (!a) {
         throw new Error(
-          "[@editor/collab] Awareness not yet available (provider not connected).",
+          "[@sofer/collab] Awareness not yet available (provider not connected).",
         );
       }
       return a;

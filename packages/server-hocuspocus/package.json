@@ -1,5 +1,5 @@
 {
-  "name": "@editor/server-hocuspocus",
+  "name": "@sofer/server-hocuspocus",
   "version": "0.0.0",
   "private": true,
   "type": "module",

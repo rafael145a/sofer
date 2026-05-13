@@ -1,2 +1,2 @@
-// @editor/tables — placeholder. Implementation pending.
-export const PACKAGE_NAME = "@editor/tables";
+// @sofer/tables — placeholder. Implementation pending.
+export const PACKAGE_NAME = "@sofer/tables";

@@ -1,6 +1,6 @@
 /**
  * Unit conversions between OOXML and the editor's serialized format.
- * These are the inverses of the helpers in `@editor/export-docx/src/docx.ts`.
+ * These are the inverses of the helpers in `@sofer/export-docx/src/docx.ts`.
  */
 
 /** docx half-points → CSS pt string. 24 (half-pt) → "12pt". */

@@ -3,8 +3,8 @@ import {
   DEFAULT_PAGE_SETTINGS,
   PAGE_PRESETS,
   type SerializedDocument,
-} from "@editor/core";
-import { documentToDocxBuffer } from "@editor/export-docx";
+} from "@sofer/core";
+import { documentToDocxBuffer } from "@sofer/export-docx";
 import { docxBlobToDocument } from "../docx";
 
 describe("page-settings round-trip", () => {

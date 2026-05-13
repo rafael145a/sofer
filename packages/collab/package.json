@@ -1,5 +1,5 @@
 {
-  "name": "@editor/collab",
+  "name": "@sofer/collab",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -39,7 +39,7 @@
     "react": { "optional": true }
   },
   "dependencies": {
-    "@editor/core": "workspace:*",
+    "@sofer/core": "workspace:*",
     "@hocuspocus/provider": "^3.4.4",
     "y-protocols": "^1.0.6",
     "yjs": "^13.6.20"

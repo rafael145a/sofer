@@ -20,19 +20,19 @@ importers:
 
   apps/playground:
     dependencies:
-      '@editor/core':
+      '@sofer/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@editor/export-docx':
+      '@sofer/export-docx':
         specifier: workspace:*
         version: link:../../packages/export-docx
-      '@editor/export-pdf':
+      '@sofer/export-pdf':
         specifier: workspace:*
         version: link:../../packages/export-pdf
-      '@editor/import-docx':
+      '@sofer/import-docx':
         specifier: workspace:*
         version: link:../../packages/import-docx
-      '@editor/react':
+      '@sofer/react':
         specifier: workspace:*
         version: link:../../packages/react
       react:
@@ -63,12 +63,12 @@ importers:
 
   packages/collab:
     dependencies:
-      '@editor/core':
-        specifier: workspace:*
-        version: link:../core
       '@hocuspocus/provider':
         specifier: ^3.4.4
         version: 3.4.4(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
+      '@sofer/core':
+        specifier: workspace:*
+        version: link:../core
       y-protocols:
         specifier: ^1.0.6
         version: 1.0.7(yjs@13.6.30)
@@ -110,7 +110,7 @@ importers:
 
   packages/export-docx:
     dependencies:
-      '@editor/core':
+      '@sofer/core':
         specifier: workspace:*
         version: link:../core
       docx:
@@ -129,7 +129,7 @@ importers:
 
   packages/export-pdf:
     dependencies:
-      '@editor/core':
+      '@sofer/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -145,7 +145,7 @@ importers:
 
   packages/import-docx:
     dependencies:
-      '@editor/core':
+      '@sofer/core':
         specifier: workspace:*
         version: link:../core
       fast-xml-parser:
@@ -155,7 +155,7 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
     devDependencies:
-      '@editor/export-docx':
+      '@sofer/export-docx':
         specifier: workspace:*
         version: link:../export-docx
       tsup:
@@ -188,7 +188,7 @@ importers:
 
   packages/react:
     dependencies:
-      '@editor/core':
+      '@sofer/core':
         specifier: workspace:*
         version: link:../core
       yjs:

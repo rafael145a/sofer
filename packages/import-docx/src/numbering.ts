@@ -1,4 +1,4 @@
-import type { ListKind } from "@editor/core";
+import type { ListKind } from "@sofer/core";
 import {
   attr,
   childrenOf,

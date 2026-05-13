@@ -1,5 +1,5 @@
 import { Fragment, memo, type CSSProperties, type ReactNode } from "react";
-import { isImageEmbed, type DeltaOp, type ImageEmbed, type MarkAttrs } from "@editor/core";
+import { isImageEmbed, type DeltaOp, type ImageEmbed, type MarkAttrs } from "@sofer/core";
 
 /**
  * Convert a Y.Text delta into ReactNodes.

@@ -1,5 +1,5 @@
 {
-  "name": "@editor/export-pdf",
+  "name": "@sofer/export-pdf",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@editor/core": "workspace:*"
+    "@sofer/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

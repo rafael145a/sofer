@@ -1,4 +1,4 @@
-import { serializePaginatedHtml } from "@editor/export-pdf";
+import { serializePaginatedHtml } from "@sofer/export-pdf";
 
 export interface SaveSnapshotResult {
   ok: boolean;

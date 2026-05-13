@@ -1,4 +1,4 @@
-import type { Position, Selection } from "@editor/core";
+import type { Position, Selection } from "@sofer/core";
 
 /**
  * Mapping between the model and the contenteditable DOM.

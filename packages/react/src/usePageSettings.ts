@@ -1,5 +1,5 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
-import type { EditorDocument, PageSettings } from "@editor/core";
+import type { EditorDocument, PageSettings } from "@sofer/core";
 
 /**
  * Reactive snapshot of an `EditorDocument`'s page settings. Re-renders the

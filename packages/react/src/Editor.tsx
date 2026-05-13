@@ -18,7 +18,7 @@ import {
   type ListKind,
   type MarkName,
   type SerializedBlock,
-} from "@editor/core";
+} from "@sofer/core";
 import { applyDomSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { EditorProvider } from "./EditorContext";
 import { ImageResizeOverlay } from "./ImageResizeOverlay";

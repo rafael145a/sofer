@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "es2022",
-  external: ["@editor/core", "jszip", "fast-xml-parser"],
+  external: ["@sofer/core", "jszip", "fast-xml-parser"],
 });

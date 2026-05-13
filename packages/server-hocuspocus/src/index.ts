@@ -1,2 +1,2 @@
-// @editor/server-hocuspocus — placeholder. Implementation pending.
-export const PACKAGE_NAME = "@editor/server-hocuspocus";
+// @sofer/server-hocuspocus — placeholder. Implementation pending.
+export const PACKAGE_NAME = "@sofer/server-hocuspocus";

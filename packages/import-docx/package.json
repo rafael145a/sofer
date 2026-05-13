@@ -1,5 +1,5 @@
 {
-  "name": "@editor/import-docx",
+  "name": "@sofer/import-docx",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,12 +19,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@editor/core": "workspace:*",
+    "@sofer/core": "workspace:*",
     "fast-xml-parser": "^4.5.0",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@editor/export-docx": "workspace:*",
+    "@sofer/export-docx": "workspace:*",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

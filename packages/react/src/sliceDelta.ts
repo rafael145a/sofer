@@ -1,4 +1,4 @@
-import type { DeltaOp } from "@editor/core";
+import type { DeltaOp } from "@sofer/core";
 
 /** Total number of inserted characters. Embeds (non-string inserts) count as 1. */
 export function deltaLength(delta: DeltaOp[]): number {

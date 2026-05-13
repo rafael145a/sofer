@@ -1,4 +1,4 @@
-import type { BlockAttrs, CellAttrs, DeltaOp, SerializedBlock, SerializedCell } from "@editor/core";
+import type { BlockAttrs, CellAttrs, DeltaOp, SerializedBlock, SerializedCell } from "@sofer/core";
 import {
   attr,
   childrenOf,
@@ -14,7 +14,7 @@ import { parseIntAttr } from "./units";
  * Map a `<w:tbl>` element to a SerializedBlock(table). The output `cells` array
  * is row-major with `rows * cols` entries — covered slots are filled with
  * `{attrs: {covered: true}}` placeholders so it matches the invariant required
- * by `@editor/core`'s `EditorDocument`.
+ * by `@sofer/core`'s `EditorDocument`.
  */
 export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
   const tblGrid = findChild(tbl, "w:tblGrid");
@@ -122,7 +122,7 @@ function gridSpanOf(tc: OoxmlNode): number {
 function cellChildrenToDelta(tc: OoxmlNode, ctx: RunContext): DeltaOp[] {
   // A cell can contain multiple paragraphs; we concat their deltas with a
   // newline between adjacent ones to preserve visual separation. The cell
-  // model in @editor/core is a single Y.Text, so we flatten.
+  // model in @sofer/core is a single Y.Text, so we flatten.
   const out: DeltaOp[] = [];
   let first = true;
   for (const child of childrenOf(tc)) {

@@ -1,4 +1,4 @@
-import type { ImageEmbed } from "@editor/core";
+import type { ImageEmbed } from "@sofer/core";
 import { attr, childrenOf, tagOf, type OoxmlNode } from "./parse-xml";
 import { parseIntAttr } from "./units";
 

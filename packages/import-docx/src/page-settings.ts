@@ -1,4 +1,4 @@
-import { detectPreset, mmToPx, type PageSettings } from "@editor/core";
+import { detectPreset, mmToPx, type PageSettings } from "@sofer/core";
 import { attr, findChild, type OoxmlNode } from "./parse-xml";
 import { parseIntAttr } from "./units";
 
@@ -8,7 +8,7 @@ import { parseIntAttr } from "./units";
  * Page size lives in `<w:sectPr><w:pgSz w:w="..." w:h="..."/></w:sectPr>` and
  * margins in `<w:pgMar w:top="..." w:bottom="..." w:left="..." w:right="..."/>`,
  * all in twips. This is the inverse of `sectionPropertiesFor` in
- * `@editor/export-docx`.
+ * `@sofer/export-docx`.
  */
 const MM_PER_TWIP = 25.4 / 1440;
 

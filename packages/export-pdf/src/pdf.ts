@@ -1,4 +1,4 @@
-import type { LegacySerializedDocument, SerializedDocument } from "@editor/core";
+import type { LegacySerializedDocument, SerializedDocument } from "@sofer/core";
 import { documentToHtml, type DocumentToHtmlOptions } from "./html";
 
 export interface ExportPdfFromDocumentOptions extends DocumentToHtmlOptions {

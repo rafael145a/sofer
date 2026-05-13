@@ -8,14 +8,14 @@ import type {
   SerializedBlock,
   SerializedCell,
   SerializedDocument,
-} from "@editor/core";
+} from "@sofer/core";
 import {
   DEFAULT_PAGE_SETTINGS,
   isImageEmbed,
   isLegacySerializedDocument,
   pxToMm,
   type PageSettings,
-} from "@editor/core";
+} from "@sofer/core";
 import {
   AlignmentType,
   BorderStyle,
@@ -49,7 +49,7 @@ export interface DocumentToDocxOptions {
 
 /**
  * Build a docx `Document` from a `SerializedDocument`. Output is a Blob you can
- * download with `downloadBlob` from `@editor/export-pdf`.
+ * download with `downloadBlob` from `@sofer/export-pdf`.
  *
  * Mappings:
  *  - paragraph / heading / blockquote / codeBlock → Paragraph (with `heading`,

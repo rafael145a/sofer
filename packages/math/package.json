@@ -1,5 +1,5 @@
 {
-  "name": "@editor/math",
+  "name": "@sofer/math",
   "version": "0.0.0",
   "private": true,
   "type": "module",

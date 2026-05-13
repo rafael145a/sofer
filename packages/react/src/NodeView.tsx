@@ -1,5 +1,5 @@
 import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "react";
-import { tableRectSelection, type BlockAttrs, type SerializedBlock } from "@editor/core";
+import { tableRectSelection, type BlockAttrs, type SerializedBlock } from "@sofer/core";
 import { useEditorContext } from "./EditorContext";
 import { renderInline } from "./renderInline";
 import { sliceDelta } from "./sliceDelta";
