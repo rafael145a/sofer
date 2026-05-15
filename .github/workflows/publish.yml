@@ -19,10 +19,14 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
+      # NÃO usar `registry-url` aqui: ele faz o setup-node escrever um
+      # .npmrc com `_authToken=${NODE_AUTH_TOKEN}`. Sem NPM_TOKEN secret
+      # esse token vai vazio e quebra o publish (404 antes do registry
+      # validar o OIDC do Trusted Publisher). Com OIDC, npm CLI lida
+      # sozinho com a autenticação — nada de _authToken no .npmrc.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: pnpm
 
       - name: Garante npm >= 11.5.1 (Trusted Publisher OIDC)
