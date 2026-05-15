@@ -35,7 +35,9 @@ export type {
   PageEntry,
   PageGeometry,
   PageLayout,
+  PageLayoutResult,
   PageSlot,
+  PaginationPhase,
   TableRowFragment,
 } from "./usePagination";
 export { sliceDelta, deltaLength } from "./sliceDelta";

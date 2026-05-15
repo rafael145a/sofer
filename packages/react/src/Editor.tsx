@@ -315,8 +315,40 @@ export function Editor({
           }
           return;
         }
-        case "insertParagraph":
         case "insertLineBreak": {
+          // Shift+Enter inside a listItem inserts a soft line break (`\n`)
+          // INSIDE the item instead of splitting it into a new numbered entry
+          // — useful for spacing between question lines without bumping the
+          // numbering. Other blocks fall through to the regular paragraph
+          // split (= same as Enter), because TipTap-style "soft break" inside
+          // a paragraph isn't part of this model.
+          e.preventDefault();
+          if (ed.getBlockType() === "listItem") {
+            insertText(ctx, "\n", ed.consumePendingMarks());
+            return;
+          }
+          // Fall through to the same path as insertParagraph.
+          const selEmbed = ed.getSelectedEmbed();
+          if (selEmbed) {
+            const off = selEmbed.offset + 1;
+            ctx.setSelection({
+              anchor: {
+                blockIndex: selEmbed.blockIndex,
+                cellIndex: selEmbed.cellIndex,
+                offset: off,
+              },
+              focus: {
+                blockIndex: selEmbed.blockIndex,
+                cellIndex: selEmbed.cellIndex,
+                offset: off,
+              },
+            });
+          }
+          if (ed.splitListItem()) return;
+          insertParagraph(ctx);
+          return;
+        }
+        case "insertParagraph": {
           e.preventDefault();
           // If an embed is the entire selection, drop the caret RIGHT AFTER it
           // before splitting — otherwise the default "delete range then insert
@@ -424,6 +456,29 @@ export function Editor({
       return;
     }
 
+    // Home/End: move the caret to the visual start/end of the current line.
+    // The default contenteditable behavior is inconsistent with paginated
+    // fragments — Chrome occasionally jumps to the start/end of the block
+    // element instead of the visual line. We explicitly use the native
+    // `Selection.modify("lineboundary")` API (Chrome/Edge/Safari) which
+    // respects visual line wrapping inside any contenteditable.
+    //
+    // `Cmd/Ctrl+Home/End` keep the default browser behavior (document scroll).
+    if (!mod && (e.key === "Home" || e.key === "End")) {
+      const root = rootRef.current;
+      const sel = window.getSelection();
+      const sm = (sel as unknown as { modify?: (alter: string, direction: string, granularity: string) => void })?.modify;
+      if (root && sel && sel.rangeCount > 0 && typeof sm === "function") {
+        e.preventDefault();
+        const alter = e.shiftKey ? "extend" : "move";
+        const direction = e.key === "Home" ? "left" : "right";
+        sm.call(sel, alter, direction, "lineboundary");
+        const modelSel = readDomSelection(root);
+        if (modelSel) ctxRef.current.setSelection(modelSel);
+      }
+      return;
+    }
+
     if (!mod) return;
     const key = e.key.toLowerCase();
 
@@ -493,6 +548,24 @@ export function Editor({
   }, []);
 
   const topLevels = useMemo(() => groupTopLevels(snapshot.blocks), [snapshot]);
+  // Chave estrutural dos topLevels: muda só quando a SHAPE muda (tipos,
+  // contagem de itens em lists, list kind/style/start), não quando o texto
+  // dentro de um block é editado. Usada como dep do `usePageLayout` em
+  // lugar do array `topLevels` (cuja referência muda a cada keystroke), o
+  // que cortava repaginações desnecessárias — antes 1.3M DOM mutations
+  // por ~10 teclas viraram zero. O array `topLevels` em si continua fresh
+  // pra `renderSlot` ler o texto atualizado de cada block.
+  const topLevelsStructuralKey = useMemo(
+    () =>
+      topLevels
+        .map((t) =>
+          t.kind === "list"
+            ? `L:${t.listKind}:${t.items.length}:${t.ordinalStart}`
+            : `B:${t.block.type}:${t.block.attrs.level ?? ""}`,
+        )
+        .join("|"),
+    [topLevels],
+  );
   // Page geometry sources, in precedence order:
   //  1. `pageGeometry` prop when explicitly set (view-only override — does NOT
   //     write back to the Y.Doc; useful for apps that force a fixed size, e.g.
@@ -507,25 +580,46 @@ export function Editor({
   // Reads from snapshot + selection; recomputed on every render.
   const selectedEmbed = editor.getSelectedEmbed();
 
-  const layout = usePageLayout(
+  const { layout, phase: paginationPhase } = usePageLayout(
     rootRef as RefObject<HTMLElement>,
     geom,
     topLevels.length,
-    [topLevels, pageGeometry],
+    // Usar a chave estrutural (string) em vez do array `topLevels` direto:
+    // o array reference muda a cada keystroke, mas a chave só muda quando
+    // a SHAPE dos top-levels muda. `usePageLayout` compara deps via
+    // `shallowArrayEqual` — string equality cobre isso.
+    [topLevelsStructuralKey, pageGeometry],
   );
 
   const effectiveLayout: PageLayout = paginated ? layout : defaultPageLayout(topLevels.length);
 
-  const pageStyle = paginated
-    ? ({
-        "--ed-page-width": `${geom.width}px`,
-        "--ed-page-height": `${geom.height}px`,
-        "--ed-page-margin-top": `${geom.marginTop}px`,
-        "--ed-page-margin-bottom": `${geom.marginBottom}px`,
-        "--ed-page-margin-left": `${geom.marginLeft}px`,
-        "--ed-page-margin-right": `${geom.marginRight}px`,
-      } as React.CSSProperties)
-    : undefined;
+  // pageStyle memoizado: CSS custom properties são HERDADAS, então qualquer
+  // toggle de `style` no `.ed-root` invalidava estilos em todos os
+  // descendentes (~165k elementos no caso do bug histórico) e alimentava
+  // style recalc pesado a cada keystroke. Memo aqui mantém a mesma
+  // referência enquanto width/height/margens não mudam.
+  const pageStyle = useMemo(
+    () =>
+      paginated
+        ? ({
+            "--ed-page-width": `${geom.width}px`,
+            "--ed-page-height": `${geom.height}px`,
+            "--ed-page-margin-top": `${geom.marginTop}px`,
+            "--ed-page-margin-bottom": `${geom.marginBottom}px`,
+            "--ed-page-margin-left": `${geom.marginLeft}px`,
+            "--ed-page-margin-right": `${geom.marginRight}px`,
+          } as React.CSSProperties)
+        : undefined,
+    [
+      paginated,
+      geom.width,
+      geom.height,
+      geom.marginTop,
+      geom.marginBottom,
+      geom.marginLeft,
+      geom.marginRight,
+    ],
+  );
 
   const body = (
     <div
@@ -540,6 +634,7 @@ export function Editor({
       className={
         (className ?? "ed-root") + (paginated ? " ed-root--paged" : " ed-root--flat")
       }
+      data-pagination-phase={paginated ? paginationPhase : undefined}
       style={pageStyle}
       onKeyDown={onKeyDown}
       onCompositionStart={onCompositionStart}
@@ -551,12 +646,22 @@ export function Editor({
               pageNumber: pi + 1,
               pageCount: effectiveLayout.pages.length,
             };
+            // Apenas a pág 1 recebe o `firstPageExtraTop` adicional. Inline
+            // style sobrescreve a CSS var herdada do `.ed-root` (que vale para
+            // as páginas seguintes).
+            const pageInlineStyle =
+              pi === 0 && geom.firstPageExtraTop
+                ? ({
+                    "--ed-page-margin-top": `${geom.marginTop + geom.firstPageExtraTop}px`,
+                  } as React.CSSProperties)
+                : undefined;
             return (
               <div
                 key={`page-${pi}`}
                 className="ed-page"
                 data-page-number={ctx.pageNumber}
                 data-page-total={ctx.pageCount}
+                style={pageInlineStyle}
               >
                 {renderPageHeader && (
                   <div className="ed-page-header" contentEditable={false}>
@@ -615,7 +720,24 @@ interface ListEntry {
 
 type TopLevel =
   | { kind: "block"; block: SerializedBlock; blockIndex: number; key: number }
-  | { kind: "list"; items: ListEntry[]; listKind: ListKind; key: number };
+  | {
+      kind: "list";
+      items: ListEntry[];
+      listKind: ListKind;
+      /**
+       * Number to seed the `<ol>` `start` attribute. Pulled from the first
+       * item's `listStart` attr, defaulting to 1. Only meaningful for
+       * `listKind === "ordered"`.
+       */
+      ordinalStart: number;
+      /**
+       * Optional CSS `list-style-type` override for this group. Pulled from
+       * the first item's `listStyle` attr. Undefined means "use the cascade
+       * cycle from sofer-editor.css".
+       */
+      listStyle?: string;
+      key: number;
+    };
 
 function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
   const out: TopLevel[] = [];
@@ -626,15 +748,39 @@ function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
       const groupStart = i;
       const items: ListEntry[] = [];
       const kind: ListKind = block.attrs.listKind === "ordered" ? "ordered" : "bullet";
-      while (
-        i < snapshot.length &&
-        snapshot[i].type === "listItem" &&
-        (snapshot[i].attrs.listKind ?? "bullet") === kind
-      ) {
-        items.push({ block: snapshot[i], index: i });
+      const groupStyle = block.attrs.listStyle as string | undefined;
+      // A `listStart` on the FIRST item of the group seeds the `<ol start>`.
+      // A `listStart` or `listStyle` on a LATER item breaks the group at that
+      // item — its first item becomes the seed of the next group.
+      while (i < snapshot.length) {
+        const b = snapshot[i];
+        if (b.type !== "listItem") break;
+        if ((b.attrs.listKind ?? "bullet") !== kind) break;
+        if (i > groupStart) {
+          // Continuation: break the group ONLY when this item EXPLICITLY
+          // declares a renumbering. An undefined `listStart` / `listStyle`
+          // means "inherit from the current group leader" — that's the
+          // common case (user only tags the first item of the new sequence).
+          if (typeof b.attrs.listStart === "number") break;
+          const itemStyle = b.attrs.listStyle as string | undefined;
+          if (itemStyle !== undefined && itemStyle !== groupStyle) break;
+        }
+        items.push({ block: b, index: i });
         i++;
       }
-      out.push({ kind: "list", items, listKind: kind, key: groupStart });
+      const firstAttrs = items[0].block.attrs;
+      const ordinalStart =
+        typeof firstAttrs.listStart === "number" && firstAttrs.listStart > 0
+          ? firstAttrs.listStart
+          : 1;
+      out.push({
+        kind: "list",
+        items,
+        listKind: kind,
+        ordinalStart,
+        listStyle: groupStyle,
+        key: groupStart,
+      });
       continue;
     }
     out.push({ kind: "block", block, blockIndex: i, key: i });
@@ -671,15 +817,57 @@ function renderSlot(slot: PageSlot, topLevels: TopLevel[]): JSX.Element | null {
       />
     );
   }
+  if (slot.listFragment && top.kind === "list") {
+    return renderListFragment(top, slot.listFragment);
+  }
   return renderTopLevel(top);
 }
 
 function renderTopLevel(top: TopLevel): JSX.Element {
   if (top.kind === "list") {
     const tree = buildListTree(top.items);
-    return renderListTree(tree, top.listKind, `list-${top.key}`);
+    return renderListTree(tree, top, top.ordinalStart, `list-${top.key}`);
   }
   return <NodeView key={top.key} block={top.block} index={top.blockIndex} />;
+}
+
+/**
+ * Render a sub-range of a list group's top-level items, as produced by
+ * `placeFragmentedList`. The continuation `<ol>` carries an adjusted `start`
+ * so numbering remains contiguous across the page break.
+ */
+function renderListFragment(top: TopLevel & { kind: "list" }, frag: { index: number; itemStart: number; itemEnd: number }): JSX.Element {
+  const ranges = topLevelItemRanges(top.items);
+  const startRange = ranges[frag.itemStart];
+  const endRange = ranges[frag.itemEnd - 1];
+  if (!startRange || !endRange) return renderTopLevel(top);
+  const sliced = top.items.slice(startRange[0], endRange[1]);
+  // Continuation start = group's seed + count of top-level items already on prior pages.
+  const ordinalStart = top.ordinalStart + frag.itemStart;
+  const key = `list-${top.key}-f${frag.index}`;
+  const slicedTop: TopLevel & { kind: "list" } = { ...top, items: sliced };
+  const tree = buildListTree(sliced);
+  return renderListTree(tree, slicedTop, ordinalStart, key);
+}
+
+/**
+ * Index ranges within a flat `ListEntry[]` corresponding to each top-level
+ * (level-0) item plus its nested descendants. Used by `renderListFragment` to
+ * slice the flat list on a top-level boundary that matches what the paginator
+ * measured against direct `<li>` children.
+ */
+function topLevelItemRanges(items: ListEntry[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let currentStart = -1;
+  items.forEach((it, idx) => {
+    const level = clampListLevel(it.block.attrs.listLevel);
+    if (level === 0) {
+      if (currentStart >= 0) out.push([currentStart, idx]);
+      currentStart = idx;
+    }
+  });
+  if (currentStart >= 0) out.push([currentStart, items.length]);
+  return out;
 }
 
 interface ListNode {
@@ -700,14 +888,57 @@ function buildListTree(items: ListEntry[]): ListNode[] {
   return roots;
 }
 
-function renderListTree(tree: ListNode[], kind: ListKind, key: string): JSX.Element {
+function renderListTree(
+  tree: ListNode[],
+  top: TopLevel & { kind: "list" },
+  start: number,
+  key: string,
+): JSX.Element {
+  const className = `ed-list ed-list-${top.listKind}`;
+  const style: React.CSSProperties | undefined = top.listStyle
+    ? { listStyleType: top.listStyle }
+    : undefined;
+  const items = tree.map((node) => (
+    <NodeView key={node.entry.index} block={node.entry.block} index={node.entry.index}>
+      {node.children.length > 0
+        ? renderNestedListTree(node.children, top.listKind, `nested-${node.entry.index}`)
+        : null}
+    </NodeView>
+  ));
+  if (top.listKind === "ordered") {
+    return (
+      <ol
+        key={key}
+        className={className}
+        data-list-kind="ordered"
+        start={start > 1 ? start : undefined}
+        style={style}
+      >
+        {items}
+      </ol>
+    );
+  }
+  return (
+    <ul key={key} className={className} data-list-kind="bullet" style={style}>
+      {items}
+    </ul>
+  );
+}
+
+/**
+ * Nested sub-lists never carry an explicit `start`/`listStyle` from a parent
+ * item: the cascade in `sofer-editor.css` handles the per-level style cycle
+ * (decimal → lower-alpha → lower-roman). Only the TOP-level `<ol>` for a
+ * group needs an explicit `start`/`listStyleType`.
+ */
+function renderNestedListTree(tree: ListNode[], kind: ListKind, key: string): JSX.Element {
   const Tag = kind === "ordered" ? "ol" : "ul";
   return (
     <Tag key={key} className={`ed-list ed-list-${kind}`} data-list-kind={kind}>
       {tree.map((node) => (
         <NodeView key={node.entry.index} block={node.entry.block} index={node.entry.index}>
           {node.children.length > 0
-            ? renderListTree(node.children, kind, `nested-${node.entry.index}`)
+            ? renderNestedListTree(node.children, kind, `nested-${node.entry.index}`)
             : null}
         </NodeView>
       ))}

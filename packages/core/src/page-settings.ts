@@ -24,6 +24,27 @@ export interface PageSettings {
    * This is purely a UI hint — it's recomputed from width/height when needed.
    */
   preset?: PagePreset;
+  /**
+   * Free-form title persisted on the document for a consumer-rendered
+   * "system header" (e.g. a non-editable letterhead/identification block
+   * drawn on page 1 via `renderPageHeader`). Stored in `docSettings` so it
+   * survives serialization and is visible to every client/consumer of the
+   * `SerializedDocument`, including headless exports.
+   *
+   * The renderer is application-defined — this field just transports the
+   * title string. Use it when the header content is part of the document
+   * (and therefore must round-trip through exports), not a UI chrome
+   * decoration.
+   */
+  systemHeaderTitulo?: string;
+  /**
+   * Owner/author display name for the same consumer-rendered system
+   * header (see [[systemHeaderTitulo]]). Useful when the header should
+   * show the document's CREATOR, not the current viewer (e.g. an author
+   * name on a doc viewed by a third party). Persisted in `docSettings`
+   * for consistent rendering across clients and headless renderers.
+   */
+  systemHeaderProfessor?: string;
 }
 
 /** Page sizes in CSS px @ 96dpi. */

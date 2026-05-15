@@ -68,6 +68,8 @@ export class EditorDocument {
       marginBottom: pick("marginBottom") ?? DEFAULT_PAGE_SETTINGS.marginBottom,
       marginLeft: pick("marginLeft") ?? DEFAULT_PAGE_SETTINGS.marginLeft,
       marginRight: pick("marginRight") ?? DEFAULT_PAGE_SETTINGS.marginRight,
+      systemHeaderTitulo: pick("systemHeaderTitulo"),
+      systemHeaderProfessor: pick("systemHeaderProfessor"),
     };
     merged.preset = detectPreset(merged.width, merged.height);
     return merged;
@@ -225,6 +227,24 @@ export class EditorDocument {
    */
   loadFromJSON(serialized: SerializedDocument | LegacySerializedDocument): void {
     const { blocks: sourceBlocks, pageSettings } = normalizeSerialized(serialized);
+    // Lock anti-concorrência: `loadFromJSON` é destrutivo (clear+push) e
+    // dois imports concorrentes (especialmente entre clientes via CRDT)
+    // historicamente produziram blocks duplicados em massa (caso 172k).
+    // Marker em `docSettings.__importLock` com TTL 5s — se outro import
+    // foi iniciado < 5s atrás, este aborta com warning ao invés de
+    // sobrescrever. A janela de 5s cobre a latência de rede do Hocuspocus
+    // entre clients durante imports humanos típicos.
+    const LOCK_KEY = "__importLock";
+    const LOCK_TTL_MS = 5_000;
+    const existing = this.docSettings.get(LOCK_KEY);
+    if (typeof existing === "number" && Date.now() - existing < LOCK_TTL_MS) {
+      const ageMs = Date.now() - existing;
+      console.warn(
+        `[EditorDocument.loadFromJSON] import já em andamento (${ageMs}ms atrás, TTL ${LOCK_TTL_MS}ms) — ignorando esta chamada para evitar duplicação de blocks.`,
+      );
+      return;
+    }
+    this.docSettings.set(LOCK_KEY, Date.now());
     this.ydoc.transact(() => {
       if (this.blocks.length > 0) {
         this.blocks.delete(0, this.blocks.length);
@@ -251,6 +271,10 @@ export class EditorDocument {
           this.docSettings.set(k, v);
         }
       }
+      // Limpa o lock no fim do import (mesma transaction "import"). Se
+      // crashar antes daqui, o TTL de 5s expira a entrada e o doc volta a
+      // aceitar imports.
+      this.docSettings.delete(LOCK_KEY);
     }, "import");
   }
 

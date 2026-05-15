@@ -16,6 +16,13 @@ export type AlignValue = "left" | "center" | "right" | "justify";
 export type DirValue = "ltr" | "rtl";
 export type ListKind = "bullet" | "ordered";
 
+export type ListStyleType =
+  | "decimal"
+  | "lower-alpha"
+  | "upper-alpha"
+  | "lower-roman"
+  | "upper-roman";
+
 /** Maximum supported list nesting (0 = top level). */
 export const MAX_LIST_LEVEL = 5;
 
@@ -30,6 +37,20 @@ export interface BlockAttrs {
   listKind?: ListKind;
   /** Only meaningful when `type === "listItem"`. 0..MAX_LIST_LEVEL. */
   listLevel?: number;
+  /**
+   * Only meaningful when `type === "listItem"` and `listKind === "ordered"`.
+   * When set on a listItem, that item starts a NEW list group whose first
+   * `<ol>` carries `start={listStart}`. Used to renumerate questions or pick
+   * up an interrupted sequence.
+   */
+  listStart?: number;
+  /**
+   * Only meaningful when `type === "listItem"`. Overrides the default per-level
+   * CSS cycle (decimal → lower-alpha → lower-roman) with an explicit style.
+   * Like `listStart`, setting this on a listItem breaks the group so the new
+   * `<ol>` carries the requested `list-style-type`.
+   */
+  listStyle?: ListStyleType;
   /** Only meaningful when `type === "table"`. */
   rows?: number;
   /** Only meaningful when `type === "table"`. */

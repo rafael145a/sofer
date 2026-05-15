@@ -38,6 +38,11 @@ export function renderInline(delta: DeltaOp[], keyPrefix: number | string): Reac
     } else if (isImageEmbed(op.insert)) {
       const key = `${keyPrefix}-${offset}`;
       const layout = op.insert.layout ?? "inline";
+      // Marks aplicadas ao 1-char range que cobre o embed: hoje só
+      // `comment` é renderizada visualmente (espelha o tratamento de
+      // texto em `wrap()`). Outras marks (bold/italic/etc.) não fazem
+      // sentido em embed visual e são ignoradas.
+      const commentMarkId = op.attributes?.comment?.markId;
       if (layout === "wrap-left" || layout === "wrap-right") {
         wrapAnchors.push(
           <ImageEmbedView key={`${key}-anchor`} embed={op.insert} offset={offset} wrapAnchor />,
@@ -52,7 +57,16 @@ export function renderInline(delta: DeltaOp[], keyPrefix: number | string): Reac
           />,
         );
       } else {
-        body.push(<ImageEmbedView key={key} embed={op.insert} offset={offset} />);
+        const imgNode = <ImageEmbedView key={key} embed={op.insert} offset={offset} />;
+        if (commentMarkId) {
+          body.push(
+            <span key={`${key}-cmt`} data-comment-id={commentMarkId} className="ed-comment">
+              {imgNode}
+            </span>,
+          );
+        } else {
+          body.push(imgNode);
+        }
       }
       offset += 1;
     } else if (op.insert != null) {
@@ -180,6 +194,10 @@ function ImageEmbedViewImpl({
     ? { width: embed.width, height: embed.height, display: "block" }
     : outerStyle;
 
+  // `decoding="sync"` + `loading="eager"` evita o piscar quando a paginação
+  // remonta o <img> (consumidor com `renderPageHeader` faz a 1ª página ter
+  // marginTop diferente, o que muda o DOM pai do bloco quando ele cruza
+  // páginas): com cache do browser quente, o frame de remount já vem pintado.
   const img = (
     <img
       src={embed.src}
@@ -187,6 +205,8 @@ function ImageEmbedViewImpl({
       height={embed.height}
       contentEditable={false}
       draggable={false}
+      decoding="sync"
+      loading="eager"
       data-embed="image"
       data-embed-offset={offset}
       data-embed-align={align ?? ""}

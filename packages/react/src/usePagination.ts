@@ -27,6 +27,13 @@ export interface PageGeometry {
   marginBottom: number;
   marginLeft: number;
   marginRight: number;
+  /**
+   * Espaço adicional somado ao marginTop só na 1ª página. Útil para clientes
+   * que rendem um header fixo (timbrado, identificação) na pág 1 via
+   * `renderPageHeader` e não querem que esse espaço seja reservado nas demais.
+   * Quando omitido, todas as páginas têm a mesma `contentHeight`.
+   */
+  firstPageExtraTop?: number;
 }
 
 export const A4_PAGE: PageGeometry = {
@@ -38,8 +45,9 @@ export const A4_PAGE: PageGeometry = {
   marginRight: 96,
 };
 
-export function contentHeight(g: PageGeometry): number {
-  return g.height - g.marginTop - g.marginBottom;
+export function contentHeight(g: PageGeometry, pageIndex: number = 0): number {
+  const extra = pageIndex === 0 ? g.firstPageExtraTop ?? 0 : 0;
+  return g.height - g.marginTop - g.marginBottom - extra;
 }
 
 export function contentWidth(g: PageGeometry): number {
@@ -61,12 +69,23 @@ export interface TableRowFragment {
   rowEnd: number;
 }
 
+export interface ListItemRangeFragment {
+  /** 0, 1, 2... sequential fragment id within the list group. */
+  index: number;
+  /** First top-level item (level 0) included (inclusive). */
+  itemStart: number;
+  /** First top-level item (level 0) NOT included (exclusive). */
+  itemEnd: number;
+}
+
 export interface PageSlot {
   topLevelIndex: number;
   /** Set when this slot represents a paragraph/heading/blockquote line-level fragment. */
   fragment?: BlockFragment;
   /** Set when this slot is a row-range fragment of a table (Sub-phase 4.6). */
   tableFragment?: TableRowFragment;
+  /** Set when this slot is an item-range fragment of an ordered/bullet list. */
+  listFragment?: ListItemRangeFragment;
 }
 
 export interface PageEntry {
@@ -87,34 +106,75 @@ export function defaultPageLayout(topLevelCount: number): PageLayout {
   };
 }
 
-type Phase = "measure" | "stable";
+export type PaginationPhase = "measure" | "stable";
+
+export interface PageLayoutResult {
+  layout: PageLayout;
+  /**
+   * "measure" between a deps change and the post-commit measurement; "stable"
+   * once the layout matches the rendered DOM. Consumers can hide the caret /
+   * suppress visible flashes during "measure" (the DOM is briefly in the
+   * unfragmented intermediate state and the native caret may jump to the start
+   * of the line before useLayoutEffect re-applies the model selection).
+   */
+  phase: PaginationPhase;
+}
 
 export function usePageLayout(
   rootRef: RefObject<HTMLElement>,
   geometry: PageGeometry,
   topLevelCount: number,
   deps: ReadonlyArray<unknown>,
-): PageLayout {
-  const [phase, setPhase] = useState<Phase>("measure");
+): PageLayoutResult {
+  const [phase, setPhase] = useState<PaginationPhase>("measure");
   const [layout, setLayout] = useState<PageLayout>(() => defaultPageLayout(topLevelCount));
-  const lastDepsRef = useRef<unknown[]>([]);
+  const lastDepsRef = useRef<unknown[] | null>(null);
 
-  // Detect deps change → reset to measure phase with unfragmented layout.
+  // Reset effect: when `deps` (consumer-provided), `topLevelCount`, or
+  // `geometry` change, go back to the unfragmented default layout and
+  // re-enter the measure phase.
   //
-  // Use `layoutsDeepEqual` (fragment-aware) for the reset check. With shallow
-  // equality, a stale fragmented layout whose shape happens to match the
-  // unfragmented default (1 page × 1 slot is the common case) would survive the
-  // reset — the next `useLayoutEffect` would then early-return on
-  // `!isUnfragmented(layout)` and never recompute, leaving the block stuck
-  // showing only the first fragment's slice.
-  const currentDeps = [...deps, topLevelCount, geometry];
-  if (!shallowArrayEqual(lastDepsRef.current, currentDeps)) {
+  // Why a useLayoutEffect (instead of `setState` in render body, the previous
+  // approach): with concurrent rendering / Strict Mode, mutating
+  // `lastDepsRef.current` during render is fragile — React may discard a
+  // render pass while keeping the ref mutation, so a subsequent pass sees
+  // "deps unchanged" and the reset never fires. The historical symptom was
+  // a doc whose N blocks arrived entirely via remote `Y.applyUpdate`
+  // (e.g. an Hocuspocus / y-websocket sync): the editor's snapshot updated
+  // to N in `useEditor`, but `layout` stayed at 1 page × 1 slot — the reset
+  // condition in the old render-body path silently missed firing.
+  //
+  // Doing the reset in a useLayoutEffect runs after the commit (so refs are
+  // stable and visible), but BEFORE paint (so the user never sees a frame
+  // with stale layout). The phase change schedules a synchronous re-render
+  // and the measure effect below picks up immediately.
+  //
+  // Equality uses `shallowArrayEqual` for deps (consumer's responsibility to
+  // pass stable references / structural keys) and `layoutsDeepEqual` for
+  // the layout itself (fragment-aware — see the historical bug where shallow
+  // equality let a fragmented layout matching `1 page × 1 slot` survive the
+  // reset and lock subsequent measures via `!isUnfragmented(layout)`).
+  useLayoutEffect(() => {
+    const currentDeps = [...deps, topLevelCount, geometry];
+    if (lastDepsRef.current !== null && shallowArrayEqual(lastDepsRef.current, currentDeps)) {
+      return;
+    }
     lastDepsRef.current = currentDeps;
-    if (phase !== "measure") setPhase("measure");
-    const next = defaultPageLayout(topLevelCount);
-    if (!layoutsDeepEqual(layout, next)) setLayout(next);
-  }
+    setLayout((prev) => {
+      const next = defaultPageLayout(topLevelCount);
+      return layoutsDeepEqual(prev, next) ? prev : next;
+    });
+    setPhase("measure");
+    // No dependency array: this effect runs after every commit and decides
+    // internally whether deps changed. We can't put `[...deps, topLevelCount, geometry]`
+    // here because `deps` is a variable-length array from the caller — React's
+    // hook deps must be a fixed-shape list. Running every commit is cheap (one
+    // shallow array compare).
+  });
 
+  // Measure effect: when in the measure phase with an unfragmented layout,
+  // read the DOM and compute the real (possibly multi-page, possibly
+  // fragmented) layout. Returns to the "stable" phase.
   useLayoutEffect(() => {
     if (phase !== "measure") return;
     const root = rootRef.current;
@@ -126,7 +186,7 @@ export function usePageLayout(
     setPhase("stable");
   }, [phase, layout, geometry, topLevelCount, rootRef]);
 
-  return layout;
+  return { layout, phase };
 }
 
 // ---------- Layout computation ----------
@@ -135,7 +195,10 @@ function isUnfragmented(layout: PageLayout): boolean {
   return (
     layout.pages.length === 1 &&
     layout.pages[0].slots.every(
-      (s) => s.fragment === undefined && s.tableFragment === undefined,
+      (s) =>
+        s.fragment === undefined &&
+        s.tableFragment === undefined &&
+        s.listFragment === undefined,
     )
   );
 }
@@ -148,9 +211,12 @@ function computeLayout(
   const tops = collectTopLevelElements(root);
   if (tops.length === 0) return defaultPageLayout(topLevelCount);
 
-  const limit = contentHeight(geometry);
+  // `firstPageExtraTop` faz a pág 0 ter content height menor; usar uma função
+  // permite recomputar quando empurramos novas páginas.
+  const limitFor = (pageIndex: number) => contentHeight(geometry, pageIndex);
   const pages: PageEntry[] = [{ slots: [] }];
   let currentPage = pages[0];
+  let limit = limitFor(0);
   let used = 0;
 
   const cap = Math.min(tops.length, topLevelCount);
@@ -165,15 +231,25 @@ function computeLayout(
     }
 
     if (isFragmentable(el)) {
-      const result = placeFragmentedBlock(el, i, pages, used, limit);
+      const result = placeFragmentedBlock(el, i, pages, used, limitFor);
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = result.lastUsed;
       continue;
     }
 
     if (isTableTopLevel(el)) {
-      const result = placeFragmentedTable(el, i, pages, used, limit);
+      const result = placeFragmentedTable(el, i, pages, used, limitFor);
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
+      used = result.lastUsed;
+      continue;
+    }
+
+    if (isListTopLevel(el)) {
+      const result = placeFragmentedList(el, i, pages, used, limitFor);
+      currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = result.lastUsed;
       continue;
     }
@@ -184,10 +260,12 @@ function computeLayout(
       currentPage.slots.push({ topLevelIndex: i });
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = 0;
     } else {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       currentPage.slots.push({ topLevelIndex: i });
       used = h;
     }
@@ -204,8 +282,9 @@ function placeFragmentedBlock(
   topLevelIndex: number,
   pages: PageEntry[],
   startUsed: number,
-  limit: number,
+  limitFor: (pageIndex: number) => number,
 ): { lastUsed: number } {
+  let limit = limitFor(pages.length - 1);
   const totalChars = getBlockTextLength(el);
   if (totalChars === 0) {
     const h = elTotalHeight(el);
@@ -213,6 +292,7 @@ function placeFragmentedBlock(
     if (startUsed + h > limit && currentPage.slots.length > 0) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       startUsed = 0;
     }
     currentPage.slots.push({ topLevelIndex });
@@ -231,6 +311,7 @@ function placeFragmentedBlock(
     if (startUsed + h > limit && currentPage.slots.length > 0) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       startUsed = 0;
     }
     currentPage.slots.push({ topLevelIndex });
@@ -247,6 +328,7 @@ function placeFragmentedBlock(
     if (available <= 0) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = 0;
       continue;
     }
@@ -268,6 +350,7 @@ function placeFragmentedBlock(
       } else {
         pages.push({ slots: [] });
         currentPage = pages[pages.length - 1];
+        limit = limitFor(pages.length - 1);
         used = 0;
         continue;
       }
@@ -288,6 +371,7 @@ function placeFragmentedBlock(
     if (lineIdx < lines.length) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = 0;
     }
   }
@@ -450,8 +534,9 @@ function placeFragmentedTable(
   topLevelIndex: number,
   pages: PageEntry[],
   startUsed: number,
-  limit: number,
+  limitFor: (pageIndex: number) => number,
 ): PlaceFragmentedTableResult {
+  let limit = limitFor(pages.length - 1);
   const table = el.querySelector(':scope > table[data-block-type="table"]') as HTMLTableElement | null;
   const tbody = table?.querySelector(':scope > tbody');
   const trs = tbody ? (Array.from(tbody.children) as HTMLTableRowElement[]) : [];
@@ -462,6 +547,7 @@ function placeFragmentedTable(
     if (startUsed + h > limit && currentPage.slots.length > 0) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       startUsed = 0;
     }
     currentPage.slots.push({ topLevelIndex });
@@ -502,6 +588,7 @@ function placeFragmentedTable(
     if (available <= 0) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = 0;
       continue;
     }
@@ -526,6 +613,7 @@ function placeFragmentedTable(
       } else {
         pages.push({ slots: [] });
         currentPage = pages[pages.length - 1];
+        limit = limitFor(pages.length - 1);
         used = 0;
         continue;
       }
@@ -546,6 +634,125 @@ function placeFragmentedTable(
     if (rowIdx < trs.length) {
       pages.push({ slots: [] });
       currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
+      used = 0;
+    }
+  }
+
+  return { lastUsed: used };
+}
+
+/**
+ * A top-level for a list group is the `<ol>` or `<ul>` rendered by
+ * `renderListTree`. Its direct `<li>` children are the level-0 entries of
+ * the group; nested sub-lists live INSIDE those `<li>`s and travel with them.
+ */
+function isListTopLevel(el: HTMLElement): boolean {
+  if (el.tagName !== "OL" && el.tagName !== "UL") return false;
+  return el.classList.contains("ed-list");
+}
+
+interface PlaceFragmentedListResult { lastUsed: number; }
+
+/**
+ * Split a list group that doesn't fit on the current page across pages at
+ * top-level `<li>` boundaries. Nested sub-lists stay attached to their parent
+ * `<li>` (we never break inside a nested list — that's reserved for the rare
+ * case where a single top-level item is itself taller than a full page, in
+ * which case we bleed it).
+ *
+ * Heights come from `<li>.getBoundingClientRect()` measured against the
+ * unfragmented render. They include the nested sub-list height when present.
+ */
+function placeFragmentedList(
+  el: HTMLElement,
+  topLevelIndex: number,
+  pages: PageEntry[],
+  startUsed: number,
+  limitFor: (pageIndex: number) => number,
+): PlaceFragmentedListResult {
+  let limit = limitFor(pages.length - 1);
+
+  // Direct <li> children of the top-level <ol>/<ul>. Filter strictly by
+  // `.ed-listitem` class so any other DOM injected by the consumer (markers,
+  // dividers) doesn't get counted as an item.
+  const items: HTMLLIElement[] = [];
+  for (const c of Array.from(el.children)) {
+    if (c instanceof HTMLLIElement && c.classList.contains("ed-listitem")) {
+      items.push(c);
+    }
+  }
+
+  if (items.length === 0) {
+    const h = elTotalHeight(el);
+    let currentPage = pages[pages.length - 1];
+    if (startUsed + h > limit && currentPage.slots.length > 0) {
+      pages.push({ slots: [] });
+      currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
+      startUsed = 0;
+    }
+    currentPage.slots.push({ topLevelIndex });
+    return { lastUsed: startUsed + h };
+  }
+
+  const heights = items.map((li) => elTotalHeight(li));
+  // Vertical padding/margin contributed by the wrapping <ol>/<ul> itself
+  // (margin-block + padding-block beyond the sum of item heights). We charge
+  // this overhead only to the FIRST fragment's page so subsequent continuation
+  // fragments don't double-count it.
+  const sumHeights = heights.reduce((a, b) => a + b, 0);
+  const wrapperOverhead = Math.max(0, elTotalHeight(el) - sumHeights);
+
+  let i = 0;
+  let currentPage = pages[pages.length - 1];
+  let used = startUsed;
+  let fragIndex = 0;
+
+  while (i < items.length) {
+    const available = Math.max(0, limit - used);
+    // Greedy: include as many consecutive items as fit. bestK is the last
+    // fitting item index.
+    const isFirstFragment = fragIndex === 0;
+    let bestK = -1;
+    let runningH = isFirstFragment ? wrapperOverhead : 0;
+    for (let k = i; k < items.length; k++) {
+      runningH += heights[k];
+      if (runningH <= available) bestK = k;
+      else break;
+    }
+
+    if (bestK < 0) {
+      // Not even one item fits in the remaining space.
+      if (currentPage.slots.length === 0) {
+        // Page is empty; force-place a single oversized item (bleed).
+        bestK = i;
+      } else {
+        // Move to next page and retry.
+        pages.push({ slots: [] });
+        currentPage = pages[pages.length - 1];
+        limit = limitFor(pages.length - 1);
+        used = 0;
+        continue;
+      }
+    }
+
+    currentPage.slots.push({
+      topLevelIndex,
+      listFragment: { index: fragIndex, itemStart: i, itemEnd: bestK + 1 },
+    });
+
+    // Account for consumed height on the current page.
+    let consumed = isFirstFragment ? wrapperOverhead : 0;
+    for (let k = i; k <= bestK; k++) consumed += heights[k];
+    used += consumed;
+
+    i = bestK + 1;
+    fragIndex++;
+    if (i < items.length) {
+      pages.push({ slots: [] });
+      currentPage = pages[pages.length - 1];
+      limit = limitFor(pages.length - 1);
       used = 0;
     }
   }
@@ -640,6 +847,14 @@ function layoutsDeepEqual(a: PageLayout, b: PageLayout): boolean {
       if (tA || tB) {
         if (!tA || !tB) return false;
         if (tA.index !== tB.index || tA.rowStart !== tB.rowStart || tA.rowEnd !== tB.rowEnd) {
+          return false;
+        }
+      }
+      const lA = sA[j].listFragment;
+      const lB = sB[j].listFragment;
+      if (lA || lB) {
+        if (!lA || !lB) return false;
+        if (lA.index !== lB.index || lA.itemStart !== lB.itemStart || lA.itemEnd !== lB.itemEnd) {
           return false;
         }
       }

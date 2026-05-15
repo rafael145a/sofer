@@ -130,8 +130,8 @@ importers:
   packages/export-pdf:
     dependencies:
       '@sofereditor/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: 0.1.0
+        version: 0.1.0
     devDependencies:
       tsup:
         specifier: ^8.3.5
@@ -919,6 +919,9 @@ packages:
     resolution: {integrity: sha512-hPt/bgL5cE+Qp+/TPHBqptcAgPzgj46mPcg/16zNUmbQk0j+mOEQV/+Lqu8QRtDV3Ek95Q6FeFITpuhl6OTsAA==}
     cpu: [x64]
     os: [win32]
+
+  '@sofereditor/core@0.1.0':
+    resolution: {integrity: sha512-KQ6Xm3B6aiau48Rxv/RM8BrTjN9Pb4bKj6YtjYhHC41miIlb5yhDCRwhim+4b8CTw/C0KoHXnKVZcypTvxEDbg==}
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -2021,6 +2024,10 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.3':
     optional: true
+
+  '@sofereditor/core@0.1.0':
+    dependencies:
+      yjs: 13.6.30
 
   '@types/babel__core@7.20.5':
     dependencies:
