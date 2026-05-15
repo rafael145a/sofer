@@ -30,29 +30,29 @@ Sofer's document model **is** the Y.Doc: blocks live in a `Y.Array`, each block 
 
 ## Packages
 
-All packages are published under `@sofer/*` on npm.
+All packages are published under `@sofereditor/*` on npm.
 
 | Package | What it does |
 |---|---|
-| [`@sofer/core`](./packages/core) | Document model on Y.js: blocks, marks, commands, history. Framework-agnostic. |
-| [`@sofer/react`](./packages/react) | React renderer, `useEditor` hook, `<Editor>` and `<Toolbar>` components, built-in A4 pagination. |
-| [`@sofer/collab`](./packages/collab) | Hocuspocus binding for real-time collaboration. Awareness exposed for cursor overlays. |
-| [`@sofer/import-docx`](./packages/import-docx) | Parse `.docx` (OOXML) in the browser or Node into a `SerializedDocument`. |
-| [`@sofer/export-docx`](./packages/export-docx) | Emit `.docx` from a `SerializedDocument`. |
-| [`@sofer/export-pdf`](./packages/export-pdf) | Serialize the paginated DOM to HTML; consumers run Puppeteer for PDF. |
+| [`@sofereditor/core`](./packages/core) | Document model on Y.js: blocks, marks, commands, history. Framework-agnostic. |
+| [`@sofereditor/react`](./packages/react) | React renderer, `useEditor` hook, `<Editor>` and `<Toolbar>` components, built-in A4 pagination. |
+| [`@sofereditor/collab`](./packages/collab) | Hocuspocus binding for real-time collaboration. Awareness exposed for cursor overlays. |
+| [`@sofereditor/import-docx`](./packages/import-docx) | Parse `.docx` (OOXML) in the browser or Node into a `SerializedDocument`. |
+| [`@sofereditor/export-docx`](./packages/export-docx) | Emit `.docx` from a `SerializedDocument`. |
+| [`@sofereditor/export-pdf`](./packages/export-pdf) | Serialize the paginated DOM to HTML; consumers run Puppeteer for PDF. |
 
-Placeholder packages reserved for future modules: `@sofer/pagination`, `@sofer/tables`, `@sofer/math`, `@sofer/layout-images`, `@sofer/server-hocuspocus`.
+Placeholder packages reserved for future modules: `@sofereditor/pagination`, `@sofereditor/tables`, `@sofereditor/math`, `@sofereditor/layout-images`, `@sofereditor/server-hocuspocus`.
 
 ---
 
 ## Quick start
 
 ```bash
-npm install @sofer/core @sofer/react yjs
+npm install @sofereditor/core @sofereditor/react yjs
 ```
 
 ```tsx
-import { Editor, EditorProvider, Toolbar, useEditor, A4_PAGE } from "@sofer/react";
+import { Editor, EditorProvider, Toolbar, useEditor, A4_PAGE } from "@sofereditor/react";
 
 export function MyEditor() {
   const editor = useEditor();
@@ -74,14 +74,14 @@ export function MyEditor() {
 ### With collaboration
 
 ```bash
-npm install @sofer/collab @hocuspocus/provider
+npm install @sofereditor/collab @hocuspocus/provider
 ```
 
 ```tsx
 import * as Y from "yjs";
-import { EditorDocument } from "@sofer/core";
-import { useEditor } from "@sofer/react";
-import { useCollab } from "@sofer/collab";
+import { EditorDocument } from "@sofereditor/core";
+import { useEditor } from "@sofereditor/react";
+import { useCollab } from "@sofereditor/collab";
 
 const ydoc = new Y.Doc();
 const editor = useEditor({ document: new EditorDocument(ydoc) });
@@ -110,9 +110,9 @@ const editor = useEditor({
 ### Import/export
 
 ```tsx
-import { docxBlobToDocument } from "@sofer/import-docx";
-import { documentToDocxBlob } from "@sofer/export-docx";
-import { exportPdfFromElement } from "@sofer/export-pdf";
+import { docxBlobToDocument } from "@sofereditor/import-docx";
+import { documentToDocxBlob } from "@sofereditor/export-docx";
+import { exportPdfFromElement } from "@sofereditor/export-pdf";
 
 const serialized = await docxBlobToDocument(file);
 editor.doc.loadFromJSON(serialized);
@@ -127,21 +127,21 @@ await exportPdfFromElement(editorRootEl, { title: "My document" });
 
 ```
 +----------------------+         +----------------------+
-|     @sofer/core      |  ydoc   |     @sofer/collab    |
+|     @sofereditor/core      |  ydoc   |     @sofereditor/collab    |
 |  blocks / marks /    |<------->|  HocuspocusProvider  |
 |  commands / history  |         |  awareness           |
 +----------+-----------+         +----------+-----------+
            |                                |
            v                                v
 +----------+-----------+         +----------------------+
-|    @sofer/react      |         |  Hocuspocus server   |
+|    @sofereditor/react      |         |  Hocuspocus server   |
 |  <Editor> renders    |         |  (your backend)      |
 |  paginated DOM       |         +----------------------+
 +----------+-----------+
            |
            v
 +----------+-----------+
-|  @sofer/export-pdf   |
+|  @sofereditor/export-pdf   |
 |  serializes DOM →    |
 |  HTML for Puppeteer  |
 +----------------------+
@@ -164,8 +164,8 @@ pnpm build        # tsup builds for all publishable packages
 Running a single package's task:
 
 ```bash
-pnpm --filter @sofer/core test
-pnpm --filter @sofer/react build
+pnpm --filter @sofereditor/core test
+pnpm --filter @sofereditor/react build
 ```
 
 ---
@@ -178,7 +178,7 @@ If you run a modified version of Sofer over a network to provide a service, the 
 
 ### Third-party licenses
 
-All runtime dependencies of `@sofer/*` packages are released under permissive licenses (MIT, ISC, BSD, BlueOak, Zlib); none are copyleft. Key dependencies:
+All runtime dependencies of `@sofereditor/*` packages are released under permissive licenses (MIT, ISC, BSD, BlueOak, Zlib); none are copyleft. Key dependencies:
 
 - [`yjs`](https://github.com/yjs/yjs) — MIT
 - [`y-protocols`](https://github.com/yjs/y-protocols) — MIT

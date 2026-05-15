@@ -2,7 +2,7 @@
   "name": "sofer",
   "private": true,
   "version": "0.0.0",
-  "description": "Sofer — Google Docs-style rich text editor on top of Y.js. Real pagination, collaboration and DOCX/PDF import/export. Monorepo for the @sofer/* packages.",
+  "description": "Sofer — Google Docs-style rich text editor on top of Y.js. Real pagination, collaboration and DOCX/PDF import/export. Monorepo for the @sofereditor/* packages.",
   "license": "AGPL-3.0-or-later",
   "homepage": "https://github.com/rafael145a/sofer#readme",
   "repository": {

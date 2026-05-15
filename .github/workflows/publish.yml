@@ -1,4 +1,4 @@
-name: Publish @sofer/* to npm
+name: Publish @sofereditor/* to npm
 
 on:
   push:
