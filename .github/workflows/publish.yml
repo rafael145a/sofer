@@ -33,14 +33,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build precisa rodar antes do typecheck porque packages que apontam
+      # types pra dist/ (ex.: @sofereditor/export-pdf) só ficam type-resolvable
+      # após o tsup gerar os .d.ts.
+      - name: Build
+        run: pnpm build
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Test
         run: pnpm test
-
-      - name: Build
-        run: pnpm build
 
       # Sequencial e em ordem topológica: core publica antes dos demais, porque
       # pnpm publish reescreve `workspace:*` pra `^<version>` real (a do core
