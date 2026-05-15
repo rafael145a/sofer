@@ -68,8 +68,8 @@ export class EditorDocument {
       marginBottom: pick("marginBottom") ?? DEFAULT_PAGE_SETTINGS.marginBottom,
       marginLeft: pick("marginLeft") ?? DEFAULT_PAGE_SETTINGS.marginLeft,
       marginRight: pick("marginRight") ?? DEFAULT_PAGE_SETTINGS.marginRight,
-      systemHeaderTitulo: pick("systemHeaderTitulo"),
-      systemHeaderProfessor: pick("systemHeaderProfessor"),
+      systemHeaderTitle: pick("systemHeaderTitle"),
+      systemHeaderAuthor: pick("systemHeaderAuthor"),
     };
     merged.preset = detectPreset(merged.width, merged.height);
     return merged;

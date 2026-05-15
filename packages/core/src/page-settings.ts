@@ -36,15 +36,15 @@ export interface PageSettings {
    * (and therefore must round-trip through exports), not a UI chrome
    * decoration.
    */
-  systemHeaderTitulo?: string;
+  systemHeaderTitle?: string;
   /**
    * Owner/author display name for the same consumer-rendered system
-   * header (see [[systemHeaderTitulo]]). Useful when the header should
+   * header (see [[systemHeaderTitle]]). Useful when the header should
    * show the document's CREATOR, not the current viewer (e.g. an author
    * name on a doc viewed by a third party). Persisted in `docSettings`
    * for consistent rendering across clients and headless renderers.
    */
-  systemHeaderProfessor?: string;
+  systemHeaderAuthor?: string;
 }
 
 /** Page sizes in CSS px @ 96dpi. */

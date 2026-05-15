@@ -37,6 +37,8 @@ function shallowEqual(a: PageSettings, b: PageSettings): boolean {
     a.marginBottom === b.marginBottom &&
     a.marginLeft === b.marginLeft &&
     a.marginRight === b.marginRight &&
-    a.preset === b.preset
+    a.preset === b.preset &&
+    a.systemHeaderTitle === b.systemHeaderTitle &&
+    a.systemHeaderAuthor === b.systemHeaderAuthor
   );
 }
