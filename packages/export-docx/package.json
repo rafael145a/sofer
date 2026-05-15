@@ -1,7 +1,7 @@
 {
   "name": "@sofereditor/export-docx",
-  "version": "0.1.0",
-  "description": "@sofereditor/export-docx — Emit .docx from a Sofer SerializedDocument. Round-trip with @sofereditor/import-docx.",
+  "version": "0.2.0",
+  "description": "@sofereditor/export-docx \u2014 Emit .docx from a Sofer SerializedDocument. Round-trip with @sofereditor/import-docx.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/export-docx#readme",
