@@ -74,7 +74,20 @@ jobs:
               echo "::notice title=Já publicado::$NAME@$VERSION — skip"
             else
               echo "::notice title=Publicando::$NAME@$VERSION"
-              pnpm publish --access public --no-git-checks
+              # pnpm pack: gera tarball com workspace:* já reescrito como
+              # ^<version> real. Isso é o que precisamos do pnpm.
+              # Em seguida, npm publish do tarball: o npm CLI (>=11.5.1) é
+              # quem aciona o fluxo OIDC do Trusted Publisher; pnpm publish
+              # não passa pela mesma rota de auth.
+              pnpm pack --pack-destination /tmp/sofer-tarballs >/dev/null
+              TGZ="/tmp/sofer-tarballs/$(basename $NAME)-${VERSION}.tgz"
+              # @sofereditor/core → sofereditor-core. pnpm pack usa o
+              # nome do pacote sem @ e com / virando -.
+              TGZ="/tmp/sofer-tarballs/$(echo $NAME | sed 's|^@||; s|/|-|').-${VERSION}.tgz"
+              TGZ=$(ls /tmp/sofer-tarballs/ | grep -E "^$(echo $NAME | sed 's|^@||; s|/|-|')-${VERSION}\.tgz$" | head -1)
+              TGZ="/tmp/sofer-tarballs/$TGZ"
+              ls -la "$TGZ"
+              npm publish "$TGZ" --access public --provenance
               echo "${NAME}@${VERSION}" >> /tmp/sofer-published-tags
             fi
             cd - >/dev/null
