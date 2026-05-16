@@ -94,20 +94,28 @@ jobs:
               echo "::notice title=Já publicado::$NAME@$VERSION — skip"
             else
               echo "::notice title=Publicando::$NAME@$VERSION"
-              # pnpm pack: gera tarball com workspace:* já reescrito como
-              # ^<version> real. Isso é o que precisamos do pnpm.
-              # Em seguida, npm publish do tarball: o npm CLI (>=11.5.1) é
-              # quem aciona o fluxo OIDC do Trusted Publisher; pnpm publish
-              # não passa pela mesma rota de auth.
-              pnpm pack --pack-destination /tmp/sofer-tarballs >/dev/null
-              TGZ="/tmp/sofer-tarballs/$(basename $NAME)-${VERSION}.tgz"
-              # @sofereditor/core → sofereditor-core. pnpm pack usa o
-              # nome do pacote sem @ e com / virando -.
-              TGZ="/tmp/sofer-tarballs/$(echo $NAME | sed 's|^@||; s|/|-|').-${VERSION}.tgz"
-              TGZ=$(ls /tmp/sofer-tarballs/ | grep -E "^$(echo $NAME | sed 's|^@||; s|/|-|')-${VERSION}\.tgz$" | head -1)
-              TGZ="/tmp/sofer-tarballs/$TGZ"
-              ls -la "$TGZ"
-              npm publish "$TGZ" --access public --provenance
+              # Reescreve workspace:* pra ^<version> real (resolvido a partir
+              # do package.json do pacote workspace dependente). Sem isso, npm
+              # publish reclama que workspace: não é semver válido.
+              node -e '
+                const fs = require("fs");
+                const path = require("path");
+                const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+                for (const section of ["dependencies", "peerDependencies", "devDependencies"]) {
+                  const deps = pkg[section];
+                  if (!deps) continue;
+                  for (const [k, v] of Object.entries(deps)) {
+                    if (typeof v === "string" && v.startsWith("workspace:")) {
+                      const realPkg = JSON.parse(fs.readFileSync(`../${k.split("/")[1]}/package.json`, "utf8"));
+                      deps[k] = `^${realPkg.version}`;
+                    }
+                  }
+                }
+                fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+              '
+              # `npm publish` da doc oficial do Trusted Publisher: rodando
+              # do diretório do pacote, sem tarball arg.
+              npm publish --access public --provenance
               echo "${NAME}@${VERSION}" >> /tmp/sofer-published-tags
             fi
             cd - >/dev/null
