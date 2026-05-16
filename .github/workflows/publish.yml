@@ -72,16 +72,6 @@ jobs:
       # Sequencial e em ordem topológica: core publica antes dos demais, porque
       # pnpm publish reescreve `workspace:*` pra `^<version>` real (a do core
       # precisa existir no npm quando o consumidor for instalar @sofer/react).
-      - name: Debug OIDC env
-        run: |
-          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set? $([ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && echo YES || echo NO)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set? $([ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ] && echo YES || echo NO)"
-          echo "npm version: $(npm --version)"
-          echo "node version: $(node --version)"
-          echo ".npmrc:"
-          cat "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}" 2>/dev/null || echo "(none)"
-
       - name: Publica pacotes (skip private / já publicados)
         id: publish
         env:
@@ -130,7 +120,7 @@ jobs:
               '
               # `npm publish` da doc oficial do Trusted Publisher: rodando
               # do diretório do pacote, sem tarball arg.
-              npm publish --access public --provenance --loglevel=verbose 2>&1 | head -120
+              npm publish --access public --provenance
               echo "${NAME}@${VERSION}" >> /tmp/sofer-published-tags
             fi
             cd - >/dev/null
