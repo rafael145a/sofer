@@ -76,8 +76,13 @@ jobs:
         id: publish
         env:
           NPM_CONFIG_PROVENANCE: 'true'
+          # Explicitly unset NODE_AUTH_TOKEN — quando existe (mesmo vazio),
+          # npm CLI assume "use classic auth" e nunca dispara o fluxo
+          # Trusted Publisher OIDC.
+          NODE_AUTH_TOKEN: ''
         run: |
           set -euo pipefail
+          unset NODE_AUTH_TOKEN || true
           : > /tmp/sofer-published-tags
           PKGS="core react collab import-docx export-docx export-pdf"
           for pkg in $PKGS; do
