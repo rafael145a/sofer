@@ -130,7 +130,7 @@ jobs:
               '
               # `npm publish` da doc oficial do Trusted Publisher: rodando
               # do diretório do pacote, sem tarball arg.
-              npm publish --access public --provenance
+              npm publish --access public --provenance --loglevel=verbose 2>&1 | head -120
               echo "${NAME}@${VERSION}" >> /tmp/sofer-published-tags
             fi
             cd - >/dev/null
