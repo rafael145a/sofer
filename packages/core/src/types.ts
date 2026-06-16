@@ -219,6 +219,8 @@ export interface SerializedCell {
 }
 
 export interface SerializedBlock {
+  /** Id estável do bloco (cursores colaborativos / keying). Ausente em docs antigos. */
+  id?: string;
   type: BlockType;
   /** Plain concatenated text (no marks). Kept for ergonomic equality checks. */
   text: string;

@@ -18,6 +18,29 @@ import {
 } from "./types";
 
 /**
+ * Gera um id estável de bloco. Usado para ancorar cursores colaborativos
+ * remotos (fallback) e para keying estável no overlay. Persistido no Y.Map do
+ * bloco, então sobrevive a reload (binário Yjs). Docs antigos não têm — os
+ * helpers de cursor lidam com a ausência (caem na RelativePosition).
+ */
+export function newBlockId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* ambiente sem crypto.randomUUID — fallback abaixo */
+  }
+  return `b-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+/** Lê o id de um bloco Y.Map (undefined em docs antigos sem id). */
+export function getBlockId(block: Y.Map<unknown>): string | undefined {
+  const id = block.get("id");
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
  * Y.js-backed document.
  *
  * Storage layout:
@@ -295,6 +318,9 @@ export class EditorDocument {
       const attrsMap = b.get("attrs") as Y.Map<unknown> | undefined;
       const attrs = attrsMap ? (Object.fromEntries(attrsMap.entries()) as BlockAttrs) : {};
 
+      // NOTA: o `id` do bloco NÃO entra no serialized_json (mantém a forma do
+      // JSON estável p/ bloat-check/API e os testes de round-trip). O id vive no
+      // Y.Map e persiste no binário Yjs — é onde os cursores precisam dele.
       if (type === "table") {
         const cellsArray = b.get("cells") as Y.Array<Y.Map<unknown>> | undefined;
         const cells: SerializedCell[] = cellsArray
@@ -356,6 +382,7 @@ export function createBlock(
   }
 
   const block = new Y.Map<unknown>();
+  block.set("id", newBlockId());
   block.set("type", type);
   const yText = new Y.Text();
   if (initialText.length > 0) yText.insert(0, initialText);
@@ -377,6 +404,7 @@ export function createTableBlock(rows: number, cols: number): Y.Map<unknown> {
   const r = Math.max(1, Math.trunc(rows));
   const c = Math.max(1, Math.trunc(cols));
   const block = new Y.Map<unknown>();
+  block.set("id", newBlockId());
   block.set("type", "table");
   const attrsMap = new Y.Map<unknown>();
   attrsMap.set("rows", r);
@@ -416,6 +444,7 @@ function buildEmptyBlockFromSerialized(block: SerializedBlock): Y.Map<unknown> {
     const cols =
       typeof block.attrs.cols === "number" ? Math.max(1, Math.trunc(block.attrs.cols)) : 1;
     const yBlock = new Y.Map<unknown>();
+    yBlock.set("id", typeof block.id === "string" ? block.id : newBlockId());
     yBlock.set("type", "table");
     const attrsMap = new Y.Map<unknown>();
     attrsMap.set("rows", rows);
@@ -438,7 +467,10 @@ function buildEmptyBlockFromSerialized(block: SerializedBlock): Y.Map<unknown> {
     yBlock.set("cells", cellsArr);
     return yBlock;
   }
-  return createBlock(block.type, "", block.attrs);
+  const yb = createBlock(block.type, "", block.attrs);
+  // Preserva o id serializado (round-trip JSON), senão usa o gerado em createBlock.
+  if (typeof block.id === "string") yb.set("id", block.id);
+  return yb;
 }
 
 function applyDeltaIntoBlock(yBlock: Y.Map<unknown> | undefined, src: SerializedBlock): void {
