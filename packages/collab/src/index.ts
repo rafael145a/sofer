@@ -6,7 +6,12 @@ export {
   type ConnectionStatus,
 } from "./binding";
 
-export { getPeers, observePeers, type PeerState } from "./awareness";
+export {
+  getPeers,
+  observePeers,
+  setLocalCursor,
+  type PeerState,
+} from "./awareness";
 
 export {
   useCollab,
