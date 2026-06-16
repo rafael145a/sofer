@@ -12,6 +12,7 @@ import {
 import {
   deleteBackward,
   deleteForward,
+  encodeSelection,
   insertParagraph,
   insertText,
   type CommandContext,
@@ -22,6 +23,10 @@ import {
 import { applyDomSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { EditorProvider } from "./EditorContext";
 import { ImageResizeOverlay } from "./ImageResizeOverlay";
+import {
+  RemoteCursorsOverlay,
+  type AwarenessLike,
+} from "./RemoteCursorsOverlay";
 import { NodeView, type NodeViewFragment } from "./NodeView";
 import {
   A4_PAGE,
@@ -63,6 +68,12 @@ export interface EditorProps {
    * `"<n> / <total>"` centered. Pass `null` to omit.
    */
   renderPageFooter?: PageRenderProp | null;
+  /**
+   * Awareness do Yjs (de `useCollab().binding.awareness`). Quando presente,
+   * o editor publica a seleção local e desenha os cursores/seleções dos outros
+   * usuários (presença colaborativa). Omitir = sem cursores remotos.
+   */
+  awareness?: AwarenessLike;
 }
 
 const defaultFooter: PageRenderProp = ({ pageNumber, pageCount }) =>
@@ -74,6 +85,7 @@ export function Editor({
   pageGeometry,
   renderPageHeader,
   renderPageFooter = defaultFooter,
+  awareness,
 }: EditorProps): JSX.Element {
   const internal = useEditor();
   const editor = providedEditor ?? internal;
@@ -82,6 +94,40 @@ export function Editor({
   const rootRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const suppressSelectionSyncRef = useRef(false);
+
+  // Presença colaborativa: publica a seleção local no awareness (throttle por
+  // rAF). Outros editores desenham nosso caret via RemoteCursorsOverlay.
+  useEffect(() => {
+    if (!awareness) return;
+    const root = rootRef.current;
+    if (!root) return;
+    let raf: number | null = null;
+    const publish = () => {
+      raf = null;
+      const sel = readDomSelection(root);
+      awareness.setLocalStateField(
+        "cursor",
+        sel ? encodeSelection(doc, sel) ?? null : null,
+      );
+    };
+    const onSelChange = () => {
+      const s = document.getSelection();
+      if (!s || s.rangeCount === 0) return;
+      // Só publica quando a seleção está dentro do nosso editor.
+      if (s.anchorNode && !root.contains(s.anchorNode)) return;
+      if (raf != null) return;
+      raf = requestAnimationFrame(publish);
+    };
+    const onBlur = () => awareness.setLocalStateField("cursor", null);
+    document.addEventListener("selectionchange", onSelChange);
+    root.addEventListener("blur", onBlur, true);
+    return () => {
+      document.removeEventListener("selectionchange", onSelChange);
+      root.removeEventListener("blur", onBlur, true);
+      if (raf != null) cancelAnimationFrame(raf);
+      awareness.setLocalStateField("cursor", null);
+    };
+  }, [awareness, doc]);
 
   const ctxRef = useRef<CommandContext>({ doc, getSelection, setSelection });
   ctxRef.current = { doc, getSelection, setSelection };
@@ -703,6 +749,14 @@ export function Editor({
               selectedEmbed.cellIndex,
             )
           }
+        />
+      )}
+      {awareness && (
+        <RemoteCursorsOverlay
+          rootRef={rootRef}
+          doc={doc}
+          awareness={awareness}
+          revision={snapshot}
         />
       )}
     </div>

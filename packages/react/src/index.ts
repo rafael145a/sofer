@@ -1,5 +1,6 @@
 export { Editor } from "./Editor";
 export type { EditorProps, PageRenderContext, PageRenderProp } from "./Editor";
+export { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 export { useEditor } from "./useEditor";
 export type {
   LinkRequest,

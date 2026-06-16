@@ -310,7 +310,7 @@ interface DomPoint {
   offset: number;
 }
 
-function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
+export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   let container: HTMLElement | null;
   let containerStart = 0;
 
