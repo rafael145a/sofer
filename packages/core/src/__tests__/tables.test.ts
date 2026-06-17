@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EditorDocument,
   collapsedSelection,
+  createBlock,
   deleteBackward,
   deleteTable,
   deleteTableColumn,
@@ -41,8 +42,9 @@ describe("tables — model + insertion", () => {
     const h = harness();
     insertTable(h.ctx, 2, 3);
 
-    // [paragraph, table]
-    expect(h.doc.blockCount()).toBe(2);
+    // [paragraph, table, paragraph]
+    expect(h.doc.blockCount()).toBe(3);
+    expect(h.doc.getBlockType(2)).toBe("paragraph");
     expect(h.doc.getBlockType(1)).toBe("table");
 
     const { rows, cols } = h.doc.getTableSize(1);
@@ -73,7 +75,28 @@ describe("tables — model + insertion", () => {
     // caret at cell 0, offset 0
     deleteBackward(h.ctx);
     expect(h.selection.focus).toEqual({ blockIndex: 1, cellIndex: 0, offset: 0 });
-    expect(h.doc.blockCount()).toBe(2);
+    expect(h.doc.blockCount()).toBe(3);
+  });
+
+  it("insertTable at end of doc appends a trailing empty paragraph", () => {
+    const h = harness();
+    insertTable(h.ctx, 2, 2);
+    expect(h.doc.blockCount()).toBe(3); // [paragraph, table, paragraph]
+    expect(h.doc.getBlockType(1)).toBe("table");
+    expect(h.doc.getBlockType(2)).toBe("paragraph");
+    expect(h.doc.getBlockText(2)?.toString()).toBe("");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, cellIndex: 0, offset: 0 });
+  });
+
+  it("insertTable in the middle does NOT add an extra paragraph", () => {
+    const h = harness();
+    h.doc.blocks.insert(1, [createBlock("paragraph")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 0 }));
+    const before = h.doc.blockCount(); // 2
+    insertTable(h.ctx, 1, 1);
+    expect(h.doc.blockCount()).toBe(before + 1); // [p, table, p]
+    expect(h.doc.getBlockType(1)).toBe("table");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, cellIndex: 0, offset: 0 });
   });
 });
 
@@ -153,8 +176,9 @@ describe("tables — row/col mutations", () => {
 
     // Now only one row left; deleting it must remove the whole table.
     deleteTableRow(h.ctx, 1, 0);
-    expect(h.doc.blockCount()).toBe(1);
+    expect(h.doc.blockCount()).toBe(2);
     expect(h.doc.getBlockType(0)).toBe("paragraph");
+    expect(h.doc.getBlockType(1)).toBe("paragraph");
   });
 
   it("deleteTableColumn drops a column; deleting the last column deletes the table", () => {
@@ -165,15 +189,16 @@ describe("tables — row/col mutations", () => {
     expect(h.doc.getTableSize(1).cols).toBe(1);
 
     deleteTableColumn(h.ctx, 1, 0);
-    expect(h.doc.blockCount()).toBe(1);
+    expect(h.doc.blockCount()).toBe(2);
     expect(h.doc.getBlockType(0)).toBe("paragraph");
+    expect(h.doc.getBlockType(1)).toBe("paragraph");
   });
 
   it("deleteTable replaces the table with a paragraph when it was the only block", () => {
     const h = harness();
-    // Remove the default empty paragraph first to simulate "only a table".
-    insertTable(h.ctx, 1, 1);
-    h.doc.blocks.delete(0, 1); // drop the original paragraph
+    insertTable(h.ctx, 1, 1); // [p, table, p]
+    h.doc.blocks.delete(2, 1); // drop trailing paragraph → [p, table]
+    h.doc.blocks.delete(0, 1); // drop leading paragraph → [table]
     expect(h.doc.blockCount()).toBe(1);
     expect(h.doc.getBlockType(0)).toBe("table");
 

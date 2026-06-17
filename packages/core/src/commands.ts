@@ -624,6 +624,11 @@ export function insertTable(ctx: CommandContext, rows: number, cols: number): vo
     const focusBlock = Math.max(0, Math.min(sel.focus.blockIndex, ctx.doc.blockCount() - 1));
     const insertAt = focusBlock + 1;
     ctx.doc.blocks.insert(insertAt, [createTableBlock(r, c)]);
+    // Invariante: documento nunca termina em tabela — o caret precisa de um
+    // destino editável abaixo dela. Só acrescenta quando a tabela virou o último bloco.
+    if (insertAt === ctx.doc.blockCount() - 1) {
+      ctx.doc.blocks.insert(insertAt + 1, [createBlock("paragraph")]);
+    }
     ctx.setSelection(
       collapsedSelection({ blockIndex: insertAt, cellIndex: 0, offset: 0 }),
     );
