@@ -11,8 +11,11 @@ import {
   insertTableColumn,
   insertTableRow,
   insertText,
+  mergeRight,
   moveToNextCell,
   moveToPrevCell,
+  setCellAttr,
+  setBlockAttr,
   tableLocationOf,
   type CommandContext,
   type Selection,
@@ -217,5 +220,58 @@ describe("tables — location helper", () => {
     // cell 7 in a 3x4 table → row 1, col 3
     const pos = { blockIndex: 1, cellIndex: 7, offset: 0 };
     expect(tableLocationOf(h.doc, pos)).toEqual({ blockIndex: 1, row: 1, col: 3 });
+  });
+});
+
+describe("tables — cell alignment (setCellAttr)", () => {
+  it("writes align on the focused single cell", () => {
+    const h = harness();
+    insertTable(h.ctx, 2, 2); // caret em {block:1, cell:0}
+    setCellAttr(h.ctx, "align", "center");
+    expect(h.doc.getCellAttrs(1, 0).align).toBe("center");
+    expect(h.doc.getCellAttrs(1, 1).align).toBeUndefined();
+    expect(h.doc.getCellAttrs(1, 3).align).toBeUndefined();
+  });
+
+  it("applies align to all real cells of a rectangular multi-cell selection", () => {
+    const h = harness();
+    insertTable(h.ctx, 2, 2);
+    h.ctx.setSelection({
+      anchor: { blockIndex: 1, cellIndex: 0, offset: 0 },
+      focus: { blockIndex: 1, cellIndex: 3, offset: 0 },
+    });
+    setCellAttr(h.ctx, "align", "right");
+    expect(h.doc.getCellAttrs(1, 0).align).toBe("right");
+    expect(h.doc.getCellAttrs(1, 1).align).toBe("right");
+    expect(h.doc.getCellAttrs(1, 2).align).toBe("right");
+    expect(h.doc.getCellAttrs(1, 3).align).toBe("right");
+  });
+
+  it("value null removes the align key", () => {
+    const h = harness();
+    insertTable(h.ctx, 1, 1);
+    setCellAttr(h.ctx, "align", "justify");
+    expect(h.doc.getCellAttrs(1, 0).align).toBe("justify");
+    setCellAttr(h.ctx, "align", null);
+    expect(h.doc.getCellAttrs(1, 0).align).toBeUndefined();
+  });
+
+  it("is a no-op when the caret is not inside a table; setBlockAttr stays no-op in a cell", () => {
+    const h = harness();
+    expect(() => setCellAttr(h.ctx, "align", "center")).not.toThrow();
+    insertTable(h.ctx, 1, 1);
+    setBlockAttr(h.ctx, "align", "center");
+    expect(h.doc.getBlockAttrs(1).align).toBeUndefined();
+  });
+
+  it("redirects a covered cell to its owner", () => {
+    const h = harness();
+    insertTable(h.ctx, 1, 2); // table at block 1: cells 0 and 1
+    mergeRight(h.ctx, 1, 0, 0); // cell 0 is now owner (colspan 2); cell 1 is covered
+    // Place caret on covered cellIndex 1.
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, cellIndex: 1, offset: 0 }));
+    setCellAttr(h.ctx, "align", "center");
+    // Attribute must land on the owner (cell 0), not be a no-op.
+    expect(h.doc.getCellAttrs(1, 0).align).toBe("center");
   });
 });

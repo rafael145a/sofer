@@ -80,6 +80,8 @@ export interface CellAttrs {
    * scheme — covered cells are placeholders, not gaps.
    */
   covered?: true;
+  /** Alinhamento horizontal do texto da célula. Mesmos valores de bloco. */
+  align?: AlignValue;
 }
 
 export interface Position {

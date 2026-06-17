@@ -6,6 +6,7 @@ import { collapsedSelection, isCollapsed, orderedRange, sameTextRun } from "./se
 import type {
   BlockAttrs,
   BlockType,
+  CellAttrs,
   DeltaOp,
   ImageEmbed,
   ListKind,
@@ -356,6 +357,46 @@ export function setBlockAttr<K extends keyof BlockAttrs>(
       } else {
         attrsMap.set(key as string, value);
       }
+    }
+    ctx.setSelection(sel);
+  });
+}
+
+/**
+ * Set a single attribute on the table cell(s) under the selection.
+ * - Caret numa única célula → essa célula (tableRectSelection retorna null
+ *   para seleção colapsada (ou âncora/foco no mesmo owner), então usamos
+ *   a célula focada (redirecionada ao owner real).
+ * - Seleção retangular de várias células → todas as células reais do rect.
+ * Células `covered` são puladas. `value === null` apaga a key.
+ * No-op se a seleção não estiver dentro de uma tabela.
+ */
+export function setCellAttr<K extends keyof CellAttrs>(
+  ctx: CommandContext,
+  key: K,
+  value: CellAttrs[K] | null,
+): void {
+  transact(ctx.doc, () => {
+    const sel = ctx.getSelection();
+    const { blockIndex, cellIndex } = sel.focus;
+    if (cellIndex == null || !ctx.doc.isTable(blockIndex)) return;
+    const { cols } = ctx.doc.getTableSize(blockIndex);
+    if (cols <= 0) return;
+    const rect = tableRectSelection(ctx.doc, sel);
+    const targets: number[] = [];
+    if (rect) {
+      for (let r = rect.top; r <= rect.bottom; r++)
+        for (let c = rect.left; c <= rect.right; c++) targets.push(r * cols + c);
+    } else {
+      const real = ctx.doc.realCellIndex(blockIndex, cellIndex);
+      if (real != null) targets.push(real);
+    }
+    for (const flat of targets) {
+      if (ctx.doc.getCellAttrs(blockIndex, flat).covered) continue;
+      const m = ctx.doc.getCellAttrsMap(blockIndex, flat);
+      if (!m) continue;
+      if (value === null || value === undefined) m.delete(key as string);
+      else m.set(key as string, value);
     }
     ctx.setSelection(sel);
   });
