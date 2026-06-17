@@ -175,7 +175,8 @@ describe("clipboard — insertSlice / deleteSelection", () => {
     h.doc.blocks.insert(2, [createTableBlock(1, 1)]);
     h.ctx.setSelection(collapsedSelection({ blockIndex: 2, cellIndex: 0, offset: 0 }));
     insertSlice(h.ctx, slice);
-    expect(h.doc.getCellText(2, 0)!.toString()).toBe("helloworld");
+    // block boundaries become "\n" (cells render pre-wrap), not glued words
+    expect(h.doc.getCellText(2, 0)!.toString()).toBe("hello\nworld");
   });
 
   it("deleteSelection removes the selected range and collapses the caret", () => {
@@ -227,5 +228,41 @@ describe("clipboard — insertSlice / deleteSelection", () => {
     expect(h.doc.getBlockText(3)!.toString()).toBe("BBB");
     expect(h.doc.getBlockType(3)).toBe("heading");
     expect(h.selection.focus).toEqual({ blockIndex: 3, offset: 3 });
+  });
+
+  it("survives a JSON round-trip (the real clipboard path) preserving marks and embeds", () => {
+    const h = harness();
+    insertText(h.ctx, "Xbo");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 3 } });
+    toggleMark(h.ctx, "bold"); // "bo" bold
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 3 }));
+    insertImage(h.ctx, IMG); // "Xbo[img]"
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 0, offset: 4 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    // onCopy does JSON.stringify; onPaste does JSON.parse — exercise that seam.
+    const roundTripped = JSON.parse(JSON.stringify(slice));
+    h.doc.blocks.insert(1, [createBlock("paragraph", "")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, roundTripped);
+    const delta = h.doc.getBlockText(1)!.toDelta() as { insert: unknown; attributes?: unknown }[];
+    expect(delta[0]).toEqual({ insert: "X" });
+    expect(delta[1]).toEqual({ insert: "bo", attributes: { bold: true } });
+    expect(delta[2].insert).toEqual(IMG); // embed survived JSON
+  });
+
+  it("serializes content inside a single table cell as a paragraph block", () => {
+    const h = harness();
+    insertTable(h.ctx, 1, 1);
+    const tableIdx = h.selection.focus.blockIndex;
+    h.ctx.setSelection(collapsedSelection({ blockIndex: tableIdx, cellIndex: 0, offset: 0 }));
+    insertText(h.ctx, "cellcontent");
+    select(h.ctx, {
+      anchor: { blockIndex: tableIdx, cellIndex: 0, offset: 0 },
+      focus: { blockIndex: tableIdx, cellIndex: 0, offset: 4 },
+    });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blocks[0].type).toBe("paragraph"); // cell content → paragraph
+    expect(slice.blocks[0].delta).toEqual([{ insert: "cell" }]);
   });
 });

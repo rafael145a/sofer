@@ -97,9 +97,14 @@ export function sliceToText(slice: ClipboardSlice): string {
   return slice.blocks.map((b) => deltaToText(b.delta)).join("\n");
 }
 
-/** Achata o slice num único delta inline (para colar dentro de uma célula). */
+/** Achata o slice num único delta inline (para colar dentro de uma célula).
+ *  Fronteiras de bloco viram quebra de linha "\n" (células renderizam pre-wrap),
+ *  para não grudar palavras de parágrafos distintos. */
 export function sliceToInlineDelta(slice: ClipboardSlice): DeltaOp[] {
   const out: DeltaOp[] = [];
-  for (const b of slice.blocks) out.push(...b.delta);
+  slice.blocks.forEach((b, i) => {
+    if (i > 0) out.push({ insert: "\n" });
+    out.push(...b.delta);
+  });
   return out;
 }
