@@ -69,6 +69,8 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
     getBlockAttr,
     setBlockType,
     setBlockAttr,
+    setAlign,
+    getAlign,
     isListActive,
     toggleList,
     indentList,
@@ -77,7 +79,7 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
   const active = getActiveMarks();
   const blockType = getBlockType();
   const blockLevel = getBlockAttr("level");
-  const blockAlign = getBlockAttr("align");
+  const blockAlign = getAlign();
   const blockDir = getBlockAttr("dir");
 
   // Preserve contenteditable focus when clicking the toolbar background or buttons,
@@ -133,7 +135,7 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
       );
       return;
     }
-    setBlockAttr("align", value);
+    setAlign(value);
   };
 
   const onInsertImageClick = useCallback(

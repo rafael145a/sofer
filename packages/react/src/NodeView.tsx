@@ -193,6 +193,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                 rect !== null &&
                 r >= rect.top && r <= rect.bottom &&
                 c >= rect.left && c <= rect.right;
+              // Cell align is applied via inline textAlign; block-level align uses ed-align-* classes instead.
               return (
                 <td
                   key={c}
@@ -203,6 +204,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                   data-cell-colspan={colspan}
                   rowSpan={rowspan > 1 ? rowspan : undefined}
                   colSpan={colspan > 1 ? colspan : undefined}
+                  style={cell?.attrs.align ? { textAlign: cell.attrs.align } : undefined}
                   className={inRect ? "ed-cell ed-cell--selected" : "ed-cell"}
                 >
                   {renderInline(delta, `t${index}-c${flat}`)}

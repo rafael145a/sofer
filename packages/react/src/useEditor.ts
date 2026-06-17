@@ -28,12 +28,14 @@ import {
   orderedRange,
   removeMark as cmdRemoveMark,
   setBlockAttr as cmdSetBlockAttr,
+  setCellAttr as cmdSetCellAttr,
   setBlockType as cmdSetBlockType,
   setMark as cmdSetMark,
   splitListItem as cmdSplitListItem,
   tableLocationOf,
   toggleList as cmdToggleList,
   toggleMark as cmdToggleMark,
+  type AlignValue,
   type BlockAttrs,
   type BlockType,
   type CommandContext,
@@ -116,6 +118,8 @@ export interface UseEditorResult {
   getBlockAttr: <K extends keyof BlockAttrs>(key: K) => BlockAttrs[K] | "mixed" | undefined;
   setBlockType: (type: BlockType, attrs?: BlockAttrs) => void;
   setBlockAttr: <K extends keyof BlockAttrs>(key: K, value: BlockAttrs[K] | null) => void;
+  setAlign: (value: AlignValue) => void;
+  getAlign: () => AlignValue | "mixed" | undefined;
 
   // ---- List API (added in Sub-phase 2.3) ----
   isListActive: (kind: ListKind) => boolean;
@@ -443,6 +447,25 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     [],
   );
 
+  const setAlign = useCallback((value: AlignValue) => {
+    const sel = selectionRef.current;
+    // Route on focus only: setCellAttr keys off sel.focus.cellIndex internally
+    // and returns early unless the focus position is inside a table cell.
+    const inCell = sel.focus.cellIndex != null;
+    if (inCell) cmdSetCellAttr(ctxRef.current, "align", value);
+    else cmdSetBlockAttr(ctxRef.current, "align", value);
+  }, []);
+
+  const getAlign = useCallback((): AlignValue | "mixed" | undefined => {
+    const sel = selectionRef.current;
+    if (sel.focus.cellIndex != null && doc.isTable(sel.focus.blockIndex)) {
+      // Cell path: single focused-cell read (multi-cell mixed-state is out of scope).
+      return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).align;
+    }
+    // Block path: delegate to getBlockAttr so multi-block selections return "mixed".
+    return getBlockAttr("align");
+  }, [doc, getBlockAttr]);
+
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
@@ -686,6 +709,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     getBlockAttr,
     setBlockType,
     setBlockAttr,
+    setAlign,
+    getAlign,
     isListActive,
     toggleList,
     indentList,
