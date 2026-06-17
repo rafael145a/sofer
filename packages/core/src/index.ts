@@ -6,4 +6,5 @@ export * from "./collab-cursor";
 export * from "./selection";
 export * from "./marks";
 export * from "./commands";
+export * from "./clipboard";
 export * from "./history";
