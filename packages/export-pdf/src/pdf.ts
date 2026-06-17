@@ -79,6 +79,7 @@ export function serializePaginatedHtml(
     (el as HTMLElement).removeAttribute("contenteditable");
   });
   clone.querySelectorAll(".ed-image-overlay").forEach((el) => el.remove());
+  clone.querySelectorAll(".ed-remote-cursors").forEach((el) => el.remove());
 
   // Read the page size baked into the editor via `--ed-page-*` CSS variables.
   // The Editor component sets these on its root from the current PageSettings
