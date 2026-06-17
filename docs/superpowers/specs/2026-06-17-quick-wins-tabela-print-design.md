@@ -34,6 +34,8 @@ Remover do DOM (não esconder por CSS) — sai do arquivo final, menor e sem ris
 - O HTML retornado por `serializePaginatedHtml` não contém nenhum nó com classe `ed-remote-cursors`.
 - Ambos os caminhos (print + snapshot) ficam limpos, por compartilharem a função.
 
+> **Testabilidade:** `serializePaginatedHtml` opera sobre o DOM (`cloneNode`/`querySelectorAll`) e o repo não tem ambiente jsdom/happy-dom nem testes de DOM (mesmo a linha vizinha `.ed-image-overlay` não tem teste). Para não inflar infra, este fix é verificado **manualmente no playground** (imprimir com cursor remoto presente → confirmar ausência), não por unit test.
+
 ---
 
 ## #16 — Permitir escrever abaixo da tabela
@@ -64,6 +66,10 @@ ctx.setSelection(
 - Inserir tabela no fim do documento deixa exatamente um parágrafo vazio depois dela.
 - Inserir tabela no meio (já há bloco depois) **não** adiciona parágrafo extra.
 - Caret final fica em `{ blockIndex: insertAt, cellIndex: 0, offset: 0 }` nos dois casos.
+
+> **Fronteira documentada:** a invariante é garantida só no momento do `insertTable`. Uma tabela que chegue à última posição por outro caminho (deleção do bloco seguinte, carga de doc legado terminando em tabela) ainda não teria parágrafo abaixo. Escopo aprovado é o insert; reforçar a invariante na normalização fica para depois, se necessário.
+>
+> **Impacto em testes existentes:** muda `blockCount` após `insertTable` em `tables.test.ts` (6 asserções). São atualizações mecânicas — comportamento novo esperado, não regressão. O plano lista cada uma.
 
 ---
 
@@ -102,28 +108,34 @@ export function setCellAttr<K extends keyof CellAttrs>(
 ): void {
   transact(ctx.doc, () => {
     const sel = ctx.getSelection();
-    const rect = tableRectSelection(ctx.doc, sel);
-    if (!rect) return; // seleção não está numa tabela
-    const { blockIndex } = sel.focus;
+    const { blockIndex, cellIndex } = sel.focus;
+    if (cellIndex == null || !ctx.doc.isTable(blockIndex)) return;
     const { cols } = ctx.doc.getTableSize(blockIndex); // document.ts:160
     if (cols <= 0) return;
-    for (let r = rect.top; r <= rect.bottom; r++) {
-      for (let c = rect.left; c <= rect.right; c++) {
-        const flat = r * cols + c;
-        const attrs = ctx.doc.getCellAttrs(blockIndex, flat);
-        if (attrs.covered) continue;
-        const m = ctx.doc.getCellAttrsMap(blockIndex, flat);
-        if (!m) continue;
-        if (value === null || value === undefined) m.delete(key as string);
-        else m.set(key as string, value);
-      }
+    // Seleção multi-célula → todas as células do rect; caret numa só célula
+    // (tableRectSelection retorna null p/ seleção colapsada) → só a focada.
+    const rect = tableRectSelection(ctx.doc, sel);
+    const targets: number[] = [];
+    if (rect) {
+      for (let r = rect.top; r <= rect.bottom; r++)
+        for (let c = rect.left; c <= rect.right; c++) targets.push(r * cols + c);
+    } else {
+      targets.push(cellIndex);
+    }
+    for (const flat of targets) {
+      if (ctx.doc.getCellAttrs(blockIndex, flat).covered) continue;
+      const m = ctx.doc.getCellAttrsMap(blockIndex, flat);
+      if (!m) continue;
+      if (value === null || value === undefined) m.delete(key as string);
+      else m.set(key as string, value);
     }
     ctx.setSelection(sel);
   });
 }
 ```
 
-> A geometria retangular vem de `tableRectSelection`; `cols` de `doc.getTableSize`. `rect.{top,bottom,left,right}` são índices de linha/coluna 0-based.
+> **Caso base é célula única.** `tableRectSelection` retorna `null` para seleção colapsada (commands.ts:1034), então o caminho `else` cobre o clique-e-alinha numa célula. O rect só entra quando há seleção de várias células. `rect.{top,bottom,left,right}` são índices 0-based; `cols` de `doc.getTableSize`.
+> **Serialização OK:** `serializeCell` (document.ts:365) copia o map de attrs inteiro via `Object.fromEntries`, então `align` chega ao `<td>` sem mudança extra.
 
 **3. Roteamento — `packages/react/src/useEditor.ts`**
 Expor um `setAlign(value)` que decide o destino pela seleção:
