@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { EditorDocument, createBlock, createCell, createTableBlock, spanOf } from "./document";
-import { isMarkUniformInRange, sliceDelta } from "./marks";
+import { deltaLength, isMarkUniformInRange, sliceDelta } from "./marks";
+import { sliceToInlineDelta, type ClipboardSlice } from "./clipboard";
 import { defaultAttrsFor } from "./schema";
 import { collapsedSelection, isCollapsed, orderedRange, sameTextRun } from "./selection";
 import type {
@@ -399,6 +400,114 @@ export function setCellAttr<K extends keyof CellAttrs>(
       else m.set(key as string, value);
     }
     ctx.setSelection(sel);
+  });
+}
+
+/** Delete the current selection range and collapse the caret. Used by cut. */
+export function deleteSelection(ctx: CommandContext): void {
+  transact(ctx.doc, () => {
+    const s = deleteRange(ctx.doc, ctx.getSelection());
+    ctx.setSelection(s);
+  });
+}
+
+/**
+ * Replace the current selection with a clipboard slice (A1).
+ * - Single-block slice → inline splice (Dhead + S0 + Dtail), target keeps its type.
+ * - Multi-block slice → openStart merges S0 inline; middle/last blocks inserted
+ *   discretely; openEnd appends the post-caret tail onto the last pasted block.
+ * - Target inside a table cell → slice flattened to inline (no block structure).
+ */
+export function insertSlice(ctx: CommandContext, slice: ClipboardSlice): void {
+  if (!slice.blocks || slice.blocks.length === 0) return;
+  transact(ctx.doc, () => {
+    let sel = ctx.getSelection();
+    if (!isCollapsed(sel)) sel = deleteRange(ctx.doc, sel);
+    const { blockIndex, cellIndex, offset } = sel.focus;
+
+    if (cellIndex != null) {
+      const cellText = ctx.doc.textAt(blockIndex, cellIndex);
+      if (!cellText) return;
+      const after = writeDeltaInto(cellText, offset, sliceToInlineDelta(slice));
+      ctx.setSelection(collapsedSelection({ blockIndex, cellIndex, offset: after }));
+      return;
+    }
+
+    const targetText = ctx.doc.getBlockText(blockIndex);
+    if (!targetText) return;
+
+    const full = targetText.toDelta() as DeltaOp[];
+    const tailDelta = sliceDelta(full, offset, deltaLength(full));
+    targetText.delete(offset, targetText.length - offset);
+
+    const blocks = slice.blocks;
+
+    if (blocks.length === 1) {
+      const afterS0 = writeDeltaInto(targetText, offset, blocks[0].delta);
+      writeDeltaInto(targetText, afterS0, tailDelta);
+      ctx.setSelection(collapsedSelection({ blockIndex, offset: afterS0 }));
+      return;
+    }
+
+    // Multi-block. Capture the target's original type/attrs BEFORE any mutation,
+    // for the !openEnd tail block.
+    const originalType = ctx.doc.getBlockType(blockIndex);
+    const originalAttrs = ctx.doc.getBlockAttrs(blockIndex);
+    let insertAt = blockIndex;
+
+    // First block.
+    if (slice.openStart) {
+      // Partial fragment → merge S0 inline into the target (Dhead already present);
+      // target keeps its own type.
+      writeDeltaInto(targetText, offset, blocks[0].delta);
+    } else if (offset === 0) {
+      // Whole-block fragment pasted into an empty Dhead → reuse the empty target
+      // AS S0 in place (adopt S0's type/attrs), avoiding a stray leading block.
+      const blk = ctx.doc.blocks.get(blockIndex) as Y.Map<unknown>;
+      blk.set("type", blocks[0].type);
+      const am = blk.get("attrs") as Y.Map<unknown>;
+      am.clear();
+      for (const [k, v] of Object.entries(blocks[0].attrs)) {
+        if (v !== undefined) am.set(k, v);
+      }
+      writeDeltaInto(targetText, 0, blocks[0].delta);
+    } else {
+      // Whole-block fragment after a non-empty Dhead → S0 as its own block.
+      const b = createBlock(blocks[0].type, "", blocks[0].attrs);
+      ctx.doc.blocks.insert(++insertAt, [b]);
+      writeDeltaInto(b.get("text") as Y.Text, 0, blocks[0].delta);
+    }
+
+    // Middle blocks (whole).
+    for (let i = 1; i < blocks.length - 1; i++) {
+      const b = createBlock(blocks[i].type, "", blocks[i].attrs);
+      ctx.doc.blocks.insert(++insertAt, [b]);
+      writeDeltaInto(b.get("text") as Y.Text, 0, blocks[i].delta);
+    }
+
+    // Last block.
+    const last = blocks[blocks.length - 1];
+    if (slice.openEnd) {
+      const b = createBlock(last.type, "", last.attrs);
+      ctx.doc.blocks.insert(++insertAt, [b]);
+      const t = b.get("text") as Y.Text;
+      const caretPos = writeDeltaInto(t, 0, last.delta);
+      writeDeltaInto(t, caretPos, tailDelta);
+      ctx.setSelection(collapsedSelection({ blockIndex: insertAt, offset: caretPos }));
+    } else {
+      const b = createBlock(last.type, "", last.attrs);
+      ctx.doc.blocks.insert(++insertAt, [b]);
+      const lastLen = writeDeltaInto(b.get("text") as Y.Text, 0, last.delta);
+      const lastIdx = insertAt;
+      // Only materialize the tail block when there's actually a tail (avoids a
+      // stray empty block when pasting at end-of-line).
+      if (tailDelta.length > 0) {
+        const tb = createBlock(originalType ?? "paragraph", "", originalAttrs);
+        ctx.doc.blocks.insert(++insertAt, [tb]);
+        writeDeltaInto(tb.get("text") as Y.Text, 0, tailDelta);
+      }
+      ctx.setSelection(collapsedSelection({ blockIndex: lastIdx, offset: lastLen }));
+    }
   });
 }
 

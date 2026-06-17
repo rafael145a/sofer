@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   EditorDocument,
   collapsedSelection,
+  createBlock,
+  createTableBlock,
+  deleteSelection,
   insertImage,
   insertParagraph,
+  insertSlice,
   insertTable,
   insertText,
   serializeSelection,
@@ -109,5 +113,119 @@ describe("clipboard — serializeSelection", () => {
     const slice = serializeSelection(h.doc, h.selection)!;
     expect(slice.blocks[1].type).toBe("heading");
     expect(slice.blocks[1].attrs.level).toBe(2);
+  });
+});
+
+describe("clipboard — insertSlice / deleteSelection", () => {
+  it("pastes within-block rich text inline, preserving marks", () => {
+    const h = harness();
+    insertText(h.ctx, "XbcdY");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 4 } });
+    toggleMark(h.ctx, "bold");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 4 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    // deterministic clean empty paragraph target (NOT via a selection-respecting
+    // command — the source selection is still the non-collapsed [1,4] range).
+    h.doc.blocks.insert(1, [createBlock("paragraph", "")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockText(1)!.toDelta()).toEqual([{ insert: "bcd", attributes: { bold: true } }]);
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 3 });
+  });
+
+  it("pastes a single image embed", () => {
+    const h = harness();
+    insertText(h.ctx, "ab");
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 1 }));
+    insertImage(h.ctx, IMG);                 // a[img]b
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 2 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    const delta = h.doc.getBlockText(0)!.toDelta() as { insert: unknown }[];
+    const embeds = delta.filter((op) => typeof op.insert !== "string");
+    expect(embeds).toHaveLength(2);
+  });
+
+  it("pastes a multi-block slice merging open ends", () => {
+    const h = harness();
+    insertText(h.ctx, "hello");
+    insertParagraph(h.ctx);
+    insertText(h.ctx, "world");
+    setBlockType(h.ctx, "heading", { level: 2 });
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 2 }, focus: { blockIndex: 1, offset: 3 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    h.doc.blocks.insert(2, [createBlock("paragraph", "PQRS")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 2, offset: 3 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockText(2)!.toString()).toBe("PQRllo");
+    expect(h.doc.getBlockType(2)).toBe("paragraph");
+    expect(h.doc.getBlockText(3)!.toString()).toBe("worS");
+    expect(h.doc.getBlockType(3)).toBe("heading");
+    expect(h.selection.focus).toEqual({ blockIndex: 3, offset: 3 });
+  });
+
+  it("flattens a multi-block slice when pasting into a table cell", () => {
+    const h = harness();
+    insertText(h.ctx, "hello");
+    insertParagraph(h.ctx);
+    insertText(h.ctx, "world");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 1, offset: 5 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    h.doc.blocks.insert(2, [createTableBlock(1, 1)]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 2, cellIndex: 0, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getCellText(2, 0)!.toString()).toBe("helloworld");
+  });
+
+  it("deleteSelection removes the selected range and collapses the caret", () => {
+    const h = harness();
+    insertText(h.ctx, "abcdef");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 4 } });
+    deleteSelection(h.ctx);
+    expect(h.doc.getBlockText(0)!.toString()).toBe("aef");
+    expect(h.selection.focus).toEqual({ blockIndex: 0, offset: 1 });
+  });
+
+  it("pastes whole-block slices as discrete blocks without a stray trailing block", () => {
+    const h = harness();
+    insertText(h.ctx, "AAA");
+    insertParagraph(h.ctx);
+    insertText(h.ctx, "BBB");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 1, offset: 3 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.openStart).toBe(false);
+    expect(slice.openEnd).toBe(false);
+    // target: paragraph "ZZZ" at block 2, paste at end (offset 3)
+    h.doc.blocks.insert(2, [createBlock("paragraph", "ZZZ")]);
+    const before = h.doc.blockCount();
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 2, offset: 3 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.blockCount()).toBe(before + 2); // +AAA +BBB, NO stray empty block
+    expect(h.doc.getBlockText(2)!.toString()).toBe("ZZZ");
+    expect(h.doc.getBlockText(3)!.toString()).toBe("AAA");
+    expect(h.doc.getBlockText(4)!.toString()).toBe("BBB");
+    expect(h.selection.focus).toEqual({ blockIndex: 4, offset: 3 });
+  });
+
+  it("reuses an empty target paragraph when pasting whole blocks (no stray leading block)", () => {
+    const h = harness();
+    insertText(h.ctx, "AAA");
+    insertParagraph(h.ctx);
+    insertText(h.ctx, "BBB");
+    setBlockType(h.ctx, "heading", { level: 2 }); // block 1 = heading "BBB"
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 1, offset: 3 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    // target: an EMPTY paragraph at block 2
+    h.doc.blocks.insert(2, [createBlock("paragraph", "")]);
+    const before = h.doc.blockCount();
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 2, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.blockCount()).toBe(before + 1); // empty target became AAA, +BBB
+    expect(h.doc.getBlockText(2)!.toString()).toBe("AAA");
+    expect(h.doc.getBlockType(2)).toBe("paragraph");
+    expect(h.doc.getBlockText(3)!.toString()).toBe("BBB");
+    expect(h.doc.getBlockType(3)).toBe("heading");
+    expect(h.selection.focus).toEqual({ blockIndex: 3, offset: 3 });
   });
 });
