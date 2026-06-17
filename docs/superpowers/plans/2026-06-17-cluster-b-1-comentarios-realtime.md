@@ -125,25 +125,25 @@ git commit -m "feat(prova-editor): scheduleComentariosRefresh (debounce + reconc
 **Files:**
 - Modify: `portal2-next/src/components/ProvaEditor/index.tsx`
 
-- [ ] **Step 1: useEffect com filtro por origem**
+- [ ] **Step 1: useEffect com gate em `synced` + filtro de origin Symbol**
 
-Adicione um novo `useEffect` (logo após o observer existente de `scheduleSave`, linha ~536):
+Adicione um novo `useEffect` (logo após o observer existente de `scheduleSave`, linha ~536). **Gateie em `synced`, NÃO em `binding`**: `binding` vem de um `ref` do `useCollab` que pode ficar `null` transitoriamente num re-bind sem re-render, fazendo o effect nunca re-anexar o observer (verificado ao vivo: o handler ficava ausente de `ydoc._observers`). `synced` é `useState` confiável — mesmo gate do `scheduleSave`. Edições locais do editor chegam com `origin` = **Symbol**; remotas trazem o provider (objeto) — por isso o filtro `typeof origin === 'symbol'`.
 
 ```ts
 // Atualiza a sidebar de comentários quando OUTRO usuário adiciona/resolve
-// um comentário. Mudanças remotas chegam com origin === binding.provider
-// (HocuspocusProvider aplica sync com transactionOrigin = provider).
-// Edições locais e minhas próprias mutations não passam por aqui.
+// um comentário. Gate em `synced` (não em `binding`, que é ref e pode ficar
+// null num re-bind sem re-render, deixando o observer sem re-anexar).
+// Edições locais do editor chegam com origin Symbol; remotas trazem o
+// provider. Failsafe: se o origin mudar, no pior caso há refetch extra.
 useEffect(() => {
-  if (!binding) return;
-  const provider = binding.provider;
-  const onUpdate = (_update: Uint8Array, origin: unknown) => {
-    if (origin !== provider) return;
+  if (!synced) return;
+  const onRemoteUpdate = (_update: Uint8Array, origin: unknown) => {
+    if (typeof origin === 'symbol') return;
     scheduleComentariosRefresh();
   };
-  ydoc.on('update', onUpdate);
+  ydoc.on('update', onRemoteUpdate);
   return () => {
-    ydoc.off('update', onUpdate);
+    ydoc.off('update', onRemoteUpdate);
     if (comentariosRefreshTimerRef.current) {
       clearTimeout(comentariosRefreshTimerRef.current);
     }
@@ -151,7 +151,7 @@ useEffect(() => {
       clearTimeout(comentariosReconcileTimerRef.current);
     }
   };
-}, [binding, ydoc, scheduleComentariosRefresh]);
+}, [ydoc, synced, scheduleComentariosRefresh]);
 ```
 
 - [ ] **Step 2: Sanidade de tipos/lint**

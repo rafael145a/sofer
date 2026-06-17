@@ -23,21 +23,22 @@ A query `comentarios` só é invalidada pelas *minhas próprias* mutations (add/
 
 ### Mecanismo da correção
 
-Em `ProvaEditor/index.tsx`, um observer no `editor.doc.ydoc` que dispara **apenas em updates remotos** e refaz o fetch da query de comentários (debounced).
+Em `ProvaEditor/index.tsx`, um observer no `ydoc` que dispara **apenas em updates remotos** e refaz o fetch da query de comentários (debounced).
 
-Distinção remoto-vs-local confirmada: o `HocuspocusProvider` aplica todo update de sincronização recebido com `transactionOrigin = provider` (`@hocuspocus/provider` `hocuspocus-provider.cjs:1749`). Logo, em `ydoc.on('update', (update, origin) => …)`, updates remotos têm `origin === binding.provider`; edições locais não.
+**Gating em `synced`, não em `binding`** (corrigido na verificação ao vivo): `binding` vem de um `ref` do `useCollab` que pode ficar `null` transitoriamente num re-bind sem disparar re-render, fazendo o effect rodar com `binding=null` e **nunca re-anexar** o observer (comprovado: o handler estava ausente de `ydoc._observers.get('update')`). `synced` é `useState` e flipa de forma confiável — é o mesmo gate do observer de autosave que funciona no mesmo arquivo.
+
+**Filtro local-vs-remoto pelo `origin`** (verificado ao vivo): edições locais do editor chegam com um **Symbol** como origin; mudanças remotas (Hocuspocus) trazem o **provider** (objeto) como origin. Ignorar `typeof origin === 'symbol'` pula refetch em digitação local. Failsafe: se o `@sofereditor` mudar o origin, no pior caso há refetch extra (debounced), nunca um update remoto perdido. (Comparar contra `binding.provider` foi descartado por depender do `binding`, justamente a fonte da fragilidade acima.)
 
 ```ts
 useEffect(() => {
-  if (!binding) return;
-  const ydoc = editor.doc.ydoc;
-  const onUpdate = (_update: Uint8Array, origin: unknown) => {
-    if (origin !== binding.provider) return; // só mudanças remotas
+  if (!synced) return;
+  const onRemoteUpdate = (_update: Uint8Array, origin: unknown) => {
+    if (typeof origin === 'symbol') return; // pula edições locais do editor
     scheduleComentariosRefresh();
   };
-  ydoc.on('update', onUpdate);
-  return () => ydoc.off('update', onUpdate);
-}, [binding, editor]);
+  ydoc.on('update', onRemoteUpdate);
+  return () => ydoc.off('update', onRemoteUpdate); // + limpa os timers de debounce/reconcile
+}, [ydoc, synced, scheduleComentariosRefresh]);
 ```
 
 `scheduleComentariosRefresh` — debounce ~600ms:
