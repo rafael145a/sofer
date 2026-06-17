@@ -14,6 +14,7 @@ import {
   setBlockType,
   sliceToText,
   toggleMark,
+  type ClipboardSlice,
   type CommandContext,
   type ImageEmbed,
   type Selection,
@@ -186,6 +187,34 @@ describe("clipboard — insertSlice / deleteSelection", () => {
     deleteSelection(h.ctx);
     expect(h.doc.getBlockText(0)!.toString()).toBe("aef");
     expect(h.selection.focus).toEqual({ blockIndex: 0, offset: 1 });
+  });
+
+  it("a pasted plain run does NOT inherit an adjacent bold mark", () => {
+    const h = harness();
+    // existing content: "Z" bold, caret right after it.
+    insertText(h.ctx, "Z");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 0, offset: 1 } });
+    toggleMark(h.ctx, "bold");
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 1 }));
+    // paste a slice = bold "a" + plain "b"
+    const slice: ClipboardSlice = {
+      blocks: [
+        {
+          type: "paragraph",
+          text: "ab",
+          delta: [{ insert: "a", attributes: { bold: true } }, { insert: "b" }],
+          attrs: {},
+        },
+      ],
+      openStart: true,
+      openEnd: true,
+    };
+    insertSlice(h.ctx, slice);
+    // "Z"+"a" are bold and merge; "b" must stay PLAIN (no inherited bold).
+    expect(h.doc.getBlockText(0)!.toDelta()).toEqual([
+      { insert: "Za", attributes: { bold: true } },
+      { insert: "b" },
+    ]);
   });
 
   it("pastes whole-block slices as discrete blocks without a stray trailing block", () => {

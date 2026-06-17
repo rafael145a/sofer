@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { EditorDocument, createBlock, createCell, createTableBlock, spanOf } from "./document";
-import { deltaLength, isMarkUniformInRange, sliceDelta } from "./marks";
+import { CLEAR_ALL_MARKS, deltaLength, isMarkUniformInRange, sliceDelta } from "./marks";
 import { sliceToInlineDelta, type ClipboardSlice } from "./clipboard";
 import { defaultAttrsFor } from "./schema";
 import { collapsedSelection, isCollapsed, orderedRange, sameTextRun } from "./selection";
@@ -1615,11 +1615,14 @@ function writeDeltaInto(yText: Y.Text, pos: number, delta: DeltaOp[]): number {
   for (const op of delta) {
     if (typeof op.insert === "string") {
       if (op.insert.length === 0) continue;
-      if (op.attributes && Object.keys(op.attributes).length > 0) {
-        yText.insert(cursor, op.insert, op.attributes as Record<string, unknown>);
-      } else {
-        yText.insert(cursor, op.insert);
-      }
+      // Always pass an explicit attributes object that clears every mark, then
+      // layers the op's own marks on top. Without this, `Y.Text.insert` lets the
+      // new text inherit the formatting of the adjacent run (e.g. a plain run
+      // pasted right after a bold run would turn bold). See CLEAR_ALL_MARKS.
+      yText.insert(cursor, op.insert, {
+        ...CLEAR_ALL_MARKS,
+        ...((op.attributes as Record<string, unknown> | undefined) ?? {}),
+      });
       cursor += op.insert.length;
     } else if (op.insert != null) {
       // Embed (e.g. ImageEmbed). Y.Text accepts arbitrary JSON-serializable

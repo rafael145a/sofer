@@ -6,6 +6,32 @@ import type { DeltaOp, MarkAttrs, MarkName } from "./types";
  * Writing is done with `yText.format(...)` directly in commands.ts.
  */
 
+/**
+ * Every mark name as a runtime record. Typed as `Record<MarkName, true>` so the
+ * object is compiler-enforced to stay complete: adding a new `MarkName` fails to
+ * compile until it's listed here.
+ */
+const ALL_MARKS: Record<MarkName, true> = {
+  bold: true,
+  italic: true,
+  underline: true,
+  strike: true,
+  color: true,
+  fontFamily: true,
+  fontSize: true,
+  link: true,
+  comment: true,
+};
+
+/**
+ * Attributes object that explicitly clears every mark (sets each to `null`).
+ * Spread your desired marks on top to insert text carrying EXACTLY those marks,
+ * overriding any formatting Y.Text would otherwise inherit from an adjacent run.
+ */
+export const CLEAR_ALL_MARKS: Record<string, null> = Object.fromEntries(
+  Object.keys(ALL_MARKS).map((k) => [k, null]),
+);
+
 function iterateRunsInRange(
   yText: Y.Text,
   start: number,
