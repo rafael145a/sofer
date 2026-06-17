@@ -95,7 +95,7 @@ export function serializePaginatedHtml(
   // ours after the cloned `<style>`s gives our override last-write-wins.
   return [
     "<!doctype html>",
-    `<html><head><meta charset="utf-8"><title>${title}</title>`,
+    `<html><head><meta charset="utf-8"><meta name="ed-print-snapshot" content="1"><title>${title}</title>`,
     styles,
     `<style>
       html, body { margin: 0; padding: 0; background: white; }
