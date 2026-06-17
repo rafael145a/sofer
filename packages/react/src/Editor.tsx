@@ -12,9 +12,15 @@ import {
 import {
   deleteBackward,
   deleteForward,
+  deleteSelection,
   encodeSelection,
   insertParagraph,
+  insertSlice,
   insertText,
+  serializeSelection,
+  sliceToText,
+  SOFER_MIME,
+  type ClipboardSlice,
   type CommandContext,
   type ListKind,
   type MarkName,
@@ -428,23 +434,11 @@ export function Editor({
           return;
         }
         case "insertFromPaste": {
+          // Paste é tratado pelo handler `paste` (useEffect de clipboard). Quando
+          // ele NÃO faz preventDefault (ex.: clipboard só com text/html, ou sem
+          // clipboardData), o browser cai aqui — este no-op bloqueia a inserção
+          // crua no DOM em vez de corromper o documento virtual.
           e.preventDefault();
-          const images = Array.from(e.dataTransfer?.files ?? []).filter((f) =>
-            f.type.startsWith("image/"),
-          );
-          if (images.length > 0) {
-            void (async () => {
-              for (const f of images) await editorRef.current.insertImageFromFile(f);
-            })();
-            return;
-          }
-          const text = e.dataTransfer?.getData("text/plain") ?? "";
-          if (text.length === 0) return;
-          const lines = text.split(/\r\n|\r|\n/);
-          lines.forEach((line, i) => {
-            if (i > 0) insertParagraph(ctx);
-            if (line.length > 0) insertText(ctx, line);
-          });
           return;
         }
         case "deleteContentBackward":
@@ -482,6 +476,80 @@ export function Editor({
 
     root.addEventListener("beforeinput", handler);
     return () => root.removeEventListener("beforeinput", handler);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const writeSlice = (e: ClipboardEvent): boolean => {
+      const ctx = ctxRef.current;
+      const slice = serializeSelection(ctx.doc, ctx.getSelection());
+      if (!slice || !e.clipboardData) return false;
+      e.clipboardData.setData(SOFER_MIME, JSON.stringify(slice));
+      e.clipboardData.setData("text/plain", sliceToText(slice));
+      return true;
+    };
+
+    const onCopy = (e: ClipboardEvent) => {
+      if (writeSlice(e)) e.preventDefault();
+    };
+
+    const onCut = (e: ClipboardEvent) => {
+      // Always block the native cut: it mutates the contenteditable DOM directly
+      // and would write its own clipboard serialization. When we have a slice we
+      // delete via the model; an unsupported selection (writeSlice false) becomes
+      // a clean no-op instead of a "cut that doesn't delete".
+      e.preventDefault();
+      if (writeSlice(e)) deleteSelection(ctxRef.current);
+    };
+
+    const onPaste = (e: ClipboardEvent) => {
+      const ctx = ctxRef.current;
+      const cd = e.clipboardData;
+      if (!cd) return;
+      // 1) Our own rich slice.
+      const raw = cd.getData(SOFER_MIME);
+      if (raw) {
+        try {
+          const slice = JSON.parse(raw) as ClipboardSlice;
+          if (slice && Array.isArray(slice.blocks)) {
+            e.preventDefault();
+            insertSlice(ctx, slice);
+            return;
+          }
+        } catch {
+          // fall through to plain handling
+        }
+      }
+      // 2) Image files (OS paste).
+      const images = Array.from(cd.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (images.length > 0) {
+        e.preventDefault();
+        void (async () => {
+          for (const f of images) await editorRef.current.insertImageFromFile(f);
+        })();
+        return;
+      }
+      // 3) Plain text.
+      const text = cd.getData("text/plain");
+      if (text.length === 0) return;
+      e.preventDefault();
+      const lines = text.split(/\r\n|\r|\n/);
+      lines.forEach((line, i) => {
+        if (i > 0) insertParagraph(ctx);
+        if (line.length > 0) insertText(ctx, line);
+      });
+    };
+
+    root.addEventListener("copy", onCopy);
+    root.addEventListener("cut", onCut);
+    root.addEventListener("paste", onPaste);
+    return () => {
+      root.removeEventListener("copy", onCopy);
+      root.removeEventListener("cut", onCut);
+      root.removeEventListener("paste", onPaste);
+    };
   }, []);
 
   const onKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
