@@ -62,6 +62,7 @@ export function ImageResizeOverlay({
   onReanchor,
 }: ImageResizeOverlayProps): JSX.Element | null {
   const [rect, setRect] = useState<Rect | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   const locateImage = useCallback((): HTMLImageElement | null => {
@@ -207,6 +208,27 @@ export function ImageResizeOverlay({
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
       contentEditable={false}
     >
+      {isMoving && (
+        // Non-clipped drag preview (Tier 2): the overlay lives in .ed-root and
+        // follows the cursor, so the image stays visible while it crosses the
+        // page boundary (the real, clipped figure is hidden during the drag).
+        // Inline styles only — the package does not ship CSS.
+        <img
+          src={embed.src}
+          alt=""
+          aria-hidden
+          draggable={false}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "fill",
+            opacity: 0.8,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       {movable && (
         <MoveHandle
           layout={layout}
@@ -220,6 +242,8 @@ export function ImageResizeOverlay({
           offset={offset}
           cellIndex={cellIndex}
           onReanchor={onReanchor}
+          onMoveStart={() => setIsMoving(true)}
+          onMoveEnd={() => setIsMoving(false)}
         />
       )}
       <Handle
@@ -274,6 +298,9 @@ interface MoveHandleProps {
     newOffsetX: number,
     newOffsetY: number,
   ) => void;
+  /** Fired when a move-drag starts/ends, so the overlay can show a drag preview. */
+  onMoveStart?: () => void;
+  onMoveEnd?: () => void;
 }
 
 function MoveHandle({
@@ -288,6 +315,8 @@ function MoveHandle({
   offset,
   cellIndex,
   onReanchor,
+  onMoveStart,
+  onMoveEnd,
 }: MoveHandleProps): JSX.Element {
   const dragRef = useRef<{
     startX: number;
@@ -308,6 +337,14 @@ function MoveHandle({
       liveOX: startOffsetX,
       liveOY: startOffsetY,
     };
+    // Hide the real (clipped) image and show a non-clipped preview in the
+    // overlay for the duration of the drag, so the image stays visible while
+    // it crosses the page boundary (Tier 2). The figure keeps being moved
+    // below (drives the overlay/preview position via onLiveChange) — it's just
+    // invisible. Restored in finish().
+    const styled = imgRef.current.closest<HTMLElement>(".ed-figure") ?? imgRef.current;
+    styled.style.opacity = "0";
+    onMoveStart?.();
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -387,6 +424,15 @@ function MoveHandle({
     } catch {
       // ignore
     }
+
+    // End the drag preview and restore the real image's visibility. Restoring
+    // imperatively (not just relying on React's commit re-render) avoids a
+    // one-frame flicker between the commit and the re-render.
+    if (imgRef.current) {
+      const styled = imgRef.current.closest<HTMLElement>(".ed-figure") ?? imgRef.current;
+      styled.style.opacity = "";
+    }
+    onMoveEnd?.();
 
     const img = imgRef.current;
     const root = rootRef.current;
