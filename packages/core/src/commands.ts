@@ -1715,6 +1715,92 @@ export function setImageAttrs(
   });
 }
 
+/** Location of an embed in the model (block or table cell). */
+export interface EmbedLoc {
+  blockIndex: number;
+  offset: number;
+  cellIndex?: number;
+}
+
+/**
+ * Layouts whose embed is re-anchorable between Y.Texts. Only `front`/`behind`
+ * use absolute `left`/`top`, so only they can be re-anchored. Inline embeds are
+ * not positioned absolutely, and `wrap-left`/`wrap-right` are governed by float
+ * margins (not absolute coordinates) — both are EXCLUDED and stay on the
+ * same-page `setImageAttrs` path (see RESOLVED DECISION at plan header).
+ */
+const REANCHORABLE_LAYOUTS: ReadonlySet<string> = new Set(["front", "behind"]);
+
+/**
+ * Move a floating image embed from `from` to `to` in a SINGLE Y.Doc
+ * transaction, applying new positional offsets. Atomic delete+insert keeps the
+ * CRDT consistent for collab peers and coalesces into one undo step.
+ *
+ * Guard: only non-inline (re-anchorable) image embeds are moved; everything
+ * else is a no-op. When `from` and `to` resolve to the SAME Y.Text, the insert
+ * index is adjusted for the prior delete (mirrors `setImageAttrs`'s clamp at
+ * lines 1709-1714). Sets the selection to the embed's new 1-char home so the
+ * resize overlay stays attached.
+ */
+export function moveEmbedAnchor(
+  ctx: CommandContext,
+  from: EmbedLoc,
+  to: EmbedLoc,
+  newOffsetX: number,
+  newOffsetY: number,
+): void {
+  transact(ctx.doc, () => {
+    const srcText = ctx.doc.textAt(from.blockIndex, from.cellIndex);
+    if (!srcText) return;
+
+    // Locate the embed at from.offset via the same delta scan as setImageAttrs.
+    const delta = srcText.toDelta() as DeltaOp[];
+    let cursor = 0;
+    let prev: ImageEmbed | null = null;
+    for (const op of delta) {
+      if (typeof op.insert === "string") {
+        cursor += op.insert.length;
+        continue;
+      }
+      if (cursor === from.offset && isImageEmbed(op.insert)) {
+        prev = op.insert;
+        break;
+      }
+      cursor += 1;
+    }
+    if (!prev) return;
+
+    // Guard: only re-anchor non-inline layouts.
+    const layout = prev.layout ?? "inline";
+    if (!REANCHORABLE_LAYOUTS.has(layout)) return;
+
+    const dstText = ctx.doc.textAt(to.blockIndex, to.cellIndex);
+    if (!dstText) return;
+
+    const merged: ImageEmbed = { ...prev, offsetX: newOffsetX, offsetY: newOffsetY };
+
+    const sameRun = srcText === dstText;
+
+    // Delete the source slot first.
+    srcText.delete(from.offset, 1);
+
+    // Compute the landing offset. When same run, the delete shifts indices that
+    // were AFTER from.offset down by one. Clamp to the (post-delete) length.
+    let landed = to.offset;
+    if (sameRun && to.offset > from.offset) {
+      landed = to.offset - 1;
+    }
+    landed = Math.max(0, Math.min(landed, dstText.length));
+
+    dstText.insert(landed, merged as unknown as string);
+
+    ctx.setSelection({
+      anchor: { blockIndex: to.blockIndex, cellIndex: to.cellIndex, offset: landed },
+      focus: { blockIndex: to.blockIndex, cellIndex: to.cellIndex, offset: landed + 1 },
+    });
+  });
+}
+
 // Expose the Y origin so consumers (e.g. UndoManager) can filter on it.
 export function isCommandOrigin(origin: unknown): boolean {
   return origin === COMMAND_ORIGIN;
