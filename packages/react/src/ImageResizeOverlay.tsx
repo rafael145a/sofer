@@ -300,26 +300,29 @@ function MoveHandle({
     if (!d || !imgRef.current) return;
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
-    const img = imgRef.current;
+    // Post-#11 the positioned/styled element is the <figure> wrapper, not the
+    // <img> (which renders position:static inside it). Mutate the figure so the
+    // live drag actually moves the image; fall back to the img defensively.
+    const styled = imgRef.current.closest<HTMLElement>(".ed-figure") ?? imgRef.current;
     let nox = startOffsetX;
     let noy = startOffsetY;
     if (layout === "wrap-left") {
       // dx → right margin (gap to text); negative dx clamped to 8 (min gap).
       nox = Math.max(8, startOffsetX + dx);
       noy = Math.max(0, startOffsetY + dy);
-      img.style.marginRight = `${nox}px`;
-      img.style.marginTop = `${noy}px`;
+      styled.style.marginRight = `${nox}px`;
+      styled.style.marginTop = `${noy}px`;
     } else if (layout === "wrap-right") {
       // dx is mirrored: dragging LEFT increases the gap to text.
       nox = Math.max(8, startOffsetX - dx);
       noy = Math.max(0, startOffsetY + dy);
-      img.style.marginLeft = `${nox}px`;
-      img.style.marginTop = `${noy}px`;
+      styled.style.marginLeft = `${nox}px`;
+      styled.style.marginTop = `${noy}px`;
     } else if (layout === "behind" || layout === "front") {
       nox = startOffsetX + dx;
       noy = startOffsetY + dy;
-      img.style.left = `${nox}px`;
-      img.style.top = `${noy}px`;
+      styled.style.left = `${nox}px`;
+      styled.style.top = `${noy}px`;
     }
     d.liveOX = nox;
     d.liveOY = noy;
