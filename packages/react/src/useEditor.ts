@@ -71,6 +71,8 @@ export type PendingMarks = Partial<Record<MarkName, MarkAttrs[MarkName] | null>>
 export interface LinkRequest {
   initialHref: string;
   resolve: (href: string | null) => void;
+  /** Model selection captured when the link was requested (bug #6). */
+  selection: Selection;
 }
 
 export interface PageConfigRequest {
@@ -658,17 +660,32 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   }, [doc]);
 
   const [linkRequest, setLinkRequest] = useState<LinkRequest | null>(null);
+  const linkRequestRef = useRef<LinkRequest | null>(null);
   const requestLink = useCallback((initialHref = ""): Promise<string | null> => {
     return new Promise((resolve) => {
-      setLinkRequest({ initialHref, resolve });
+      // Capture the model selection NOW (bug #6): the modal round-trip can
+      // collapse it (the editor refocuses on close → selectionchange overwrites
+      // the model), and the consumer applies the link mark AFTER the modal —
+      // a no-op on a collapsed selection. We restore it on resolve.
+      const req: LinkRequest = { initialHref, resolve, selection: selectionRef.current };
+      linkRequestRef.current = req;
+      setLinkRequest(req);
     });
   }, []);
-  const resolveLinkRequest = useCallback((href: string | null) => {
-    setLinkRequest((prev) => {
-      if (prev) prev.resolve(href);
-      return null;
-    });
-  }, []);
+  const resolveLinkRequest = useCallback(
+    (href: string | null) => {
+      const req = linkRequestRef.current;
+      linkRequestRef.current = null;
+      setLinkRequest(null);
+      if (req) {
+        // Restore the captured selection so the consumer's setMark applies to
+        // the originally-selected text even if the modal collapsed it.
+        setSelection(req.selection);
+        req.resolve(href);
+      }
+    },
+    [setSelection],
+  );
 
   // ---- Page settings ----
   const pageSettings = usePageSettings(doc);
