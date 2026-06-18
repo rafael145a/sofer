@@ -12,7 +12,7 @@ Lotes concluídos: Quick wins (#15/#16/#17), Cluster A clipboard (#7/#8/#14), Cl
 ⬜ 6 - inserir link vinculado algum texto não funciona
 ✅ 7 - ctrl+C em imagem não funciona — Cluster A
 ✅ 8 - ctrl+c copia o texto porem na hora de colar ele cola sem formatação — Cluster A
-🧪 9 - quando move a imagem de uma pagina para outra ela some atras da paginação — IMPLEMENTADO (core `moveEmbedAnchor` + detecção de página no drag + clamp; 5 commits, 5 testes core verdes). FALTA verificação VISUAL do drag no browser (Tasks 3-5 só verificáveis manualmente)
+✅ 9 - quando move a imagem de uma pagina para outra ela some atras da paginação — core `moveEmbedAnchor` + detecção de página no drag + clamp. VERIFICADO no playground: imagem behind arrastada cruzando a borda re-ancora num bloco da página 2 e fica visível. (Bônus: corrigida regressão do #11 que tinha quebrado o arrastar de imagem flutuante — overlay agora move o `.ed-figure`, não o `<img>` estático.)
 ✅ 11 - quando coloca legenda na imagem fica lagada — render estrutura-estável: sempre <figure> (figcaption condicional), o <img> nunca remonta → sem re-decode síncrono do base64
 ✅ 14 - CTRL + x não funciona ,ele acaba copiando em vez de recortar — Cluster A
 ✅ 15 - alinhamento de texto dentro da tabela não funciona — Quick wins
