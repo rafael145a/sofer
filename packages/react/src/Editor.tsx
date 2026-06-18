@@ -154,21 +154,40 @@ export function Editor({
     if (document.activeElement !== root) return;
     const current = readDomSelection(root);
     if (current && selectionsEqual(current, editor.selection)) return;
+    // DOM caret diverged from the model — typically a re-render replaced the
+    // text node and collapsed the native caret to offset 0. Suppress the
+    // selectionchange handler until the DOM settles back to the model; otherwise
+    // a render-induced selectionchange writes the collapsed caret over a newer
+    // keystroke's selection and the caret jumps backward when typing fast.
+    // Cleared deterministically in the selectionchange handler once the DOM
+    // settles to the live model — NOT on a timer, because timers race the event.
     suppressSelectionSyncRef.current = true;
     applyDomSelection(root, editor.selection);
-    queueMicrotask(() => {
-      suppressSelectionSyncRef.current = false;
-    });
   });
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     const handler = () => {
-      if (suppressSelectionSyncRef.current) return;
       if (isComposingRef.current) return;
-      if (document.activeElement !== root) return;
+      if (document.activeElement !== root) {
+        // Focus left the editor — nothing to capture here. Release any pending
+        // suppression so a stuck flag can't swallow the next genuine change.
+        suppressSelectionSyncRef.current = false;
+        return;
+      }
       const modelSel = readDomSelection(root);
+      if (suppressSelectionSyncRef.current) {
+        // Mid-reconciliation: a render moved the caret. Resume capturing user
+        // selection only once the DOM caret has settled to match the LIVE model
+        // (our applyDomSelection landed). Transient render-collapsed carets
+        // (DOM != model) are ignored — those are the spurious events that used
+        // to clobber the model selection and make the caret jump back.
+        if (modelSel && selectionsEqual(modelSel, editorRef.current.getSelection())) {
+          suppressSelectionSyncRef.current = false;
+        }
+        return;
+      }
       if (modelSel) setSelection(modelSel);
     };
     document.addEventListener("selectionchange", handler);
