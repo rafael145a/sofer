@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type JSX,
   type KeyboardEvent,
   type ReactNode,
@@ -27,6 +28,7 @@ import {
   type SerializedBlock,
 } from "@sofereditor/core";
 import { applyDomSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
+import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
 import { EditorProvider } from "./EditorContext";
 import { ImageResizeOverlay } from "./ImageResizeOverlay";
 import {
@@ -99,6 +101,14 @@ export function Editor({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  // The `behind` image the pointer is currently hovering (by geometry), so we
+  // can show a click affordance to select it through the text on top of it.
+  const [hoveredBehind, setHoveredBehind] = useState<{
+    blockIndex: number;
+    offset: number;
+    cellIndex?: number;
+  } | null>(null);
+  const hoveredBehindRef = useRef<typeof hoveredBehind>(null);
   const suppressSelectionSyncRef = useRef(false);
 
   // Presença colaborativa: publica a seleção local no awareness (throttle por
@@ -363,6 +373,75 @@ export function Editor({
     };
     root.addEventListener("pointerdown", onPointerDown);
     return () => root.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  // Hover detection for `behind` images: they sit at z-index:-1, so the text on
+  // top intercepts clicks and the image can't be selected by clicking there. On
+  // pointer move we find — BY GEOMETRY — the behind image under the pointer and
+  // expose a select affordance (rendered below). Throttled to one check/frame.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const same = (
+      a: typeof hoveredBehind,
+      b: typeof hoveredBehind,
+    ): boolean =>
+      a === b ||
+      (!!a &&
+        !!b &&
+        a.blockIndex === b.blockIndex &&
+        a.offset === b.offset &&
+        (a.cellIndex ?? -1) === (b.cellIndex ?? -1));
+    const set = (next: typeof hoveredBehind) => {
+      if (same(next, hoveredBehindRef.current)) return;
+      hoveredBehindRef.current = next;
+      setHoveredBehind(next);
+    };
+    let raf = 0;
+    const onMove = (e: PointerEvent) => {
+      if (raf) return;
+      const x = e.clientX;
+      const y = e.clientY;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const imgs = root.querySelectorAll<HTMLImageElement>(
+          'img[data-embed="image"][data-embed-layout="behind"]',
+        );
+        let hit: HTMLImageElement | null = null;
+        for (const img of imgs) {
+          const r = img.getBoundingClientRect();
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+            hit = img;
+            break;
+          }
+        }
+        if (!hit) {
+          set(null);
+          return;
+        }
+        const blockEl = hit.closest<HTMLElement>("[data-block-index]");
+        const offsetAttr = hit.dataset.embedOffset;
+        if (!blockEl || offsetAttr == null) {
+          set(null);
+          return;
+        }
+        const blockIndex = Number.parseInt(blockEl.dataset.blockIndex!, 10);
+        const fragmentStart = Number.parseInt(blockEl.dataset.fragmentStart ?? "0", 10) || 0;
+        const cellEl = hit.closest<HTMLElement>("[data-cell-index]");
+        const cellIndex = cellEl
+          ? Number.parseInt(cellEl.dataset.cellIndex!, 10)
+          : undefined;
+        set({ blockIndex, offset: fragmentStart + Number.parseInt(offsetAttr, 10), cellIndex });
+      });
+    };
+    const onLeave = () => set(null);
+    root.addEventListener("pointermove", onMove);
+    root.addEventListener("pointerleave", onLeave);
+    return () => {
+      root.removeEventListener("pointermove", onMove);
+      root.removeEventListener("pointerleave", onLeave);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   useEffect(() => {
@@ -850,6 +929,34 @@ export function Editor({
           }
         />
       )}
+      {hoveredBehind &&
+        !(
+          selectedEmbed &&
+          selectedEmbed.blockIndex === hoveredBehind.blockIndex &&
+          selectedEmbed.offset === hoveredBehind.offset &&
+          (selectedEmbed.cellIndex ?? -1) === (hoveredBehind.cellIndex ?? -1)
+        ) && (
+          <BehindImageSelectAffordance
+            rootRef={rootRef}
+            blockIndex={hoveredBehind.blockIndex}
+            offset={hoveredBehind.offset}
+            cellIndex={hoveredBehind.cellIndex}
+            onSelect={() =>
+              setSelection({
+                anchor: {
+                  blockIndex: hoveredBehind.blockIndex,
+                  cellIndex: hoveredBehind.cellIndex,
+                  offset: hoveredBehind.offset,
+                },
+                focus: {
+                  blockIndex: hoveredBehind.blockIndex,
+                  cellIndex: hoveredBehind.cellIndex,
+                  offset: hoveredBehind.offset + 1,
+                },
+              })
+            }
+          />
+        )}
       {awareness && (
         <RemoteCursorsOverlay
           rootRef={rootRef}
