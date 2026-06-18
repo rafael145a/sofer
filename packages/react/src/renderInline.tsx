@@ -187,12 +187,20 @@ function ImageEmbedViewImpl({
       break;
   }
 
-  // The img always carries the data-* attributes used by Editor/Overlay; the
-  // style is either the outer positioning (no caption — bare img) or just the
-  // intrinsic size (with caption — figure carries the outer positioning).
-  const imgStyle: CSSProperties = hasCaption
-    ? { width: embed.width, height: embed.height, display: "block" }
-    : outerStyle;
+  // The img always carries the data-* attributes used by Editor/Overlay.
+  //
+  // Structure-stable rendering (bug #11): the <img> ALWAYS lives inside a
+  // <figure> that carries `outerStyle`, so adding/removing a caption never
+  // changes the <img>'s parent type. React then keeps the same <img> DOM node
+  // instead of unmounting+remounting it — a remount would force a synchronous
+  // base64 re-decode (`decoding="sync"` below), freezing the UI on large
+  // images. The <img> therefore always uses the intrinsic-size style; the
+  // <figure> owns the positioning.
+  const imgStyle: CSSProperties = {
+    width: embed.width,
+    height: embed.height,
+    display: "block",
+  };
 
   // `decoding="sync"` + `loading="eager"` evita o piscar quando a paginação
   // remonta o <img> (consumidor com `renderPageHeader` faz a 1ª página ter
@@ -217,25 +225,28 @@ function ImageEmbedViewImpl({
     />
   );
 
-  if (!hasCaption) return img;
-
+  // Always render the <figure> wrapper (structure-stable; see imgStyle note).
+  // The <figcaption> is the ONLY part that toggles with the caption — the
+  // <img> stays mounted, so no re-decode/freeze.
   const captionAlign = embed.captionAlign ?? "center";
   return (
     <figure
       className="ed-figure"
       contentEditable={false}
-      data-embed-figure="true"
+      data-embed-figure={hasCaption ? "true" : undefined}
       data-embed-layout={layout}
       style={outerStyle}
     >
       {img}
-      <figcaption
-        className="ed-figcaption"
-        data-caption-align={captionAlign}
-        style={{ textAlign: captionAlign }}
-      >
-        {embed.caption}
-      </figcaption>
+      {hasCaption && (
+        <figcaption
+          className="ed-figcaption"
+          data-caption-align={captionAlign}
+          style={{ textAlign: captionAlign }}
+        >
+          {embed.caption}
+        </figcaption>
+      )}
     </figure>
   );
 }

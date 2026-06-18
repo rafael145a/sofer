@@ -13,7 +13,7 @@ Lotes concluídos: Quick wins (#15/#16/#17), Cluster A clipboard (#7/#8/#14), Cl
 ✅ 7 - ctrl+C em imagem não funciona — Cluster A
 ✅ 8 - ctrl+c copia o texto porem na hora de colar ele cola sem formatação — Cluster A
 ⬜ 9 - quando move a imagem de uma pagina para outra ela some atras da paginação
-⬜ 11 - quando coloca legenda na imagem fica lagada
+✅ 11 - quando coloca legenda na imagem fica lagada — render estrutura-estável: sempre <figure> (figcaption condicional), o <img> nunca remonta → sem re-decode síncrono do base64
 ✅ 14 - CTRL + x não funciona ,ele acaba copiando em vez de recortar — Cluster A
 ✅ 15 - alinhamento de texto dentro da tabela não funciona — Quick wins
 ✅ 16 - quando cria a tabela vc não consegue escrever abaixo da tabela — Quick wins
