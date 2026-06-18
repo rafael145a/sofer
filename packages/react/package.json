@@ -1,7 +1,7 @@
 {
   "name": "@sofereditor/react",
   "version": "0.2.0",
-  "description": "@sofereditor/react \u2014 React renderer + useEditor hook + <Editor>/<Toolbar> components with built-in A4 pagination for the Sofer editor.",
+  "description": "@sofereditor/react — React renderer + useEditor hook + <Editor>/<Toolbar> components with built-in A4 pagination for the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
   "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/react#readme",
@@ -65,10 +65,11 @@
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "jsdom": "^29.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "typescript": "^5.7.2",
     "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
 }
