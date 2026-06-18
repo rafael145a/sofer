@@ -9,7 +9,7 @@ Lotes concluídos: Quick wins (#15/#16/#17), Cluster A clipboard (#7/#8/#14), Cl
 ✅ 3 - resolver não atualiza em tempo real (ele so atualiza quando resolve algum) — Cluster B
 ✅ 4 - botão imagem frente do texto não funciona. o texto permance na frente da imagem — isolar só blocos com imagem "behind" (`:has()`), liberando "front" para escapar do bloco
 ✅ 5 - Quando resolve o comentario ele não aparece o texto que foi utilizado para fazer o comentário — Cluster B (coluna trecho_citado persistida)
-⬜ 6 - inserir link vinculado algum texto não funciona
+✅ 6 - inserir link vinculado algum texto não funciona — o modal colapsava a seleção do modelo (refoco do editor ao fechar → selectionchange) e o `setMark` do consumidor virava no-op. Fix core: `requestLink` captura a seleção, `resolveLinkRequest` restaura antes de resolver. Verificado red→green no playground.
 ✅ 7 - ctrl+C em imagem não funciona — Cluster A
 ✅ 8 - ctrl+c copia o texto porem na hora de colar ele cola sem formatação — Cluster A
 ✅ 9 - quando move a imagem de uma pagina para outra ela some atras da paginação — core `moveEmbedAnchor` + detecção de página no drag + clamp. VERIFICADO no playground: imagem behind arrastada cruzando a borda re-ancora num bloco da página 2 e fica visível. (Bônus: corrigida regressão do #11 que tinha quebrado o arrastar de imagem flutuante — overlay agora move o `.ed-figure`, não o `<img>` estático.)
