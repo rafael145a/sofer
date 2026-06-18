@@ -329,10 +329,25 @@ function MoveHandle({
     onLiveChange();
   };
 
-  // Clamp the live vertical offset so the image's top stays within the anchor
-  // page's content box (never clipped by .ed-page-content overflow:hidden).
-  // For behind/front the offset is relative to the .ed-block fragment, so we
-  // translate the content-box bounds into fragment-local coordinates.
+  // Clamp a behind/front vertical offset so the image stays within `frag`'s
+  // page content box (never clipped by .ed-page-content overflow:hidden).
+  // Offsets are fragment-local (position:absolute relative to the .ed-block).
+  // Used for BOTH the same-page path and the re-anchor path (dest fragment).
+  const clampOffsetToFragment = (frag: HTMLElement, oy: number): number => {
+    const img = imgRef.current;
+    if (!img) return oy;
+    const page = frag.closest<HTMLElement>(".ed-page");
+    const content = page?.querySelector<HTMLElement>(".ed-page-content");
+    if (!content) return oy;
+    const fragRect = frag.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const imgH = img.getBoundingClientRect().height;
+    // Allowed top range in fragment-local px: [contentTop, contentBottom-imgH].
+    const minLocalTop = contentRect.top - fragRect.top;
+    const maxLocalTop = contentRect.bottom - fragRect.top - imgH;
+    return Math.round(Math.max(minLocalTop, Math.min(oy, maxLocalTop)));
+  };
+
   const clampedCommit = (ox: number, oy: number) => {
     const img = imgRef.current;
     const root = rootRef.current;
@@ -341,20 +356,11 @@ function MoveHandle({
       return;
     }
     const frag = getFragmentForOffset(root, blockIndex, offset);
-    const page = frag?.closest<HTMLElement>(".ed-page");
-    const content = page?.querySelector<HTMLElement>(".ed-page-content");
-    if (!frag || !content) {
+    if (!frag) {
       onCommit(ox, oy);
       return;
     }
-    const fragRect = frag.getBoundingClientRect();
-    const contentRect = content.getBoundingClientRect();
-    const imgH = img.getBoundingClientRect().height;
-    // Allowed top range in fragment-local px: [contentTop, contentBottom-imgH].
-    const minLocalTop = contentRect.top - fragRect.top;
-    const maxLocalTop = contentRect.bottom - fragRect.top - imgH;
-    const clampedY = Math.max(minLocalTop, Math.min(oy, maxLocalTop));
-    onCommit(ox, Math.round(clampedY));
+    onCommit(ox, clampOffsetToFragment(frag, oy));
   };
 
   const finish = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -381,43 +387,57 @@ function MoveHandle({
     }
 
     const imgRect = img.getBoundingClientRect();
-    const centerX = imgRect.left + imgRect.width / 2;
     const centerY = imgRect.top + imgRect.height / 2;
 
-    // Destination page = the .ed-page under the image CENTER (handles images
-    // spanning two pages — anchor by the center).
-    const dropEl = document.elementFromPoint(centerX, centerY) as HTMLElement | null;
-    const destPage = dropEl?.closest<HTMLElement>(".ed-page") ?? null;
+    // Destination page by GEOMETRY. `elementFromPoint(center)` was unreliable:
+    // it returns null in the gap between pages or off-viewport, so cross-page
+    // drops failed to re-anchor and snapped back to page 1. Instead pick the
+    // .ed-page whose box CONTAINS the image center, else the NEAREST page —
+    // never null. imgRect and getBoundingClientRect share the viewport-relative
+    // coordinate space, so the comparison holds at any scroll.
+    const pages = Array.from(root.querySelectorAll<HTMLElement>(".ed-page"));
+    let destPage: HTMLElement | null = null;
+    let bestPageDist = Infinity;
+    for (const pg of pages) {
+      const r = pg.getBoundingClientRect();
+      if (centerY >= r.top && centerY <= r.bottom) {
+        destPage = pg;
+        break;
+      }
+      const dist = centerY < r.top ? r.top - centerY : centerY - r.bottom;
+      if (dist < bestPageDist) {
+        bestPageDist = dist;
+        destPage = pg;
+      }
+    }
 
     // Current anchor page = the page owning the current fragment.
     const currentFrag = getFragmentForOffset(root, blockIndex, offset);
     const currentPage = currentFrag?.closest<HTMLElement>(".ed-page") ?? null;
 
-    // Same page (or no destination page resolved) → existing same-anchor path.
+    // Same page (or no page resolved) → existing same-anchor path.
     if (destPage == null || destPage === currentPage) {
       clampedCommit(liveOX, liveOY);
       return;
     }
 
     // ---- Re-anchor to a block on the destination page ----
-    // Pick the destination anchor fragment:
-    //  1) the block fragment under the image's TOP-LEFT corner, if it's inside
-    //     the destination page;
-    //  2) else the LAST block fragment rendered on the destination page.
+    // Destination anchor block by GEOMETRY: the block fragment on destPage whose
+    // top is nearest the dropped image's top (no elementFromPoint).
+    const blocksOnPage = Array.from(
+      destPage.querySelectorAll<HTMLElement>("[data-block-index]"),
+    );
     let destFrag: HTMLElement | null = null;
-    const cornerEl = document.elementFromPoint(imgRect.left, imgRect.top) as HTMLElement | null;
-    const cornerBlock = cornerEl
-      ? cornerEl.closest<HTMLElement>("[data-block-index]")
-      : null;
-    if (cornerBlock && destPage.contains(cornerBlock)) {
-      destFrag = cornerBlock;
-    } else {
-      const frags = destPage.querySelectorAll<HTMLElement>("[data-block-index]");
-      destFrag = frags.length > 0 ? frags[frags.length - 1] : null;
+    let bestBlockDist = Infinity;
+    for (const b of blocksOnPage) {
+      const dist = Math.abs(b.getBoundingClientRect().top - imgRect.top);
+      if (dist < bestBlockDist) {
+        bestBlockDist = dist;
+        destFrag = b;
+      }
     }
 
-    // Empty destination page (no block fragments) → safety net (Task 5): keep
-    // the same-anchor path with the live offsets (clamp handles visibility).
+    // Empty destination page (no block fragments) → keep same-anchor + clamp.
     if (!destFrag) {
       clampedCommit(liveOX, liveOY);
       return;
@@ -435,12 +455,16 @@ function MoveHandle({
       ? Number.parseInt(destFrag.dataset.fragmentStart, 10) || 0
       : 0;
 
-    // Recompute absolute coordinates relative to the destination fragment box.
+    // Recompute absolute coords relative to the destination fragment box, and
+    // CLAMP so the re-anchored image is never clipped on the destination page.
     // behind/front render position:absolute; left:ox; top:oy relative to the
     // .ed-block fragment (position:relative). So ox = imgLeft - fragLeft.
     const fragRect = destFrag.getBoundingClientRect();
     const newOffsetX = Math.round(imgRect.left - fragRect.left);
-    const newOffsetY = Math.round(imgRect.top - fragRect.top);
+    const newOffsetY = clampOffsetToFragment(
+      destFrag,
+      Math.round(imgRect.top - fragRect.top),
+    );
 
     onReanchor(
       { blockIndex: destBlockIndex, offset: destOffset, cellIndex: undefined },
