@@ -326,6 +326,34 @@ function MoveHandle({
     onLiveChange();
   };
 
+  // Clamp the live vertical offset so the image's top stays within the anchor
+  // page's content box (never clipped by .ed-page-content overflow:hidden).
+  // For behind/front the offset is relative to the .ed-block fragment, so we
+  // translate the content-box bounds into fragment-local coordinates.
+  const clampedCommit = (ox: number, oy: number) => {
+    const img = imgRef.current;
+    const root = rootRef.current;
+    if (!img || !root || (layout !== "behind" && layout !== "front")) {
+      onCommit(ox, oy);
+      return;
+    }
+    const frag = getFragmentForOffset(root, blockIndex, offset);
+    const page = frag?.closest<HTMLElement>(".ed-page");
+    const content = page?.querySelector<HTMLElement>(".ed-page-content");
+    if (!frag || !content) {
+      onCommit(ox, oy);
+      return;
+    }
+    const fragRect = frag.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const imgH = img.getBoundingClientRect().height;
+    // Allowed top range in fragment-local px: [contentTop, contentBottom-imgH].
+    const minLocalTop = contentRect.top - fragRect.top;
+    const maxLocalTop = contentRect.bottom - fragRect.top - imgH;
+    const clampedY = Math.max(minLocalTop, Math.min(oy, maxLocalTop));
+    onCommit(ox, Math.round(clampedY));
+  };
+
   const finish = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d) return;
@@ -345,7 +373,7 @@ function MoveHandle({
     // Re-anchoring only happens for non-inline embeds dropped on a DIFFERENT
     // top-level page, with onReanchor wired.
     if (!img || !root || onReanchor === undefined || cellIndex != null) {
-      onCommit(liveOX, liveOY);
+      clampedCommit(liveOX, liveOY);
       return;
     }
 
@@ -364,7 +392,7 @@ function MoveHandle({
 
     // Same page (or no destination page resolved) → existing same-anchor path.
     if (destPage == null || destPage === currentPage) {
-      onCommit(liveOX, liveOY);
+      clampedCommit(liveOX, liveOY);
       return;
     }
 
@@ -388,13 +416,13 @@ function MoveHandle({
     // Empty destination page (no block fragments) → safety net (Task 5): keep
     // the same-anchor path with the live offsets (clamp handles visibility).
     if (!destFrag) {
-      onCommit(liveOX, liveOY);
+      clampedCommit(liveOX, liveOY);
       return;
     }
 
     const destBlockIndex = findBlockIndex(destFrag, root);
     if (destBlockIndex == null) {
-      onCommit(liveOX, liveOY);
+      clampedCommit(liveOX, liveOY);
       return;
     }
 
