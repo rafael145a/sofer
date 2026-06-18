@@ -4,7 +4,7 @@ Status (atualizado 2026-06-17):
 ✅ corrigido · ⬜ pendente
 Lotes concluídos: Quick wins (#15/#16/#17), Cluster A clipboard (#7/#8/#14), Cluster B comentários (#2/#3/#5), #1 cursor, #4 imagem frente do texto.
 
-✅ 1 - cursor volta quando digita muito rápido — fix do guarda de selectionchange (determinístico, sem timer) - não volta mas pisca no começo
+✅ 1 - cursor volta quando digita muito rápido — fix do guarda de selectionchange (determinístico, sem timer) - não volta mas pisca no começo → RESOLVIDO o piscar: cada tecla gera 2 commits React; no 1º a seleção do modelo já está em N+1 mas o text node ainda tem N chars, então `locatePoint` estourava o container e caía no fallback `{container, offset:0}` (início da linha) por 1 frame. Fix em `dom-bridge.ts`: offset fora do alcance agora clampa pro FIM do último text node (não pro início do container) + `applyDomSelection` vira no-op quando os pontos já batem (evita o blink do `removeAllRanges`). Teste de regressão em `dom-bridge.test.ts` (locatePoint clampa offset fora do alcance). Verificado o mecanismo no playground (estado intermediário `el:DIV @0` sumiu); falta confirmação visual do usuário.
 ✅ 2 - caixas de comentários não aparece em tempo real (quando resolve algum comentário ele atualiza e aparece outros comentários) — Cluster B
 ✅ 3 - resolver não atualiza em tempo real (ele so atualiza quando resolve algum) — Cluster B
 ✅ 4 - botão imagem frente do texto não funciona. o texto permance na frente da imagem — isolar só blocos com imagem "behind" (`:has()`), liberando "front" para escapar do bloco

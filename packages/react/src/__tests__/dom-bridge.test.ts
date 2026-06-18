@@ -275,6 +275,23 @@ describe("locatePoint <-> textOffsetWithin round-trip", () => {
     const root = makeRoot(`<div data-block-index="0" data-block-type="paragraph">x</div>`);
     expect(locatePoint(root, { blockIndex: 42, offset: 0 })).toBeNull();
   });
+
+  // Regression (bug #1 caret flash): when the model selection is transiently
+  // AHEAD of the rendered DOM (insertText commits the new selection in one
+  // React commit and the new text in the next), an out-of-range offset must
+  // clamp to the END of the last text node — NOT collapse to the container's
+  // start (offset 0), which paints the caret at the start of the line for one
+  // frame before the next commit corrects it.
+  it("clamps an out-of-range offset to the end of the last text node", () => {
+    const root = makeRoot(`<div data-block-index="0" data-block-type="paragraph">hello</div>`);
+    const block = root.firstElementChild as HTMLElement;
+    const textNode = block.firstChild as Text;
+    // Model wants offset 6 but the DOM text node only holds 5 chars.
+    const pt = locatePoint(root, { blockIndex: 0, offset: 6 })!;
+    expect(pt).not.toBeNull();
+    expect(pt.node).toBe(textNode);
+    expect(pt.offset).toBe(5);
+  });
 });
 
 // ---------------------------------------------------------------------------

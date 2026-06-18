@@ -326,6 +326,7 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   let remaining = Math.max(0, pos.offset - containerStart);
   let result: DomPoint | null = null;
   let lastImg: HTMLElement | null = null;
+  let lastText: Text | null = null;
 
   function visit(n: Node): void {
     if (result) return;
@@ -337,6 +338,7 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
       }
       remaining -= len;
       lastImg = null;
+      lastText = n as Text;
       return;
     }
     if (n.nodeType !== Node.ELEMENT_NODE) return;
@@ -366,11 +368,20 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   if (result) return result;
 
   // Walked the whole container without consuming `remaining` — caret lands
-  // just AFTER the last embed if it was the last visited node, otherwise at
-  // the container's start as a last-resort fallback.
+  // just AFTER the last embed if it was the last visited node.
   if (lastImg && remaining === 0) {
     const parent = (lastImg as HTMLElement).parentNode;
     if (parent) return { node: parent, offset: indexInParent(lastImg) + 1 };
+  }
+  // Offset overflowed the container's content (the model selection is
+  // transiently AHEAD of the rendered DOM — insertText commits the new
+  // selection one React commit before the new text). Clamp to the END of the
+  // last text node so the caret stays at the end of the line. Collapsing to
+  // the container's start instead would paint the caret at the start of the
+  // line for one frame before the next commit corrects it (bug #1 flash).
+  if (lastText) {
+    const t = lastText as Text;
+    return { node: t, offset: (t.textContent ?? "").length };
   }
   return { node: container, offset: 0 };
 }
@@ -410,6 +421,20 @@ export function applyDomSelection(root: HTMLElement, modelSel: Selection): void 
   const anchorPt = locatePoint(root, modelSel.anchor);
   const focusPt = locatePoint(root, modelSel.focus);
   if (!anchorPt || !focusPt) return;
+
+  // Already on the resolved points? Don't touch the live range. `removeAllRanges`
+  // momentarily clears the selection (the caret blinks out), so re-applying an
+  // identical selection is a visible no-op flash. This matters when the offset
+  // clamped to the end of the line (model transiently ahead of the DOM): the
+  // caret is already there, so we must leave it alone (bug #1 flash).
+  if (
+    domSel.anchorNode === anchorPt.node &&
+    domSel.anchorOffset === anchorPt.offset &&
+    domSel.focusNode === focusPt.node &&
+    domSel.focusOffset === focusPt.offset
+  ) {
+    return;
+  }
 
   try {
     domSel.removeAllRanges();
