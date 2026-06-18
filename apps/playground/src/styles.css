@@ -563,16 +563,24 @@ img[data-embed="image"] {
 
 /* ---- Fase 6: imagens flutuantes (wrap + z-order) ---- */
 /*
- * Every block becomes a positioning context so behind/front images are
- * positioned relative to their anchor paragraph.
+ * Every block is a positioning context so behind/front images are positioned
+ * relative to their anchor paragraph.
  *
- * `isolation: isolate` is the critical bit: it creates a self-contained
- * stacking context so an image with `z-index: -1` ("behind text") stays behind
- * its block's own text but does NOT fall behind the page's white background
- * (which would happen if z-index escaped to the document root stacking context).
+ * `isolation: isolate` cria um contexto de empilhamento próprio — necessário
+ * para "behind" (z-index:-1) ficar atrás do texto do bloco mas NÃO cair atrás
+ * do fundo branco da página. Porém aplicá-lo a TODO bloco prende uma imagem
+ * "front" (z-index:2) no contexto do seu parágrafo, e os parágrafos seguintes
+ * (contextos irmãos pintados depois) cobrem a imagem — o texto fica na frente
+ * (bug #1 da lista era cursor; este é o #4 "imagem na frente do texto").
+ *
+ * Fix: isolar SÓ os blocos que contêm uma imagem "behind". Blocos sem "behind"
+ * não isolam, então uma imagem "front" escapa para o contexto da página e pinta
+ * acima do texto de todos os parágrafos.
  */
 .ed-page-content .ed-block {
   position: relative;
+}
+.ed-page-content .ed-block:has(img[data-embed="image"][data-embed-layout="behind"]) {
   isolation: isolate;
 }
 img[data-embed="image"][data-embed-layout="behind"] {
