@@ -12,6 +12,7 @@ import {
   mergeDown as cmdMergeDown,
   mergeRight as cmdMergeRight,
   mergeSelection as cmdMergeSelection,
+  moveEmbedAnchor as cmdMoveEmbedAnchor,
   setColumnWidth as cmdSetColumnWidth,
   setImageAttrs as cmdSetImageAttrs,
   splitCell as cmdSplitCell,
@@ -40,6 +41,7 @@ import {
   type BlockType,
   type CommandContext,
   type DeltaOp,
+  type EmbedLoc,
   type ImageEmbed,
   type ListKind,
   type MarkAttrs,
@@ -198,6 +200,16 @@ export interface UseEditorResult {
     partial: Partial<ImageEmbed>,
     cellIndex?: number,
     newOffset?: number,
+  ) => void;
+  /**
+   * Move a floating image embed from one anchor to another (re-anchor across
+   * blocks/pages) in a single transaction. No-op for inline embeds.
+   */
+  moveEmbedAnchor: (
+    from: EmbedLoc,
+    to: EmbedLoc,
+    newOffsetX: number,
+    newOffsetY: number,
   ) => void;
   /** Read a File (image) and insert it inline at the caret as a data-URL embed. */
   insertImageFromFile: (file: File) => Promise<void>;
@@ -590,6 +602,12 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     },
     [],
   );
+  const moveEmbedAnchor = useCallback(
+    (from: EmbedLoc, to: EmbedLoc, newOffsetX: number, newOffsetY: number) => {
+      cmdMoveEmbedAnchor(ctxRef.current, from, to, newOffsetX, newOffsetY);
+    },
+    [],
+  );
   const uploadImageRef = useRef(opts.uploadImage);
   uploadImageRef.current = opts.uploadImage;
   const insertImageFromFile = useCallback(async (file: File): Promise<void> => {
@@ -740,6 +758,7 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     mergeSelection,
     insertImage,
     setImageAttrs,
+    moveEmbedAnchor,
     insertImageFromFile,
     getSelectedEmbed,
     pageSettings,
