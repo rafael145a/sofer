@@ -836,6 +836,18 @@ export function Editor({
               selectedEmbed.cellIndex,
             )
           }
+          onReanchor={(to, ox, oy) =>
+            editor.moveEmbedAnchor(
+              {
+                blockIndex: selectedEmbed.blockIndex,
+                offset: selectedEmbed.offset,
+                cellIndex: selectedEmbed.cellIndex,
+              },
+              to,
+              ox,
+              oy,
+            )
+          }
         />
       )}
       {awareness && (
