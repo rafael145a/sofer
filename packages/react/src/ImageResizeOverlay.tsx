@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from "react";
 import type { ImageEmbed } from "@sofereditor/core";
-import { getFragmentForOffset } from "./dom-bridge";
+import { findBlockIndex, getFragmentForOffset } from "./dom-bridge";
 
 interface ImageResizeOverlayProps {
   rootRef: RefObject<HTMLDivElement>;
@@ -24,6 +24,16 @@ interface ImageResizeOverlayProps {
    * coordinates (CSS px). Only fired when `embed.layout` is non-inline.
    */
   onCommitMove?: (offsetX: number, offsetY: number) => void;
+  /**
+   * Called once on pointer-up after a move-drag when the image was dropped on a
+   * DIFFERENT page than its current anchor. Re-anchors the embed to a block on
+   * the destination page. Only fired for non-inline layouts.
+   */
+  onReanchor?: (
+    to: { blockIndex: number; offset: number; cellIndex?: number },
+    newOffsetX: number,
+    newOffsetY: number,
+  ) => void;
 }
 
 type Corner = "nw" | "ne" | "sw" | "se";
@@ -49,6 +59,7 @@ export function ImageResizeOverlay({
   embed,
   onCommit,
   onCommitMove,
+  onReanchor,
 }: ImageResizeOverlayProps): JSX.Element | null {
   const [rect, setRect] = useState<Rect | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -189,6 +200,11 @@ export function ImageResizeOverlay({
           imgRef={imgRef}
           onCommit={onCommitMove!}
           onLiveChange={measure}
+          rootRef={rootRef}
+          blockIndex={blockIndex}
+          offset={offset}
+          cellIndex={cellIndex}
+          onReanchor={onReanchor}
         />
       )}
       <Handle
@@ -234,6 +250,15 @@ interface MoveHandleProps {
   imgRef: RefObject<HTMLImageElement | null>;
   onCommit: (ox: number, oy: number) => void;
   onLiveChange: () => void;
+  rootRef: RefObject<HTMLDivElement>;
+  blockIndex: number;
+  offset: number;
+  cellIndex?: number;
+  onReanchor?: (
+    to: { blockIndex: number; offset: number; cellIndex?: number },
+    newOffsetX: number,
+    newOffsetY: number,
+  ) => void;
 }
 
 function MoveHandle({
@@ -243,6 +268,11 @@ function MoveHandle({
   imgRef,
   onCommit,
   onLiveChange,
+  rootRef,
+  blockIndex,
+  offset,
+  cellIndex,
+  onReanchor,
 }: MoveHandleProps): JSX.Element {
   const dragRef = useRef<{
     startX: number;
@@ -305,7 +335,87 @@ function MoveHandle({
     } catch {
       // ignore
     }
-    onCommit(Math.round(d.liveOX), Math.round(d.liveOY));
+
+    const img = imgRef.current;
+    const root = rootRef.current;
+    const liveOX = Math.round(d.liveOX);
+    const liveOY = Math.round(d.liveOY);
+
+    // Tables / wrap-anchors-in-cell are out of scope: keep the current path.
+    // Re-anchoring only happens for non-inline embeds dropped on a DIFFERENT
+    // top-level page, with onReanchor wired.
+    if (!img || !root || onReanchor === undefined || cellIndex != null) {
+      onCommit(liveOX, liveOY);
+      return;
+    }
+
+    const imgRect = img.getBoundingClientRect();
+    const centerX = imgRect.left + imgRect.width / 2;
+    const centerY = imgRect.top + imgRect.height / 2;
+
+    // Destination page = the .ed-page under the image CENTER (handles images
+    // spanning two pages — anchor by the center).
+    const dropEl = document.elementFromPoint(centerX, centerY) as HTMLElement | null;
+    const destPage = dropEl?.closest<HTMLElement>(".ed-page") ?? null;
+
+    // Current anchor page = the page owning the current fragment.
+    const currentFrag = getFragmentForOffset(root, blockIndex, offset);
+    const currentPage = currentFrag?.closest<HTMLElement>(".ed-page") ?? null;
+
+    // Same page (or no destination page resolved) → existing same-anchor path.
+    if (destPage == null || destPage === currentPage) {
+      onCommit(liveOX, liveOY);
+      return;
+    }
+
+    // ---- Re-anchor to a block on the destination page ----
+    // Pick the destination anchor fragment:
+    //  1) the block fragment under the image's TOP-LEFT corner, if it's inside
+    //     the destination page;
+    //  2) else the LAST block fragment rendered on the destination page.
+    let destFrag: HTMLElement | null = null;
+    const cornerEl = document.elementFromPoint(imgRect.left, imgRect.top) as HTMLElement | null;
+    const cornerBlock = cornerEl
+      ? cornerEl.closest<HTMLElement>("[data-block-index]")
+      : null;
+    if (cornerBlock && destPage.contains(cornerBlock)) {
+      destFrag = cornerBlock;
+    } else {
+      const frags = destPage.querySelectorAll<HTMLElement>("[data-block-index]");
+      destFrag = frags.length > 0 ? frags[frags.length - 1] : null;
+    }
+
+    // Empty destination page (no block fragments) → safety net (Task 5): keep
+    // the same-anchor path with the live offsets (clamp handles visibility).
+    if (!destFrag) {
+      onCommit(liveOX, liveOY);
+      return;
+    }
+
+    const destBlockIndex = findBlockIndex(destFrag, root);
+    if (destBlockIndex == null) {
+      onCommit(liveOX, liveOY);
+      return;
+    }
+
+    // Destination offset = the fragment's first rendered offset (fragmentStart),
+    // so the anchor lands in the FRACTION of the block that lives on this page.
+    const destOffset = destFrag.dataset.fragmentStart
+      ? Number.parseInt(destFrag.dataset.fragmentStart, 10) || 0
+      : 0;
+
+    // Recompute absolute coordinates relative to the destination fragment box.
+    // behind/front render position:absolute; left:ox; top:oy relative to the
+    // .ed-block fragment (position:relative). So ox = imgLeft - fragLeft.
+    const fragRect = destFrag.getBoundingClientRect();
+    const newOffsetX = Math.round(imgRect.left - fragRect.left);
+    const newOffsetY = Math.round(imgRect.top - fragRect.top);
+
+    onReanchor(
+      { blockIndex: destBlockIndex, offset: destOffset, cellIndex: undefined },
+      newOffsetX,
+      newOffsetY,
+    );
   };
 
   return (
