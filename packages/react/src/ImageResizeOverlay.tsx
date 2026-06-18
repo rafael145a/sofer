@@ -116,27 +116,42 @@ export function ImageResizeOverlay({
 
   useLayoutEffect(() => {
     measure();
-    // Pagination runs in a separate effect after this one, and can shift the
-    // image vertically by dozens of pixels (e.g. when `align: center` flips
-    // the layout to `display: block`). Re-measure on the next frame to catch
-    // the post-reflow position. Falls back to a microtask in non-browser envs.
+    // Pagination runs in a SEPARATE effect after this one, on LATER frames. So
+    // right after an embed prop change OR a re-anchor (blockIndex/offset change
+    // from a cross-page drag), the target <img> may not be locatable yet —
+    // `measure()` sets rect=null and the overlay renders nothing. Re-measure
+    // across a few frames UNTIL the image is found (rect set), then stop.
+    // A single rAF wasn't enough: pagination can take several frames to place
+    // the re-anchored block, leaving the overlay hidden until the next
+    // selection change (bug: "can't click to select the image right after it
+    // re-anchors onto the new page").
     let cancelled = false;
+    let frame = 0;
+    let rafId = 0;
     const remeasure = () => {
       if (cancelled) return;
       measure();
+      // Keep retrying while the image still isn't locatable (bounded budget).
+      if (!locateImage() && frame++ < 30) {
+        rafId =
+          typeof requestAnimationFrame === "function"
+            ? requestAnimationFrame(remeasure)
+            : (queueMicrotask(remeasure), 0);
+      }
     };
-    const id =
+    rafId =
       typeof requestAnimationFrame === "function"
         ? requestAnimationFrame(remeasure)
         : (queueMicrotask(remeasure), 0);
     return () => {
       cancelled = true;
-      if (typeof cancelAnimationFrame === "function" && typeof id === "number" && id > 0) {
-        cancelAnimationFrame(id);
+      if (typeof cancelAnimationFrame === "function" && typeof rafId === "number" && rafId > 0) {
+        cancelAnimationFrame(rafId);
       }
     };
   }, [
     measure,
+    locateImage,
     embed.width,
     embed.height,
     embed.align,
