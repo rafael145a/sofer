@@ -1,5 +1,6 @@
 import { Fragment, memo, type CSSProperties, type ReactNode } from "react";
 import { isImageEmbed, type DeltaOp, type ImageEmbed, type MarkAttrs } from "@sofereditor/core";
+import { hasOpenModifier } from "./platform";
 
 /**
  * Convert a Y.Text delta into ReactNodes.
@@ -84,6 +85,17 @@ const PHANTOM_STYLE: CSSProperties = {
   height: 0,
   overflow: "hidden",
   verticalAlign: "baseline",
+};
+
+// Inline style for links (the package ships no CSS). `color`/underline give the
+// link its visual affordance; `cursor: "text"` matches the surrounding editable
+// text — the browser's UA stylesheet makes `<a href>` use `cursor: pointer`,
+// which flickers pointer↔text across the link boundary inside a contentEditable
+// (hard to click / "cursor oscila"). To FOLLOW a link, Cmd/Ctrl+click.
+const LINK_STYLE: CSSProperties = {
+  color: "#2563eb",
+  textDecoration: "underline",
+  cursor: "text",
 };
 
 interface ImageEmbedViewProps {
@@ -275,9 +287,18 @@ function wrap(text: string, attrs?: MarkAttrs): ReactNode {
         title={attrs.link.title}
         rel="noopener noreferrer"
         target="_blank"
+        style={LINK_STYLE}
         onClick={(e) => {
-          // In the editor the link should not navigate on plain click — Cmd/Ctrl+click does.
-          if (!(e.metaKey || e.ctrlKey)) e.preventDefault();
+          // Plain click edits the link text (caret), never navigates. The
+          // platform "open" modifier (⌘ on macOS, Ctrl elsewhere) opens the
+          // link directly in a new tab. We `preventDefault` in BOTH cases and
+          // open via `window.open` ourselves: inside a contentEditable the
+          // browser doesn't reliably navigate an `<a>` on modifier-click, so
+          // relying on the default action did nothing.
+          e.preventDefault();
+          if (hasOpenModifier(e) && attrs.link?.href) {
+            window.open(attrs.link.href, "_blank", "noopener,noreferrer");
+          }
         }}
       >
         {node}

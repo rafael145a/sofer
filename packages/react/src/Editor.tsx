@@ -27,8 +27,9 @@ import {
   type MarkName,
   type SerializedBlock,
 } from "@sofereditor/core";
-import { applyDomSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
+import { applyDomSelection, isTableRectSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
+import { LinkHoverTooltip } from "./LinkHoverTooltip";
 import { EditorProvider } from "./EditorContext";
 import { ImageResizeOverlay } from "./ImageResizeOverlay";
 import {
@@ -109,6 +110,13 @@ export function Editor({
     cellIndex?: number;
   } | null>(null);
   const hoveredBehindRef = useRef<typeof hoveredBehind>(null);
+  // The link the pointer is hovering — drives the URL tooltip (rect in viewport
+  // coords). Tracked by element identity to avoid re-render churn on every move.
+  const [hoveredLink, setHoveredLink] = useState<{
+    href: string;
+    rect: { top: number; left: number; bottom: number; width: number };
+  } | null>(null);
+  const hoveredLinkElRef = useRef<HTMLAnchorElement | null>(null);
   const suppressSelectionSyncRef = useRef(false);
 
   // Presença colaborativa: publica a seleção local no awareness (throttle por
@@ -164,6 +172,19 @@ export function Editor({
     if (document.activeElement !== root) return;
     const current = readDomSelection(root);
     if (current && selectionsEqual(current, editor.selection)) return;
+    if (isTableRectSelection(editor.selection)) {
+      // Cross-cell (rectangular) table selection: the native DOM selection is
+      // intentionally empty — TableView paints the highlight via CSS classes.
+      // Keep it empty but do NOT arm the suppress guard. The guard exists to
+      // ignore render-collapsed carets while TYPING; for a rect selection the
+      // empty native selection is the steady state, so arming it would make the
+      // selectionchange handler ignore a genuine click-away — the rect would
+      // stick in the model and the next keystroke would overwrite the selected
+      // cells instead of writing at the clicked caret.
+      applyDomSelection(root, editor.selection);
+      suppressSelectionSyncRef.current = false;
+      return;
+    }
     // DOM caret diverged from the model — typically a re-render replaced the
     // text node and collapsed the native caret to offset 0. Suppress the
     // selectionchange handler until the DOM settles back to the model; otherwise
@@ -441,6 +462,46 @@ export function Editor({
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerleave", onLeave);
       if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Link hover tooltip: show the URL while the pointer is over a link. Uses
+  // `mouseover` delegation (fires on element enter, far cheaper than mousemove)
+  // and tracks the hovered <a> by identity to avoid re-render churn. Cleared on
+  // leave/scroll (the cached viewport rect would otherwise go stale).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const clear = () => {
+      if (hoveredLinkElRef.current) {
+        hoveredLinkElRef.current = null;
+        setHoveredLink(null);
+      }
+    };
+    const onOver = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      const a = target?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (a && root.contains(a)) {
+        if (hoveredLinkElRef.current === a) return;
+        hoveredLinkElRef.current = a;
+        const r = a.getBoundingClientRect();
+        setHoveredLink({
+          href: a.getAttribute("href") ?? "",
+          rect: { top: r.top, left: r.left, bottom: r.bottom, width: r.width },
+        });
+      } else {
+        clear();
+      }
+    };
+    root.addEventListener("mouseover", onOver);
+    root.addEventListener("mouseleave", clear);
+    root.addEventListener("scroll", clear, true);
+    window.addEventListener("scroll", clear, true);
+    return () => {
+      root.removeEventListener("mouseover", onOver);
+      root.removeEventListener("mouseleave", clear);
+      root.removeEventListener("scroll", clear, true);
+      window.removeEventListener("scroll", clear, true);
     };
   }, []);
 
@@ -957,6 +1018,9 @@ export function Editor({
             }
           />
         )}
+      {hoveredLink && hoveredLink.href && (
+        <LinkHoverTooltip href={hoveredLink.href} rect={hoveredLink.rect} />
+      )}
       {awareness && (
         <RemoteCursorsOverlay
           rootRef={rootRef}
