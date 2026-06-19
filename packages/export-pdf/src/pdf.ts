@@ -150,7 +150,7 @@ async function printHtmlInIframe(html: string, _filename: string): Promise<void>
   docu.write(html);
   docu.close();
 
-  // Wait for the iframe to finish loading (images, fonts).
+  // Wait for the iframe document to finish loading (DOM, stylesheets, images).
   await new Promise<void>((resolve) => {
     if (docu.readyState === "complete") resolve();
     else iframe.addEventListener("load", () => resolve(), { once: true });
@@ -158,6 +158,14 @@ async function printHtmlInIframe(html: string, _filename: string): Promise<void>
   // Best-effort wait for embedded images: print dialogs that snapshot too early
   // miss late-loading data URIs (rare, but real).
   await waitForImages(docu);
+  // CRITICAL: wait for @font-face fonts to finish loading. The `load` event does
+  // NOT wait for web fonts, so printing too early triggers FOIT (Flash of
+  // Invisible Text): the browser hides every glyph until its font loads, while
+  // text-decoration underlines still paint. Symptom seen in the wild: the
+  // letterhead + field underlines printed but ALL text was missing. `fonts.ready`
+  // resolves once all used fonts are loaded; cap the wait so a font that never
+  // resolves can't hang the print.
+  await waitForFonts(docu);
 
   await new Promise<void>((resolve) => {
     const cleanup = () => {
@@ -207,6 +215,22 @@ async function waitForImages(docu: Document): Promise<void> {
         }),
     ),
   );
+}
+
+/**
+ * Wait for the iframe document's web fonts (`@font-face`) to finish loading,
+ * capped so a font that never resolves can't hang the print. Without this the
+ * print can fire mid-font-load and render invisible text (FOIT).
+ */
+async function waitForFonts(docu: Document): Promise<void> {
+  const fonts = (docu as Document & { fonts?: FontFaceSet }).fonts;
+  if (!fonts?.ready) return;
+  await Promise.race([
+    fonts.ready.then(() => undefined),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, 3000);
+    }),
+  ]);
 }
 
 const HTML_ESCAPES: Record<string, string> = {
