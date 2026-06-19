@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from "react";
 import { useEditorContext } from "./EditorContext";
+import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 import type { CaptionAlign } from "./useEditor";
 
 /**
@@ -49,6 +50,11 @@ export function ImageCaptionDialog(): JSX.Element | null {
     <dialog
       ref={dialogRef}
       className="ed-caption-dialog ed-link-dialog"
+      // Centraliza por estilo inline (o pacote não envia CSS): consumidores com
+      // reset global de `dialog` (ex.: `margin:0`) quebram a centralização do
+      // <dialog> nativo via UA `margin:auto` → o modal abria no canto superior
+      // esquerdo. `position:fixed` + translate é à prova de reset.
+      style={DIALOG_CENTER_STYLE}
       onClose={onCancel}
       onCancel={(e) => {
         e.preventDefault();

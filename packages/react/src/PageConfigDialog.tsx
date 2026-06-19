@@ -9,6 +9,7 @@ import {
   type PagePreset,
 } from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
+import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 
 type MarginPreset = "normal" | "narrow" | "wide" | "custom";
 
@@ -104,6 +105,7 @@ export function PageConfigDialog(): JSX.Element | null {
     <dialog
       ref={dialogRef}
       className="ed-page-config-dialog"
+      style={DIALOG_CENTER_STYLE}
       onClose={onCancel}
       onCancel={(e) => {
         e.preventDefault();

@@ -6,6 +6,7 @@ import {
   type JSX,
 } from "react";
 import { useEditorContext } from "./EditorContext";
+import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 
 /**
  * Modal dialog for entering a link URL. Replaces the bare `window.prompt`
@@ -60,6 +61,7 @@ export function LinkDialog(): JSX.Element | null {
     <dialog
       ref={dialogRef}
       className="ed-link-dialog"
+      style={DIALOG_CENTER_STYLE}
       onClose={onCancel}
       onCancel={(e) => {
         e.preventDefault();
