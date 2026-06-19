@@ -102,6 +102,13 @@ jobs:
               # Reescreve workspace:* pra ^<version> real (resolvido a partir
               # do package.json do pacote workspace dependente). Sem isso, npm
               # publish reclama que workspace: não é semver válido.
+              #
+              # TAMBÉM aplica os overrides de MANIFESTO do publishConfig
+              # (main/module/types/exports) pro topo. CRÍTICO: `npm publish` NÃO
+              # aplica publishConfig de manifesto (isso é recurso do pnpm/yarn);
+              # sem isto o pacote publicado mantém main/exports apontando pro
+              # ./src/index.ts (que NÃO vai no tarball, só `dist`) e a resolução
+              # quebra em TODOS os consumidores ("Cannot find module").
               node -e '
                 const fs = require("fs");
                 const path = require("path");
@@ -114,6 +121,11 @@ jobs:
                       const realPkg = JSON.parse(fs.readFileSync(`../${k.split("/")[1]}/package.json`, "utf8"));
                       deps[k] = `^${realPkg.version}`;
                     }
+                  }
+                }
+                if (pkg.publishConfig) {
+                  for (const key of ["main", "module", "types", "exports", "bin"]) {
+                    if (pkg.publishConfig[key] !== undefined) pkg[key] = pkg.publishConfig[key];
                   }
                 }
                 fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
