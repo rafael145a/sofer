@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/export-pdf",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "@sofereditor/export-pdf — Serialize the paginated Sofer DOM to self-contained HTML, ready for Puppeteer PDF rendering.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
