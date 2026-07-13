@@ -1,5 +1,5 @@
 import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "react";
-import { tableRectSelection, type BlockAttrs, type SerializedBlock } from "@sofereditor/core";
+import { tableRectSelection, type BlockAttrs, type CellAttrs, type SerializedBlock } from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
 import { renderInline } from "./renderInline";
 import { sliceDelta } from "./sliceDelta";
@@ -125,6 +125,18 @@ function alignClass(a?: BlockAttrs["align"]): string {
   return a ? ` ed-align-${a}` : "";
 }
 
+/**
+ * Inline style for a table cell's visual attrs (align, bgColor).
+ * Returns undefined when the cell has none, so the <td> carries no style attr.
+ */
+export function cellStyle(attrs?: CellAttrs): CSSProperties | undefined {
+  if (!attrs) return undefined;
+  const style: CSSProperties = {};
+  if (attrs.align) style.textAlign = attrs.align;
+  if (attrs.bgColor) style.backgroundColor = attrs.bgColor;
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
 function clampLevel(l: BlockAttrs["level"]): 1 | 2 | 3 | 4 | 5 | 6 {
   if (l === 2 || l === 3 || l === 4 || l === 5 || l === 6) return l;
   return 1;
@@ -204,7 +216,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                   data-cell-colspan={colspan}
                   rowSpan={rowspan > 1 ? rowspan : undefined}
                   colSpan={colspan > 1 ? colspan : undefined}
-                  style={cell?.attrs.align ? { textAlign: cell.attrs.align } : undefined}
+                  style={cellStyle(cell?.attrs)}
                   className={inRect ? "ed-cell ed-cell--selected" : "ed-cell"}
                 >
                   {renderInline(delta, `t${index}-c${flat}`)}

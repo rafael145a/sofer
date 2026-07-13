@@ -82,6 +82,8 @@ export interface CellAttrs {
   covered?: true;
   /** Alinhamento horizontal do texto da célula. Mesmos valores de bloco. */
   align?: AlignValue;
+  /** Cor de fundo da célula (CSS color, ex. `#ffe58f`). Ausente = sem fundo. */
+  bgColor?: string;
 }
 
 export interface Position {

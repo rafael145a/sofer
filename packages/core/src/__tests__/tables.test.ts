@@ -275,3 +275,26 @@ describe("tables — cell alignment (setCellAttr)", () => {
     expect(h.doc.getCellAttrs(1, 0).align).toBe("center");
   });
 });
+
+describe("tables — cell background (setCellAttr bgColor)", () => {
+  it("paints a rectangular selection and survives toJSON serialization", () => {
+    const h = harness();
+    insertTable(h.ctx, 2, 2);
+    h.ctx.setSelection({
+      anchor: { blockIndex: 1, cellIndex: 0, offset: 0 },
+      focus: { blockIndex: 1, cellIndex: 1, offset: 0 },
+    });
+    setCellAttr(h.ctx, "bgColor", "#ffe58f");
+    // top row painted, bottom row untouched
+    expect(h.doc.getCellAttrs(1, 0).bgColor).toBe("#ffe58f");
+    expect(h.doc.getCellAttrs(1, 1).bgColor).toBe("#ffe58f");
+    expect(h.doc.getCellAttrs(1, 2).bgColor).toBeUndefined();
+    // serializeCell must pass the key through (guards against attr whitelisting)
+    const table = h.doc.toJSON().blocks[1];
+    expect(table.cells?.[0]?.attrs.bgColor).toBe("#ffe58f");
+    expect(table.cells?.[2]?.attrs.bgColor).toBeUndefined();
+    // null clears
+    setCellAttr(h.ctx, "bgColor", null);
+    expect(h.doc.getCellAttrs(1, 0).bgColor).toBeUndefined();
+  });
+});

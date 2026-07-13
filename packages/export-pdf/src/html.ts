@@ -228,7 +228,12 @@ function renderCell(cell: SerializedCell): string {
   const cs = cell.attrs?.colspan && cell.attrs.colspan > 1
     ? ` colspan="${cell.attrs.colspan}"`
     : "";
-  return `<td class="ed-cell"${rs}${cs}>${renderInline(cell.delta)}</td>`;
+  const styles: string[] = [];
+  const align = clampAlign(cell.attrs?.align);
+  if (align) styles.push(`text-align:${align}`);
+  if (cell.attrs?.bgColor) styles.push(`background-color:${cssValue(cell.attrs.bgColor)}`);
+  const style = styles.length > 0 ? ` style="${styles.join(";")}"` : "";
+  return `<td class="ed-cell"${rs}${cs}${style}>${renderInline(cell.delta)}</td>`;
 }
 
 // ---------- inline ----------

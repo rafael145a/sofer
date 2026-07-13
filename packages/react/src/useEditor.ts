@@ -124,6 +124,10 @@ export interface UseEditorResult {
   setBlockAttr: <K extends keyof BlockAttrs>(key: K, value: BlockAttrs[K] | null) => void;
   setAlign: (value: AlignValue) => void;
   getAlign: () => AlignValue | "mixed" | undefined;
+  /** Cor de fundo das células selecionadas (rect) ou da célula focada. `null` remove. No-op fora de tabela. */
+  setCellBackground: (color: string | null) => void;
+  /** Cor de fundo da célula focada; undefined fora de tabela ou sem cor. */
+  getCellBackground: () => string | undefined;
 
   // ---- List API (added in Sub-phase 2.3) ----
   isListActive: (kind: ListKind) => boolean;
@@ -480,6 +484,19 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     return getBlockAttr("align");
   }, [doc, getBlockAttr]);
 
+  const setCellBackground = useCallback((color: string | null) => {
+    // setCellAttr keys off sel.focus.cellIndex internally: applies to the
+    // rect selection (or the focused cell) and no-ops outside a table.
+    cmdSetCellAttr(ctxRef.current, "bgColor", color);
+  }, []);
+
+  const getCellBackground = useCallback((): string | undefined => {
+    const sel = selectionRef.current;
+    if (sel.focus.cellIndex == null || !doc.isTable(sel.focus.blockIndex)) return undefined;
+    // Single focused-cell read, like getAlign (multi-cell mixed-state out of scope).
+    return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).bgColor;
+  }, [doc]);
+
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
@@ -746,6 +763,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     setBlockAttr,
     setAlign,
     getAlign,
+    setCellBackground,
+    getCellBackground,
     isListActive,
     toggleList,
     indentList,

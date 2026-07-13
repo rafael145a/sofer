@@ -99,6 +99,58 @@ describe("documentToHtmlFragment", () => {
     expect(tdCount).toBe(1);
   });
 
+  it("emits cell background color as inline style on the <td>", () => {
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 2 },
+        cells: [
+          { text: "a", delta: [{ insert: "a" }], attrs: { bgColor: "#ffe58f" } },
+          { text: "b", delta: [{ insert: "b" }], attrs: {} },
+        ],
+      },
+    ]);
+    expect(html).toContain("background-color:#ffe58f");
+    // only the painted cell carries a style attribute
+    const styled = (html.match(/<td[^>]*style=/g) ?? []).length;
+    expect(styled).toBe(1);
+  });
+
+  it("emits cell text-align as inline style on the <td>", () => {
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "a", delta: [{ insert: "a" }], attrs: { align: "center" } }],
+      },
+    ]);
+    expect(html).toContain("text-align:center");
+  });
+
+  it("strips CSS injection from cell bgColor", () => {
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 1 },
+        cells: [
+          {
+            text: "a",
+            delta: [{ insert: "a" }],
+            attrs: { bgColor: 'red";</style><script>alert(1)</script><style>"' },
+          },
+        ],
+      },
+    ]);
+    expect(html).not.toContain("</style>");
+    expect(html).not.toContain("<script>");
+  });
+
   it("emits image embeds with data URL and dimensions", () => {
     const html = frag([
       {

@@ -500,6 +500,14 @@ main {
 .ed-table-actions button:hover {
   background: #eef0f3;
 }
+.ed-table-actions .ed-table-bgcolor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
 .ed-table-actions .ed-table-delete {
   color: #b91c1c;
 }

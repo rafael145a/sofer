@@ -563,6 +563,25 @@ function TableMenu(): JSX.Element {
               <button type="button" onClick={() => { setOpen(false); editor.splitCell(); }}>
                 Dividir células mescladas
               </button>
+              <hr />
+              <label className="ed-toolbar-label ed-table-bgcolor">
+                <span
+                  className="ed-toolbar-swatch"
+                  aria-hidden
+                  style={{ background: editor.getCellBackground() ?? "#ffffff" }}
+                />
+                Cor de fundo da célula
+                <input
+                  type="color"
+                  value={editor.getCellBackground() ?? "#ffffff"}
+                  onChange={(e) => editor.setCellBackground(e.target.value)}
+                  aria-label="Cor de fundo da célula"
+                />
+              </label>
+              <button type="button" onClick={() => { setOpen(false); editor.setCellBackground(null); }}>
+                Remover cor de fundo
+              </button>
+              <hr />
               <button
                 type="button"
                 className="ed-table-delete"
