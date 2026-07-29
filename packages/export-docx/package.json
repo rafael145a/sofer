@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/export-docx",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "@sofereditor/export-docx — Emit .docx from a Sofer SerializedDocument. Round-trip with @sofereditor/import-docx.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
@@ -29,6 +29,19 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "require": "./src/index.ts"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
     }
   },
   "scripts": {
