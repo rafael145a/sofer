@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
+import JSZip from "jszip";
 import type { LegacySerializedDocument } from "@sofereditor/core";
 import { documentToDocxBuffer } from "../docx";
+
+async function documentXml(buffer: Uint8Array): Promise<string> {
+  const zip = await JSZip.loadAsync(buffer);
+  return zip.file("word/document.xml")!.async("string");
+}
 
 const PNG_1PX =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
@@ -243,5 +249,72 @@ describe("resolveImage", () => {
     const { buffer, skippedImages } = await documentToDocxBuffer(doc);
     expect(skippedImages).toBe(1);
     expect(buffer[0]).toBe(0x50);
+  });
+});
+
+describe("células de tabela", () => {
+  it("bgColor vira shading fill no XML", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "Questão", delta: [{ insert: "Questão" }], attrs: { bgColor: "#032b50" } }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    expect(xml).toContain('w:fill="032B50"');
+  });
+
+  it("align da célula alinha o parágrafo interno", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "x", delta: [{ insert: "x" }], attrs: { align: "center" } }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    expect(xml).toMatch(/<w:jc w:val="center"\/>/);
+  });
+
+  it("colWidths gera gridCol com larguras em twips", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table", text: "", delta: [],
+        attrs: { rows: 1, cols: 2, colWidths: [260, 130] },
+        cells: [
+          { text: "a", delta: [{ insert: "a" }], attrs: {} },
+          { text: "b", delta: [{ insert: "b" }], attrs: {} },
+        ],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    // 260px → 68.8mm... conferir o valor exato no primeiro run e fixá-lo:
+    // twips = convertMillimetersToTwip(pxToMm(260)). O teste asserta a presença
+    // de <w:gridCol w:w="..."> com o mesmo número calculado no teste.
+    const { convertMillimetersToTwip } = await import("docx");
+    const { pxToMm } = await import("@sofereditor/core");
+    const w0 = convertMillimetersToTwip(pxToMm(260));
+    const w1 = convertMillimetersToTwip(pxToMm(130));
+    expect(xml).toContain(`<w:gridCol w:w="${w0}"/>`);
+    expect(xml).toContain(`<w:gridCol w:w="${w1}"/>`);
+    // Larguras fixas: sem `tblLayout="fixed"` o Word ignora o grid e faz autofit
+    // pelo conteúdo, tornando `columnWidths` um mero palpite.
+    expect(xml).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(xml).toContain(`<w:tblW w:type="dxa" w:w="${w0 + w1}"/>`);
+  });
+
+  it("sem colWidths a tabela mantém largura 100% (fallback)", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "x", delta: [{ insert: "x" }], attrs: {} }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    expect(xml).toContain('w:type="pct"');
+    expect(xml).not.toContain("w:tblLayout");
   });
 });

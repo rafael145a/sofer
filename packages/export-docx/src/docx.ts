@@ -29,6 +29,7 @@ import {
   ShadingType,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
   UnderlineType,
@@ -282,20 +283,44 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
     rowsOut.push(new TableRow({ children: cellsOut }));
   }
 
+  const colWidths = Array.isArray(block.attrs.colWidths)
+    ? block.attrs.colWidths.filter((w): w is number => typeof w === "number" && w > 0)
+    : [];
+  const columnWidths =
+    colWidths.length === cols && cols > 0
+      ? colWidths.map((px) => convertMillimetersToTwip(pxToMm(px)))
+      : undefined;
+
   return new Table({
     rows: rowsOut,
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    ...(columnWidths
+      ? {
+          columnWidths,
+          // Fix the layout so Word honors the column widths verbatim instead
+          // of autofitting to content (the OOXML default when `tblLayout` is
+          // absent, which would make `columnWidths` a mere hint).
+          layout: TableLayoutType.FIXED,
+          width: { size: columnWidths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+        }
+      : { width: { size: 100, type: WidthType.PERCENTAGE } }),
   });
 }
 
 function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null>): TableCell {
   const span = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
   const rowSpan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
+  const fill = cssColorToDocxHex(cell.attrs?.bgColor);
   return new TableCell({
     columnSpan: span,
     rowSpan,
     verticalAlign: VerticalAlign.TOP,
-    children: [new Paragraph({ children: deltaToRuns(cell.delta, ARIAL, images) })],
+    shading: fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined,
+    children: [
+      new Paragraph({
+        alignment: alignFor(cell.attrs?.align),
+        children: deltaToRuns(cell.delta, ARIAL, images),
+      }),
+    ],
   });
 }
 
