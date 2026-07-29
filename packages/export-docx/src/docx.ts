@@ -70,7 +70,9 @@ export interface DocumentToDocxOptions {
  *    `columnSpan`; "covered" cells are skipped (docx infers cover from spans)
  *  - inline marks → TextRun props (bold, italics, underline, strike, color,
  *    font, size in half-points)
- *  - image embeds → ImageRun with the base64 payload decoded to Uint8Array
+ *  - image embeds → ImageRun with bytes resolved via `resolveImage` (default:
+ *    data URLs decoded locally, http(s) fetched; unresolved images are
+ *    skipped and counted in `skippedImages` instead of aborting the export)
  */
 export async function documentToDocxBlob(
   doc: SerializedDocument | LegacySerializedDocument,
@@ -486,6 +488,11 @@ async function resolveAllImages(
       } catch {
         resolved = null;
       }
+      // docx's ImageRun requires a `fallback` for type "svg" (RegularImageOptions);
+      // without it the constructor throws synchronously inside buildDocument,
+      // which is outside this try/catch and would abort the whole export. Treat
+      // svg as unresolved (skip) until we add fallback support.
+      if (resolved?.type === "svg") resolved = null;
       images.set(src, resolved);
     }),
   );

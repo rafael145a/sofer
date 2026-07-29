@@ -5,6 +5,9 @@ import { documentToDocxBuffer } from "../docx";
 const PNG_1PX =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
 
+const SVG_1PX =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==";
+
 function decodePngFixture(): Uint8Array {
   const b64 = PNG_1PX.split(",")[1];
   const bin = atob(b64);
@@ -188,5 +191,57 @@ describe("resolveImage", () => {
       },
     });
     expect(calls).toEqual(["https://exemplo.com/b.png"]);
+  });
+
+  it("resolver custom que lança é tratado como skip (não propaga, export segue válido)", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [
+          { insert: { type: "image", src: "https://exemplo.com/boom.png", width: 10, height: 10 } },
+        ],
+      },
+    ];
+    const { buffer, skippedImages } = await documentToDocxBuffer(doc, {
+      resolveImage: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(skippedImages).toBe(1);
+    expect(buffer[0]).toBe(0x50);
+  });
+
+  it("mesma src não-resolvível em 2 embeds conta 2 ocorrências (não srcs únicos)", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [
+          { insert: { type: "image", src: "https://exemplo.com/404.png", width: 10, height: 10 } },
+          { insert: { type: "image", src: "https://exemplo.com/404.png", width: 10, height: 10 } },
+        ],
+      },
+    ];
+    const { skippedImages } = await documentToDocxBuffer(doc, {
+      resolveImage: async () => null,
+    });
+    expect(skippedImages).toBe(2);
+  });
+
+  it("data URL image/svg+xml é pulada (skippedImages=1) sem lançar — docx exige fallback p/ svg", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [{ insert: { type: "image", src: SVG_1PX, width: 10, height: 10 } }],
+      },
+    ];
+    const { buffer, skippedImages } = await documentToDocxBuffer(doc);
+    expect(skippedImages).toBe(1);
+    expect(buffer[0]).toBe(0x50);
   });
 });
