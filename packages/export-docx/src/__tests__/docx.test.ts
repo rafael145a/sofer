@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import JSZip from "jszip";
 import type { LegacySerializedDocument } from "@sofereditor/core";
 import { documentToDocxBuffer } from "../docx";
@@ -249,6 +249,43 @@ describe("resolveImage", () => {
     const { buffer, skippedImages } = await documentToDocxBuffer(doc);
     expect(skippedImages).toBe(1);
     expect(buffer[0]).toBe(0x50);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("default resolveImage: content-type desconhecido (webp) sem extensão reconhecida é pulado (skippedImages=1)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === "content-type" ? "image/webp" : null),
+        },
+        arrayBuffer: async () => new ArrayBuffer(4),
+      })),
+    );
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [
+          {
+            insert: {
+              type: "image",
+              src: "https://exemplo.com/foto-sem-extensao",
+              width: 10,
+              height: 10,
+            },
+          },
+        ],
+      },
+    ];
+    const { buffer, skippedImages } = await documentToDocxBuffer(doc);
+    expect(skippedImages).toBe(1);
+    expect(buffer[0]).toBe(0x50); // export segue válido, não lança
   });
 });
 

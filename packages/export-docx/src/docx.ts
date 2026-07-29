@@ -464,7 +464,7 @@ async function defaultResolveImage(src: string): Promise<ResolvedImage | null> {
       const res = await fetch(src);
       if (!res.ok) return null;
       const ct = (res.headers.get("content-type") ?? "").toLowerCase();
-      const type: ResolvedImage["type"] = ct.includes("png")
+      const matchedType: ResolvedImage["type"] | null = ct.includes("png")
         ? "png"
         : ct.includes("jpeg") || ct.includes("jpg")
           ? "jpg"
@@ -474,7 +474,12 @@ async function defaultResolveImage(src: string): Promise<ResolvedImage | null> {
               ? "bmp"
               : ct.includes("svg")
                 ? "svg"
-                : (typeFromExtension(src) ?? "png");
+                : null;
+      // Unknown content-type (e.g. image/webp) with no recognizable extension
+      // in the URL: skip rather than mislabeling bytes as PNG (would produce
+      // a broken image in Word — contract is "failure to resolve → skip").
+      const type = matchedType ?? typeFromExtension(src);
+      if (!type) return null;
       return { data: new Uint8Array(await res.arrayBuffer()), type };
     } catch {
       return null;
