@@ -100,6 +100,9 @@ export function serializePaginatedHtml(
     styles,
     `<style>
       html, body { margin: 0; padding: 0; background: white; }
+      /* Preserva background-color (ex.: células da tabela de pontuação) no
+         window.print(), onde "gráficos de fundo" vem desmarcado por padrão. */
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       @media print {
         @page { size: ${pageSize.width} ${pageSize.height}; margin: 0; }
         .ed-page { box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; page-break-after: always; break-after: page; }

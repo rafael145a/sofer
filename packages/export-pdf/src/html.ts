@@ -428,6 +428,10 @@ function baseStylesheet(page: NonNullable<DocumentToHtmlOptions["page"]>): strin
   margin: ${page.marginTop} ${page.marginRight} ${page.marginBottom} ${page.marginLeft};
 }
 html, body { margin: 0; padding: 0; background: white; color: #1a1a1f; }
+/* Sem isto, o diálogo de impressão descarta background-color/imagens de
+   fundo por padrão ("gráficos de fundo" desmarcado) — ex.: células com
+   bgColor da tabela de pontuação saíam brancas no PDF. */
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 body {
   font-family: "Arial", "Helvetica", sans-serif;
   font-size: 11pt;

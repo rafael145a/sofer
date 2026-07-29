@@ -276,3 +276,14 @@ describe("documentToJson", () => {
     expect(round).toEqual({ blocks: doc });
   });
 });
+
+describe("print-color-adjust", () => {
+  it("documentToHtml inclui a regra que preserva backgrounds na impressão", async () => {
+    const { documentToHtml } = await import("../html");
+    const html = documentToHtml({ blocks: [] });
+    // Sem esta regra o diálogo de impressão (window.print) descarta
+    // background-color (ex.: células da tabela de pontuação) por padrão.
+    expect(html).toContain("print-color-adjust: exact");
+    expect(html).toContain("-webkit-print-color-adjust: exact");
+  });
+});
