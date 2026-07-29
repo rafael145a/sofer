@@ -262,7 +262,9 @@ describe("células de tabela", () => {
     ];
     const { buffer } = await documentToDocxBuffer(doc);
     const xml = await documentXml(buffer);
-    expect(xml).toContain('w:fill="032B50"');
+    // Ancorado dentro de <w:tcPr> — não basta o fill aparecer em algum lugar
+    // do XML, precisa estar nas propriedades da célula.
+    expect(xml).toMatch(/<w:tcPr>(?:(?!<\/w:tcPr>).)*w:fill="032B50"/s);
   });
 
   it("align da célula alinha o parágrafo interno", async () => {
@@ -310,6 +312,26 @@ describe("células de tabela", () => {
       {
         type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 },
         cells: [{ text: "x", delta: [{ insert: "x" }], attrs: {} }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    expect(xml).toContain('w:type="pct"');
+    expect(xml).not.toContain("w:tblLayout");
+  });
+
+  it("colWidths com valor inválido (negativo) cai no fallback percentual, sem deslocar larguras", async () => {
+    // Filtrar entradas inválidas ANTES de validar o tamanho contra `cols`
+    // deslocaria [260, 130] para as colunas erradas em vez de cair no
+    // fallback — a validação precisa rodar sobre o array bruto.
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table", text: "", delta: [],
+        attrs: { rows: 1, cols: 2, colWidths: [-5, 260, 130] },
+        cells: [
+          { text: "a", delta: [{ insert: "a" }], attrs: {} },
+          { text: "b", delta: [{ insert: "b" }], attrs: {} },
+        ],
       },
     ];
     const { buffer } = await documentToDocxBuffer(doc);

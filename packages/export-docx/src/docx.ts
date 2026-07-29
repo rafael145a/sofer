@@ -283,13 +283,18 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
     rowsOut.push(new TableRow({ children: cellsOut }));
   }
 
-  const colWidths = Array.isArray(block.attrs.colWidths)
-    ? block.attrs.colWidths.filter((w): w is number => typeof w === "number" && w > 0)
-    : [];
-  const columnWidths =
-    colWidths.length === cols && cols > 0
-      ? colWidths.map((px) => convertMillimetersToTwip(pxToMm(px)))
-      : undefined;
+  // Validate the RAW array against `cols` — filtering invalid entries first
+  // (e.g. dropping a negative width) would silently shift the remaining
+  // widths onto the wrong columns while still passing a length check.
+  const rawColWidths = block.attrs.colWidths;
+  const isValidColWidths =
+    Array.isArray(rawColWidths) &&
+    cols > 0 &&
+    rawColWidths.length === cols &&
+    rawColWidths.every((w): w is number => typeof w === "number" && w > 0);
+  const columnWidths = isValidColWidths
+    ? rawColWidths.map((px) => convertMillimetersToTwip(pxToMm(px)))
+    : undefined;
 
   return new Table({
     rows: rowsOut,
