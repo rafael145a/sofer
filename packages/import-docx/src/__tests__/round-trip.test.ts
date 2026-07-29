@@ -7,7 +7,7 @@ const PNG_1PX =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
 
 async function roundTrip(input: LegacySerializedDocument): Promise<SerializedBlock[]> {
-  const buf = await documentToDocxBuffer(input);
+  const { buffer: buf } = await documentToDocxBuffer(input);
   const result = await docxBlobToDocument(buf);
   return result.blocks;
 }

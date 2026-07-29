@@ -12,7 +12,7 @@ describe("page-settings round-trip", () => {
     const doc: SerializedDocument = {
       blocks: [{ type: "paragraph", text: "x", delta: [{ insert: "x" }], attrs: {} }],
     };
-    const buf = await documentToDocxBuffer(doc);
+    const { buffer: buf } = await documentToDocxBuffer(doc);
     const result = await docxBlobToDocument(buf);
     expect(result.pageSettings?.preset).toBe("a4");
     expect(result.pageSettings?.width).toBeCloseTo(DEFAULT_PAGE_SETTINGS.width, 0);
@@ -31,7 +31,7 @@ describe("page-settings round-trip", () => {
         marginRight: 48,
       },
     };
-    const buf = await documentToDocxBuffer(doc);
+    const { buffer: buf } = await documentToDocxBuffer(doc);
     const result = await docxBlobToDocument(buf);
     expect(result.pageSettings?.preset).toBe("oficio");
     // Margins survive within ±1px (twips ↔ mm ↔ px round-off).
@@ -51,7 +51,7 @@ describe("page-settings round-trip", () => {
         marginRight: 96,
       },
     };
-    const buf = await documentToDocxBuffer(doc);
+    const { buffer: buf } = await documentToDocxBuffer(doc);
     const result = await docxBlobToDocument(buf);
     expect(result.pageSettings?.preset).toBe("custom");
     expect(result.pageSettings?.width).toBeCloseTo(900, 0);

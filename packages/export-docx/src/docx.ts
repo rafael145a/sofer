@@ -40,11 +40,22 @@ import {
 const BULLET_REF = "ed-bullet";
 const ORDERED_REF = "ed-ordered";
 
+export interface ResolvedImage {
+  data: Uint8Array;
+  type: "png" | "jpg" | "gif" | "bmp" | "svg";
+}
+
 export interface DocumentToDocxOptions {
   /** Document title; embedded in core properties. */
   title?: string;
   /** Author for core properties. */
   creator?: string;
+  /**
+   * Resolve um `src` de imagem para bytes. Default: data URLs (decodificadas
+   * localmente) e http(s) via fetch. Retornar null pula a imagem (contada em
+   * `skippedImages`) sem abortar o export.
+   */
+  resolveImage?: (src: string) => Promise<ResolvedImage | null>;
 }
 
 /**
@@ -64,28 +75,45 @@ export interface DocumentToDocxOptions {
 export async function documentToDocxBlob(
   doc: SerializedDocument | LegacySerializedDocument,
   options: DocumentToDocxOptions = {},
-): Promise<Blob> {
-  const built = buildDocument(normalize(doc), options);
-  return Packer.toBlob(built);
+): Promise<{ blob: Blob; skippedImages: number }> {
+  const normalized = normalize(doc);
+  const { images, skipped } = await resolveAllImages(
+    normalized,
+    options.resolveImage ?? defaultResolveImage,
+  );
+  const built = buildDocument(normalized, options, images);
+  return { blob: await Packer.toBlob(built), skippedImages: skipped };
 }
 
 /** Same as `documentToDocxBlob` but returns a Uint8Array (useful in Node/tests). */
 export async function documentToDocxBuffer(
   doc: SerializedDocument | LegacySerializedDocument,
   options: DocumentToDocxOptions = {},
-): Promise<Uint8Array> {
-  const built = buildDocument(normalize(doc), options);
+): Promise<{ buffer: Uint8Array; skippedImages: number }> {
+  const normalized = normalize(doc);
+  const { images, skipped } = await resolveAllImages(
+    normalized,
+    options.resolveImage ?? defaultResolveImage,
+  );
+  const built = buildDocument(normalized, options, images);
   const buf = await Packer.toBuffer(built);
   // `Packer.toBuffer` returns a Node Buffer at runtime — coerce for consumers.
-  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return {
+    buffer: buf instanceof Uint8Array ? buf : new Uint8Array(buf),
+    skippedImages: skipped,
+  };
 }
 
 function normalize(doc: SerializedDocument | LegacySerializedDocument): SerializedDocument {
   return isLegacySerializedDocument(doc) ? { blocks: doc } : doc;
 }
 
-function buildDocument(doc: SerializedDocument, options: DocumentToDocxOptions): Document {
-  const children = blocksToDocxChildren(doc);
+function buildDocument(
+  doc: SerializedDocument,
+  options: DocumentToDocxOptions,
+  images: Map<string, ResolvedImage | null>,
+): Document {
+  const children = blocksToDocxChildren(doc, images);
   const settings = doc.pageSettings ?? DEFAULT_PAGE_SETTINGS;
   return new Document({
     creator: options.creator,
@@ -129,32 +157,35 @@ function sectionPropertiesFor(settings: PageSettings) {
   };
 }
 
-function blocksToDocxChildren(doc: SerializedDocument): Array<Paragraph | Table> {
+function blocksToDocxChildren(
+  doc: SerializedDocument,
+  images: Map<string, ResolvedImage | null>,
+): Array<Paragraph | Table> {
   const out: Array<Paragraph | Table> = [];
   const blocks = doc.blocks;
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     switch (block.type) {
       case "paragraph":
-        out.push(makeParagraph(block));
+        out.push(makeParagraph(block, images));
         break;
       case "heading":
-        out.push(makeHeading(block));
+        out.push(makeHeading(block, images));
         break;
       case "blockquote":
-        out.push(makeBlockquote(block));
+        out.push(makeBlockquote(block, images));
         break;
       case "codeBlock":
-        out.push(makeCodeBlock(block));
+        out.push(makeCodeBlock(block, images));
         break;
       case "listItem":
-        out.push(makeListItem(block));
+        out.push(makeListItem(block, images));
         break;
       case "table":
-        out.push(makeTable(block));
+        out.push(makeTable(block, images));
         break;
       default:
-        out.push(makeParagraph(block));
+        out.push(makeParagraph(block, images));
     }
   }
   return out;
@@ -167,54 +198,69 @@ function blocksToDocxChildren(doc: SerializedDocument): Array<Paragraph | Table>
 // kept as a stylistic default.
 const ARIAL: RunDefaults = { font: "Arial" };
 
-function makeParagraph(block: SerializedBlock): Paragraph {
+function makeParagraph(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+): Paragraph {
   return new Paragraph({
     alignment: alignFor(block.attrs.align),
     bidirectional: block.attrs.dir === "rtl" ? true : undefined,
-    children: deltaToRuns(block.delta, ARIAL),
+    children: deltaToRuns(block.delta, ARIAL, images),
   });
 }
 
-function makeHeading(block: SerializedBlock): Paragraph {
+function makeHeading(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+): Paragraph {
   const level = clampHeadingLevel(block.attrs.level);
   return new Paragraph({
     heading: HEADING_LEVELS[level - 1],
     alignment: alignFor(block.attrs.align),
-    children: deltaToRuns(block.delta, ARIAL),
+    children: deltaToRuns(block.delta, ARIAL, images),
   });
 }
 
-function makeBlockquote(block: SerializedBlock): Paragraph {
+function makeBlockquote(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+): Paragraph {
   return new Paragraph({
     alignment: alignFor(block.attrs.align),
     indent: { left: 480 }, // ~0.25"
     border: {
       left: { color: "CBD5E1", space: 12, style: BorderStyle.SINGLE, size: 12 },
     },
-    children: deltaToRuns(block.delta, { ...ARIAL, italics: true }),
+    children: deltaToRuns(block.delta, { ...ARIAL, italics: true }, images),
   });
 }
 
-function makeCodeBlock(block: SerializedBlock): Paragraph {
+function makeCodeBlock(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+): Paragraph {
   return new Paragraph({
     spacing: { before: 100, after: 100 },
     shading: { type: ShadingType.CLEAR, color: "auto", fill: "F1F5F9" },
-    children: deltaToRuns(block.delta, { font: "Consolas", size: 20 }),
+    children: deltaToRuns(block.delta, { font: "Consolas", size: 20 }, images),
   });
 }
 
-function makeListItem(block: SerializedBlock): Paragraph {
+function makeListItem(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+): Paragraph {
   const kind: ListKind = block.attrs.listKind === "ordered" ? "ordered" : "bullet";
   const reference = kind === "ordered" ? ORDERED_REF : BULLET_REF;
   const level = clampListLevel(block.attrs.listLevel);
   return new Paragraph({
     numbering: { reference, level },
     alignment: alignFor(block.attrs.align),
-    children: deltaToRuns(block.delta, ARIAL),
+    children: deltaToRuns(block.delta, ARIAL, images),
   });
 }
 
-function makeTable(block: SerializedBlock): Table {
+function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | null>): Table {
   const rows = typeof block.attrs.rows === "number" ? block.attrs.rows : 0;
   const cols = typeof block.attrs.cols === "number" ? block.attrs.cols : 0;
   const cells = block.cells ?? [];
@@ -229,7 +275,7 @@ function makeTable(block: SerializedBlock): Table {
         continue;
       }
       if (cell.attrs?.covered) continue;
-      cellsOut.push(makeCell(cell));
+      cellsOut.push(makeCell(cell, images));
     }
     rowsOut.push(new TableRow({ children: cellsOut }));
   }
@@ -240,14 +286,14 @@ function makeTable(block: SerializedBlock): Table {
   });
 }
 
-function makeCell(cell: SerializedCell): TableCell {
+function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null>): TableCell {
   const span = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
   const rowSpan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
   return new TableCell({
     columnSpan: span,
     rowSpan,
     verticalAlign: VerticalAlign.TOP,
-    children: [new Paragraph({ children: deltaToRuns(cell.delta, ARIAL) })],
+    children: [new Paragraph({ children: deltaToRuns(cell.delta, ARIAL, images) })],
   });
 }
 
@@ -267,6 +313,7 @@ interface RunDefaults {
 function deltaToRuns(
   delta: DeltaOp[],
   defaults: RunDefaults = {},
+  images: Map<string, ResolvedImage | null>,
 ): Array<TextRun | ImageRun> {
   if (delta.length === 0) return [new TextRun("")];
   const out: Array<TextRun | ImageRun> = [];
@@ -276,7 +323,7 @@ function deltaToRuns(
       out.push(makeTextRun(op.insert, op.attributes, defaults));
     } else if (isImageEmbed(op.insert)) {
       const embed = op.insert;
-      const img = makeImageRun(embed);
+      const img = makeImageRun(embed, images);
       if (img) out.push(img);
       // Captions are emitted as italic-smaller text on a new line right after
       // the image. Word-style "Caption" paragraph would need a paragraph
@@ -337,12 +384,15 @@ function makeTextRun(
   });
 }
 
-function makeImageRun(embed: ImageEmbed): ImageRun | null {
-  const decoded = decodeDataUrl(embed.src);
-  if (!decoded) return null;
+function makeImageRun(
+  embed: ImageEmbed,
+  images: Map<string, ResolvedImage | null>,
+): ImageRun | null {
+  const resolved = images.get(embed.src);
+  if (!resolved) return null;
   return new ImageRun({
-    data: decoded.bytes,
-    type: decoded.kind,
+    data: resolved.data,
+    type: resolved.type,
     transformation: {
       width: Math.max(1, Math.round(embed.width)),
       height: Math.max(1, Math.round(embed.height)),
@@ -368,6 +418,88 @@ function decodeDataUrl(src: string): DecodedImage | null {
   const base64 = m[2];
   const bytes = base64ToBytes(base64);
   return { bytes, kind };
+}
+
+/**
+ * Default `resolveImage`: decode data URLs locally, fetch http(s) URLs, and
+ * return null for anything else (caller counts it in `skippedImages`).
+ */
+async function defaultResolveImage(src: string): Promise<ResolvedImage | null> {
+  const decoded = decodeDataUrl(src);
+  if (decoded) return { data: decoded.bytes, type: decoded.kind };
+  if (/^https?:\/\//i.test(src) && typeof fetch === "function") {
+    try {
+      const res = await fetch(src);
+      if (!res.ok) return null;
+      const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+      const type: ResolvedImage["type"] = ct.includes("png")
+        ? "png"
+        : ct.includes("jpeg") || ct.includes("jpg")
+          ? "jpg"
+          : ct.includes("gif")
+            ? "gif"
+            : ct.includes("bmp")
+              ? "bmp"
+              : ct.includes("svg")
+                ? "svg"
+                : (typeFromExtension(src) ?? "png");
+      return { data: new Uint8Array(await res.arrayBuffer()), type };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function typeFromExtension(src: string): ResolvedImage["type"] | null {
+  const m = /\.(png|jpe?g|gif|bmp|svg)(\?|#|$)/i.exec(src);
+  if (!m) return null;
+  const ext = m[1].toLowerCase();
+  return ext === "jpeg" || ext === "jpg" ? "jpg" : (ext as ResolvedImage["type"]);
+}
+
+/**
+ * Async pre-pass: collect every image `src` referenced by the document
+ * (block deltas and table cell deltas), resolve them in parallel via
+ * `resolve`, and return a lookup map plus the count of embeds that failed to
+ * resolve. The rest of the build pipeline stays synchronous and reads from
+ * this map.
+ */
+async function resolveAllImages(
+  doc: SerializedDocument,
+  resolve: (src: string) => Promise<ResolvedImage | null>,
+): Promise<{ images: Map<string, ResolvedImage | null>; skipped: number }> {
+  const srcs = new Set<string>();
+  const collect = (delta: DeltaOp[]) => {
+    for (const op of delta) if (isImageEmbed(op.insert)) srcs.add(op.insert.src);
+  };
+  for (const block of doc.blocks) {
+    collect(block.delta);
+    for (const cell of block.cells ?? []) collect(cell.delta);
+  }
+  const images = new Map<string, ResolvedImage | null>();
+  await Promise.all(
+    [...srcs].map(async (src) => {
+      let resolved: ResolvedImage | null = null;
+      try {
+        resolved = await resolve(src);
+      } catch {
+        resolved = null;
+      }
+      images.set(src, resolved);
+    }),
+  );
+  // skipped conta OCORRÊNCIAS de embed sem resolução (não srcs únicos).
+  let skipped = 0;
+  const count = (delta: DeltaOp[]) => {
+    for (const op of delta)
+      if (isImageEmbed(op.insert) && !images.get(op.insert.src)) skipped++;
+  };
+  for (const block of doc.blocks) {
+    count(block.delta);
+    for (const cell of block.cells ?? []) count(cell.delta);
+  }
+  return { images, skipped };
 }
 
 function base64ToBytes(b64: string): Uint8Array {

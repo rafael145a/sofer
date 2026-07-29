@@ -69,7 +69,7 @@ export function App(): JSX.Element {
   };
 
   const exportDocx = async () => {
-    const blob = await documentToDocxBlob(editor.snapshot, { title: "Documento" });
+    const { blob } = await documentToDocxBlob(editor.snapshot, { title: "Documento" });
     downloadBlob(blob, "documento.docx");
   };
 
