@@ -37,6 +37,15 @@ export function paragraphToBlock(
       listKind: resolved?.listKind ?? "bullet",
       listLevel: resolved?.listLevel ?? 0,
     };
+    if (resolved?.listKind === "ordered") {
+      // O ordinal Word vai TEMPORARIAMENTE em listStart de todos os itens; o
+      // pós-passe em docx.ts remove dos não-líderes (um listStart em item de
+      // continuação quebraria o grupo no renderer). listStyle fica em todos —
+      // itens do mesmo estilo agrupam; estilo diferente (ex.: a/b/c entre
+      // questões decimais) quebra o grupo exatamente como no Word.
+      if (resolved.ordinal != null) attrs.listStart = resolved.ordinal;
+      if (resolved.listStyle) attrs.listStyle = resolved.listStyle;
+    }
     if (align) attrs.align = align;
     if (isRtl) attrs.dir = "rtl";
     return { type: "listItem", text, delta, attrs };
