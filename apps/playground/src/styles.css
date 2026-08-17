@@ -460,6 +460,23 @@ main {
   z-index: 20;
   min-width: 220px;
 }
+.ed-answerlines-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+}
+.ed-answerlines-popover .ed-toolbar-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.ed-answerlines-popover input[type="number"] {
+  width: 64px;
+}
+
 .ed-table-picker-label {
   font-size: 12px;
   color: var(--muted);

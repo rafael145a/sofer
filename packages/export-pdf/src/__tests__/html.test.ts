@@ -144,7 +144,7 @@ describe("documentToHtmlFragment", () => {
       { type: "paragraph", text: "Nome: _____", delta: [{ insert: "Nome: _____" }], attrs: {} },
     ]);
     expect(html).toContain("-webkit-text-fill-color:transparent");
-    expect(html).toContain("text-decoration:underline");
+    expect(html).toContain("border-bottom:1px solid currentColor");
     // Os caracteres continuam presentes — a lacuna é decoração, não substituição.
     expect(html.replace(/<[^>]*>/g, "")).toContain("Nome: _____");
   });

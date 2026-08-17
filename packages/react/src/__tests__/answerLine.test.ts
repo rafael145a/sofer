@@ -16,6 +16,7 @@ describe("commonBlockProps — linha de resposta", () => {
     ).toEqual({
       borderBottom: "1px solid #000000",
       lineHeight: "2",
+      minHeight: "2em",
     });
   });
 

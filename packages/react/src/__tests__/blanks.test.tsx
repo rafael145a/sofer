@@ -14,7 +14,7 @@ describe("lacuna de underlines", () => {
   it("envolve corridas de 3+ num span de lacuna", () => {
     const out = html([{ insert: "Nome: _____" }]);
     expect(out).toContain("-webkit-text-fill-color:transparent");
-    expect(out).toContain("text-decoration:underline");
+    expect(out).toContain("border-bottom:1px solid currentColor");
   });
 
   it("preserva os caracteres literais no DOM (offsets do modelo)", () => {

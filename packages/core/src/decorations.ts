@@ -44,15 +44,23 @@ export function splitUnderscoreRuns(text: string): Array<{ text: string; blank: 
  * Estilo da lacuna: uma corrida de underlines vira um traço contínuo, sem
  * serrilhado, com a largura exata da sequência digitada.
  *
- * `-webkit-text-fill-color` apaga o GLIFO mas preserva `color`, que é o que
- * pinta o sublinhado — `color: transparent` apagaria os dois.
+ * `-webkit-text-fill-color` apaga o GLIFO mas preserva `color`.
+ *
+ * O traço é `border-bottom`, e NÃO `text-decoration: underline`: no Chrome o
+ * `-webkit-text-fill-color` também apaga a decoração de texto — inclusive com
+ * `text-decoration-color: currentColor`, que resolve para a cor de
+ * PREENCHIMENTO, não para `color`. Verificado no navegador: a variante com
+ * `underline` renderiza uma lacuna completamente invisível. `border-bottom`
+ * com `currentColor` resolve para `color` e acompanha a mark de cor do run.
  *
  * PROIBIDO acrescentar aqui: `display`, `padding`, `margin`, `letterSpacing`,
- * `width`. Qualquer um desloca métricas e a paginação diverge do PDF.
+ * `width`. Qualquer um desloca métricas e a paginação diverge do PDF. Bordas de
+ * elemento inline não afetam a altura da linha — medido: linha com e sem
+ * lacuna tem exatamente a mesma altura e a mesma largura.
  */
 export const BLANK_STYLE: StyleRecord = {
   WebkitTextFillColor: "transparent",
-  textDecoration: "underline",
+  borderBottom: "1px solid currentColor",
 };
 
 /** Cor da régua da linha de resposta. Preto: é uma linha para escrever à caneta. */
@@ -68,9 +76,15 @@ export const ANSWER_LINE_COLOR = "#000000";
  */
 export function answerLineStyle(attrs: BlockAttrs): StyleRecord | undefined {
   if (attrs.answerLine !== true) return undefined;
+  const spacing = attrs.answerLineSpacing ?? 1;
   return {
     borderBottom: `1px solid ${ANSWER_LINE_COLOR}`,
-    lineHeight: String(attrs.answerLineSpacing ?? 1),
+    lineHeight: String(spacing),
+    // `minHeight` casado com a entrelinha, e NÃO redundante: o CSS do
+    // consumidor costuma trazer `min-height` em parágrafo (o playground usa
+    // 1.5em "para manter parágrafo vazio visível"). Sem esta linha, "Simples"
+    // e "1,5" renderizariam com a mesma altura.
+    minHeight: `${spacing}em`,
   };
 }
 

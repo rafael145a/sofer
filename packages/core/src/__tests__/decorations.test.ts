@@ -76,11 +76,24 @@ describe("styleToCssText", () => {
 });
 
 describe("BLANK_STYLE", () => {
-  it("apaga o glifo sem apagar a cor que pinta o sublinhado", () => {
-    // `color: transparent` apagaria os dois; text-fill-color só o glifo.
+  it("apaga o glifo sem apagar a cor", () => {
+    // `color: transparent` apagaria glifo E traço; text-fill-color só o glifo.
     expect(BLANK_STYLE.WebkitTextFillColor).toBe("transparent");
     expect(BLANK_STYLE.color).toBeUndefined();
-    expect(BLANK_STYLE.textDecoration).toBe("underline");
+  });
+
+  it("desenha o traço com border-bottom, nunca com text-decoration", () => {
+    // Verificado no Chrome: `-webkit-text-fill-color: transparent` também apaga
+    // `text-decoration: underline` — inclusive com `text-decoration-color:
+    // currentColor`, que resolve para a cor de PREENCHIMENTO. A lacuna ficava
+    // completamente invisível. `border-bottom` não sofre disso.
+    expect(BLANK_STYLE.borderBottom).toBe("1px solid currentColor");
+    expect(BLANK_STYLE.textDecoration).toBeUndefined();
+    expect(BLANK_STYLE.textDecorationColor).toBeUndefined();
+  });
+
+  it("usa currentColor para acompanhar a mark de cor do run", () => {
+    expect(BLANK_STYLE.borderBottom).toContain("currentColor");
   });
 
   it("não carrega nenhuma propriedade que desloque métricas", () => {

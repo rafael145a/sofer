@@ -122,6 +122,7 @@ describe("answerLineStyle", () => {
     expect(answerLineStyle({ answerLine: true, answerLineSpacing: 2 })).toEqual({
       borderBottom: "1px solid #000000",
       lineHeight: "2",
+      minHeight: "2em",
     });
   });
 
@@ -129,10 +130,21 @@ describe("answerLineStyle", () => {
     expect(answerLineStyle({ answerLine: true })).toEqual({
       borderBottom: "1px solid #000000",
       lineHeight: "1",
+      minHeight: "1em",
     });
   });
 
   it("entrelinha 1,5 sai como decimal CSS válido", () => {
     expect(answerLineStyle({ answerLine: true, answerLineSpacing: 1.5 })?.lineHeight).toBe("1.5");
+  });
+
+  it("fixa minHeight casado com a entrelinha", () => {
+    // Sem isto, um `min-height` no CSS do consumidor (o playground usa 1.5em em
+    // parágrafo) faria "Simples" e "1,5" renderizarem com a mesma altura.
+    for (const s of [1, 1.5, 2] as AnswerLineSpacing[]) {
+      const style = answerLineStyle({ answerLine: true, answerLineSpacing: s })!;
+      expect(style.minHeight).toBe(`${s}em`);
+      expect(style.lineHeight).toBe(String(s));
+    }
   });
 });

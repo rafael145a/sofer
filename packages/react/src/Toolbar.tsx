@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import { useEditorContext } from "./EditorContext";
-import type { AlignValue, BlockType, DirValue, ImageLayout, MarkName } from "@sofereditor/core";
+import { ANSWER_LINE_MAX } from "@sofereditor/core";
+import type {
+  AlignValue,
+  AnswerLineSpacing,
+  BlockType,
+  DirValue,
+  ImageLayout,
+  MarkName,
+} from "@sofereditor/core";
 
 // School standard: Arial only. The dropdown is kept (instead of removed) so
 // that the surrounding font-size / color UI stays balanced and future font
@@ -420,6 +428,7 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
 
       <Group>
         <TableMenu />
+        <AnswerLinesMenu />
       </Group>
 
       <Group>
@@ -505,6 +514,96 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
 }
 
 // ---------- Table menu ----------
+
+/**
+ * Linhas de resposta: parágrafos pautados para o aluno escrever.
+ *
+ * Um botão em vez da digitação de underlines porque a régua precisa acompanhar
+ * a margem — uma fileira de `_` quebra ao mudar tamanho de página ou fonte.
+ */
+function AnswerLinesMenu(): JSX.Element {
+  const editor = useEditorContext();
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(5);
+  const [spacing, setSpacing] = useState<AnswerLineSpacing>(1.5);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: globalThis.MouseEvent) => {
+      if (!rootRef.current) return;
+      if (rootRef.current.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const clamped = Math.max(1, Math.min(ANSWER_LINE_MAX, Math.trunc(count) || 1));
+
+  return (
+    <div ref={rootRef} className="ed-toolbar-tablemenu">
+      <button
+        type="button"
+        className="ed-toolbar-btn"
+        title="Linhas de resposta"
+        aria-pressed={open}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((v) => !v);
+        }}
+      >
+        ☰
+      </button>
+      {open && (
+        <div
+          className="ed-table-popover ed-answerlines-popover"
+          role="menu"
+          onMouseDown={(e) => {
+            const t = e.target as HTMLElement | null;
+            if (!t || (t.tagName !== "INPUT" && t.tagName !== "BUTTON" && t.tagName !== "SELECT")) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <label className="ed-toolbar-label">
+            Quantidade
+            <input
+              type="number"
+              min={1}
+              max={ANSWER_LINE_MAX}
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+              aria-label="Quantidade de linhas"
+            />
+          </label>
+          <label className="ed-toolbar-label">
+            Entrelinha
+            <select
+              value={String(spacing)}
+              onChange={(e) => setSpacing(Number(e.target.value) as AnswerLineSpacing)}
+              aria-label="Entrelinha"
+            >
+              <option value="1">Simples</option>
+              <option value="1.5">1,5</option>
+              <option value="2">Duplo</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              editor.insertAnswerLines(clamped, spacing);
+            }}
+          >
+            Inserir {clamped} linha{clamped > 1 ? "s" : ""}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TableMenu(): JSX.Element {
   const editor = useEditorContext();
