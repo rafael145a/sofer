@@ -136,6 +136,10 @@ export interface UseEditorResult {
   setTableBorderPreset: (preset: TableBorderPreset) => void;
   /** Preset da tabela focada; "all" fora de tabela ou quando ausente. */
   getTableBorderPreset: () => TableBorderPreset;
+  /** Cor das linhas da grade da tabela focada. `null` restaura o padrão. No-op fora de tabela. */
+  setTableBorderColor: (color: string | null) => void;
+  /** Cor da tabela focada; undefined fora de tabela ou quando usa o padrão. */
+  getTableBorderColor: () => string | undefined;
 
   // ---- List API (added in Sub-phase 2.3) ----
   isListActive: (kind: ListKind) => boolean;
@@ -521,6 +525,18 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     return doc.getBlockAttrs(sel.focus.blockIndex).borderPreset ?? "all";
   }, [doc]);
 
+  const setTableBorderColor = useCallback((color: string | null) => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return;
+    cmdSetBlockAttrAtIndex(ctxRef.current, sel.focus.blockIndex, "borderColor", color);
+  }, [doc]);
+
+  const getTableBorderColor = useCallback((): string | undefined => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return undefined;
+    return doc.getBlockAttrs(sel.focus.blockIndex).borderColor;
+  }, [doc]);
+
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
@@ -794,6 +810,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     getCellBackground,
     setTableBorderPreset,
     getTableBorderPreset,
+    setTableBorderColor,
+    getTableBorderColor,
     isListActive,
     toggleList,
     indentList,
