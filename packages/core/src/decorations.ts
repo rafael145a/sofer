@@ -7,6 +7,8 @@
  * do projeto existe para impedir.
  */
 
+import type { BlockAttrs } from "./types";
+
 /** Estilo CSS em camelCase — compatível com `CSSProperties` do React. */
 export type StyleRecord = Record<string, string>;
 
@@ -52,6 +54,25 @@ export const BLANK_STYLE: StyleRecord = {
   WebkitTextFillColor: "transparent",
   textDecoration: "underline",
 };
+
+/** Cor da régua da linha de resposta. Preto: é uma linha para escrever à caneta. */
+export const ANSWER_LINE_COLOR = "#000000";
+
+/**
+ * Estilo do parágrafo pautado. `undefined` quando o bloco não é linha de
+ * resposta, para o renderizador não emitir atributo `style` à toa.
+ *
+ * Diferente das bordas de tabela (cuja geometria é invariante por construção),
+ * `lineHeight` muda a altura medida do bloco DE PROPÓSITO — a paginação precisa
+ * medir o resultado, não presumir a entrelinha.
+ */
+export function answerLineStyle(attrs: BlockAttrs): StyleRecord | undefined {
+  if (attrs.answerLine !== true) return undefined;
+  return {
+    borderBottom: `1px solid ${ANSWER_LINE_COLOR}`,
+    lineHeight: String(attrs.answerLineSpacing ?? 1),
+  };
+}
 
 /** Converte um `StyleRecord` camelCase em texto CSS (`a:b;c:d`). */
 export function styleToCssText(style: StyleRecord): string {

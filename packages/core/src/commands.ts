@@ -5,6 +5,7 @@ import { sliceToInlineDelta, type ClipboardSlice } from "./clipboard";
 import { defaultAttrsFor } from "./schema";
 import { collapsedSelection, isCollapsed, orderedRange, sameTextRun } from "./selection";
 import type {
+  AnswerLineSpacing,
   BlockAttrs,
   BlockType,
   CellAttrs,
@@ -764,6 +765,33 @@ function clampLevel(l: number | undefined): number {
  * preceding paragraph. Callers can clean that up themselves; an extra empty
  * paragraph above a table is a small price for predictable behavior.
  */
+/** Teto de linhas por inserção — protege contra digitar 5000 no popover. */
+export const ANSWER_LINE_MAX = 50;
+
+/**
+ * Insere `count` parágrafos pautados depois do bloco focado, numa única
+ * transação (um passo de undo desfaz todos).
+ *
+ * Se o caret estiver dentro de uma célula, `focus.blockIndex` já aponta para a
+ * TABELA, então as linhas entram depois dela — nunca dentro.
+ */
+export function insertAnswerLines(
+  ctx: CommandContext,
+  count: number,
+  spacing: AnswerLineSpacing,
+): void {
+  const n = Math.max(1, Math.min(ANSWER_LINE_MAX, Math.trunc(count)));
+  transact(ctx.doc, () => {
+    const sel = ctx.getSelection();
+    const focusBlock = Math.max(0, Math.min(sel.focus.blockIndex, ctx.doc.blockCount() - 1));
+    const insertAt = focusBlock + 1;
+    const attrs: BlockAttrs = { answerLine: true, answerLineSpacing: spacing };
+    const blocks = Array.from({ length: n }, () => createBlock("paragraph", "", attrs));
+    ctx.doc.blocks.insert(insertAt, blocks);
+    ctx.setSelection(collapsedSelection({ blockIndex: insertAt, offset: 0 }));
+  });
+}
+
 export function insertTable(ctx: CommandContext, rows: number, cols: number): void {
   const r = Math.max(1, Math.trunc(rows));
   const c = Math.max(1, Math.trunc(cols));
