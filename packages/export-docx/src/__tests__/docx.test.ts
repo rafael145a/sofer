@@ -377,3 +377,147 @@ describe("células de tabela", () => {
     expect(xml).not.toContain("w:tblLayout");
   });
 });
+
+describe("presets de borda de tabela", () => {
+  async function bordasDe(preset?: string) {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const { buffer } = await documentToDocxBuffer([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, ...(preset ? { borderPreset: preset } : {}) },
+        cells,
+      },
+      { type: "paragraph", text: "", delta: [], attrs: {} },
+    ] as unknown as LegacySerializedDocument);
+    const xml = await documentXml(buffer);
+    const tblBorders = /<w:tblBorders>([\s\S]*?)<\/w:tblBorders>/.exec(xml)?.[1] ?? "";
+    const ligado = (lado: string) => {
+      const m = new RegExp(`<w:${lado}\\b[^>]*w:val="([^"]+)"`).exec(tblBorders);
+      return m ? m[1] !== "none" && m[1] !== "nil" : false;
+    };
+    return {
+      top: ligado("top"),
+      bottom: ligado("bottom"),
+      left: ligado("left"),
+      right: ligado("right"),
+      insideH: ligado("insideH"),
+      insideV: ligado("insideV"),
+    };
+  }
+
+  // Um teste por linha da tabela-verdade — a tabela É a especificação.
+  it("all: os seis lados ligados", async () => {
+    expect(await bordasDe("all")).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: true, insideV: true,
+    });
+  });
+
+  it("outer: só os quatro externos", async () => {
+    expect(await bordasDe("outer")).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: false, insideV: false,
+    });
+  });
+
+  it("horizontal: top/bottom/insideH", async () => {
+    expect(await bordasDe("horizontal")).toEqual({
+      top: true, bottom: true, left: false, right: false, insideH: true, insideV: false,
+    });
+  });
+
+  it("vertical: left/right/insideV", async () => {
+    expect(await bordasDe("vertical")).toEqual({
+      top: false, bottom: false, left: true, right: true, insideH: false, insideV: true,
+    });
+  });
+
+  it("none: nenhum lado ligado", async () => {
+    expect(await bordasDe("none")).toEqual({
+      top: false, bottom: false, left: false, right: false, insideH: false, insideV: false,
+    });
+  });
+
+  it("preset ausente mantém a grade completa", async () => {
+    expect(await bordasDe(undefined)).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: true, insideV: true,
+    });
+  });
+});
+
+describe("linhas de resposta", () => {
+  async function xmlForAttrs(attrs: Record<string, unknown>): Promise<string> {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "", delta: [], attrs },
+    ] as unknown as LegacySerializedDocument);
+    return documentXml(buffer);
+  }
+
+  it("emite pBdr inferior em linha de resposta", async () => {
+    const xml = await xmlForAttrs({ answerLine: true });
+    expect(xml).toContain("w:pBdr");
+    expect(xml).toContain("w:bottom");
+  });
+
+  it("mapeia entrelinha para twips (240 = 1 linha)", async () => {
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 1 })).toContain(
+      'w:line="240"',
+    );
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 1.5 })).toContain(
+      'w:line="360"',
+    );
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 2 })).toContain(
+      'w:line="480"',
+    );
+  });
+
+  it("entrelinha ausente vale 1 linha", async () => {
+    expect(await xmlForAttrs({ answerLine: true })).toContain('w:line="240"');
+  });
+
+  it("não emite pBdr em parágrafo comum", async () => {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "oi", delta: [{ insert: "oi" }], attrs: {} },
+    ] as LegacySerializedDocument);
+    expect(await documentXml(buffer)).not.toContain("w:pBdr");
+  });
+});
+
+describe("marca-texto (highlight)", () => {
+  async function xmlFor(delta: LegacySerializedDocument[0]["delta"]): Promise<string> {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "", delta, attrs: {} },
+    ] as LegacySerializedDocument);
+    return documentXml(buffer);
+  }
+
+  it("emite w:shd com o fill da cor de marca-texto", async () => {
+    const xml = await xmlFor([{ insert: "oi", attributes: { highlight: "#fff176" } }]);
+    expect(xml).toContain('w:fill="FFF176"');
+  });
+
+  it("não emite w:shd quando não há marca-texto", async () => {
+    const xml = await xmlFor([{ insert: "oi" }]);
+    expect(xml).not.toContain("w:shd");
+  });
+
+  it("usa w:shd e NÃO w:highlight (que só aceita ~15 cores nomeadas)", async () => {
+    const xml = await xmlFor([{ insert: "oi", attributes: { highlight: "#fff176" } }]);
+    expect(xml).not.toContain("w:highlight");
+  });
+
+  it("preserva a marca-texto em run com quebra de linha", async () => {
+    // O caminho multi-linha de makeTextRun é um segundo sítio de props; sem a
+    // extração, texto com \n perderia o fundo silenciosamente.
+    const xml = await xmlFor([{ insert: "a\nb", attributes: { highlight: "#a5d6a7" } }]);
+    expect(xml).toContain('w:fill="A5D6A7"');
+  });
+
+  it("combina marca-texto com cor de texto no mesmo run", async () => {
+    const xml = await xmlFor([
+      { insert: "oi", attributes: { color: "#ff0000", highlight: "#fff176" } },
+    ]);
+    expect(xml).toContain('w:fill="FFF176"');
+    expect(xml).toContain('w:val="FF0000"');
+  });
+});

@@ -13,12 +13,14 @@ import {
   mergeRight as cmdMergeRight,
   mergeSelection as cmdMergeSelection,
   moveEmbedAnchor as cmdMoveEmbedAnchor,
+  setBlockAttrAtIndex as cmdSetBlockAttrAtIndex,
   setColumnWidth as cmdSetColumnWidth,
   setImageAttrs as cmdSetImageAttrs,
   splitCell as cmdSplitCell,
   tableRectSelection,
   getMarksInRange,
   indentList as cmdIndentList,
+  insertAnswerLines as cmdInsertAnswerLines,
   insertTable as cmdInsertTable,
   insertTableColumn as cmdInsertColumn,
   insertTableRow as cmdInsertRow,
@@ -38,7 +40,9 @@ import {
   toggleMark as cmdToggleMark,
   type AlignValue,
   type BlockAttrs,
+  type AnswerLineSpacing,
   type BlockType,
+  type TableBorderPreset,
   type CommandContext,
   type DeltaOp,
   type EmbedLoc,
@@ -128,6 +132,10 @@ export interface UseEditorResult {
   setCellBackground: (color: string | null) => void;
   /** Cor de fundo da célula focada; undefined fora de tabela ou sem cor. */
   getCellBackground: () => string | undefined;
+  /** Onde as linhas da grade da tabela focada aparecem. No-op fora de tabela. */
+  setTableBorderPreset: (preset: TableBorderPreset) => void;
+  /** Preset da tabela focada; "all" fora de tabela ou quando ausente. */
+  getTableBorderPreset: () => TableBorderPreset;
 
   // ---- List API (added in Sub-phase 2.3) ----
   isListActive: (kind: ListKind) => boolean;
@@ -176,6 +184,8 @@ export interface UseEditorResult {
   isInTable: () => boolean;
   /** Returns `{blockIndex, row, col}` for the focus position, or null when outside a table. */
   getTableLocation: () => TableLocation | null;
+  /** Insere `count` linhas de resposta pautadas depois do bloco focado. */
+  insertAnswerLines: (count: number, spacing: AnswerLineSpacing) => void;
   insertTable: (rows: number, cols: number) => void;
   /** Removes the table at `blockIndex`. Defaults to the current focus table. */
   deleteTable: (blockIndex?: number) => void;
@@ -497,6 +507,20 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).bgColor;
   }, [doc]);
 
+  const setTableBorderPreset = useCallback((preset: TableBorderPreset) => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return;
+    // setBlockAttr é inerte com o caret dentro de uma célula — que é sempre o
+    // caso aqui. Por isso a escrita é por índice de bloco.
+    cmdSetBlockAttrAtIndex(ctxRef.current, sel.focus.blockIndex, "borderPreset", preset);
+  }, [doc]);
+
+  const getTableBorderPreset = useCallback((): TableBorderPreset => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return "all";
+    return doc.getBlockAttrs(sel.focus.blockIndex).borderPreset ?? "all";
+  }, [doc]);
+
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
@@ -532,6 +556,9 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   }, [doc]);
   const insertTable = useCallback((rows: number, cols: number) => {
     cmdInsertTable(ctxRef.current, rows, cols);
+  }, []);
+  const insertAnswerLines = useCallback((count: number, spacing: AnswerLineSpacing) => {
+    cmdInsertAnswerLines(ctxRef.current, count, spacing);
   }, []);
   const deleteTable = useCallback((blockIndex?: number) => {
     const idx = blockIndex ?? selectionRef.current.focus.blockIndex;
@@ -765,6 +792,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     getAlign,
     setCellBackground,
     getCellBackground,
+    setTableBorderPreset,
+    getTableBorderPreset,
     isListActive,
     toggleList,
     indentList,
@@ -775,6 +804,7 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     resolveLinkRequest,
     isInTable,
     getTableLocation,
+    insertAnswerLines,
     insertTable,
     deleteTable,
     insertRowAbove,

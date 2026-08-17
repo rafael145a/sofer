@@ -1,4 +1,11 @@
-import type { BlockAttrs, CellAttrs, DeltaOp, SerializedBlock, SerializedCell } from "@sofereditor/core";
+import type {
+  BlockAttrs,
+  CellAttrs,
+  DeltaOp,
+  SerializedBlock,
+  SerializedCell,
+  TableBorderPreset,
+} from "@sofereditor/core";
 import {
   attr,
   childrenOf,
@@ -107,7 +114,48 @@ export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
   const cells: SerializedCell[] = slots.map((s) => s ?? emptyCell());
 
   const attrs: BlockAttrs = { rows, cols };
+  const preset = readBorderPreset(tbl);
+  if (preset) attrs.borderPreset = preset;
   return { type: "table", text: "", delta: [], attrs, cells };
+}
+
+/**
+ * Reduz `w:tblBorders` ao preset mais próximo.
+ *
+ * O modelo não tem borda por célula, então `w:tcBorders` continua ignorado —
+ * deliberadamente. Combinação não mapeável cai em `all`, que é o padrão visual
+ * e o comportamento menos surpreendente para quem importa um documento externo.
+ *
+ * Retorna `undefined` quando a tabela não declara `tblBorders`, para não gravar
+ * a chave à toa.
+ */
+function readBorderPreset(tbl: OoxmlNode): TableBorderPreset | undefined {
+  const tblPr = findChild(tbl, "w:tblPr");
+  const b = tblPr ? findChild(tblPr, "w:tblBorders") : undefined;
+  if (!b) return undefined;
+
+  // OOXML estrito usa start/end no lugar de left/right.
+  const ligado = (...nomes: string[]): boolean =>
+    nomes.some((nome) => {
+      const n = findChild(b, nome);
+      if (!n) return false;
+      const val = (attr(n, "w:val") ?? "").toLowerCase();
+      return val !== "" && val !== "none" && val !== "nil";
+    });
+
+  const top = ligado("w:top");
+  const bottom = ligado("w:bottom");
+  const left = ligado("w:left", "w:start");
+  const right = ligado("w:right", "w:end");
+  const iH = ligado("w:insideH");
+  const iV = ligado("w:insideV");
+
+  if (top && bottom && left && right && iH && iV) return "all";
+  if (top && bottom && left && right && !iH && !iV) return "outer";
+  if (top && bottom && !left && !right && iH && !iV) return "horizontal";
+  if (!top && !bottom && left && right && !iH && iV) return "vertical";
+  if (!top && !bottom && !left && !right && !iH && !iV) return "none";
+  return "all";
 }
 
 function gridSpanOf(tc: OoxmlNode): number {

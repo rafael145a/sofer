@@ -1,4 +1,11 @@
-import type { AlignValue, BlockAttrs, BlockType, DeltaOp, SerializedBlock } from "@sofereditor/core";
+import type {
+  AlignValue,
+  AnswerLineSpacing,
+  BlockAttrs,
+  BlockType,
+  DeltaOp,
+  SerializedBlock,
+} from "@sofereditor/core";
 import {
   attr,
   childrenOf,
@@ -79,7 +86,44 @@ export function paragraphToBlock(
   const attrs: BlockAttrs = {};
   if (align) attrs.align = align;
   if (isRtl) attrs.dir = "rtl";
+  Object.assign(attrs, readAnswerLine(pPr, text.length > 0));
   return { type: "paragraph", text, delta, attrs };
+}
+
+/**
+ * Parágrafo SEM texto e com borda INFERIOR = linha de resposta.
+ *
+ * A exigência de estar vazio é essencial: um parágrafo com texto e régua é um
+ * título sublinhado, e convertê-lo em linha de resposta destruiria a semântica
+ * do conteúdo. A borda ESQUERDA já é tratada antes como blockquote.
+ */
+function readAnswerLine(pPr: OoxmlNode | undefined, hasText: boolean): Partial<BlockAttrs> {
+  if (!pPr || hasText) return {};
+  const pBdr = findChild(pPr, "w:pBdr");
+  if (!pBdr) return {};
+  const bottom = findChild(pBdr, "w:bottom");
+  if (!bottom) return {};
+  const val = (attr(bottom, "w:val") ?? "").toLowerCase();
+  if (val === "" || val === "none" || val === "nil") return {};
+  return { answerLine: true, answerLineSpacing: readAnswerLineSpacing(pPr) };
+}
+
+/** 240 twips = 1 linha. Arredonda para o bucket suportado mais próximo. */
+function readAnswerLineSpacing(pPr: OoxmlNode): AnswerLineSpacing {
+  const sp = findChild(pPr, "w:spacing");
+  const line = sp ? Number.parseFloat(attr(sp, "w:line") ?? "") : NaN;
+  if (!Number.isFinite(line)) return 1;
+  const buckets: AnswerLineSpacing[] = [1, 1.5, 2];
+  let best: AnswerLineSpacing = 1;
+  let bestDist = Infinity;
+  for (const b of buckets) {
+    const d = Math.abs(line - 240 * b);
+    if (d < bestDist) {
+      bestDist = d;
+      best = b;
+    }
+  }
+  return best;
 }
 
 function collectText(delta: DeltaOp[]): string {

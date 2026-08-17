@@ -8,6 +8,7 @@ import type {
   SerializedBlock,
   SerializedCell,
   SerializedDocument,
+  TableBorderPreset,
 } from "@sofereditor/core";
 import {
   DEFAULT_PAGE_SETTINGS,
@@ -23,6 +24,7 @@ import {
   HeadingLevel,
   ImageRun,
   LevelFormat,
+  LineRuleType,
   Packer,
   Paragraph,
   PageOrientation,
@@ -208,8 +210,27 @@ function makeParagraph(
   return new Paragraph({
     alignment: alignFor(block.attrs.align),
     bidirectional: block.attrs.dir === "rtl" ? true : undefined,
+    ...answerLineProps(block.attrs),
     children: deltaToRuns(block.delta, ARIAL, images),
   });
+}
+
+/**
+ * Linha de resposta → borda inferior de parágrafo (`w:pBdr`) + entrelinha.
+ * É como um documento profissional desenha uma pauta: a régua acompanha a
+ * margem automaticamente, ao contrário de uma fileira de underlines.
+ *
+ * 240 twips = uma linha simples no OOXML.
+ */
+function answerLineProps(attrs: SerializedBlock["attrs"]) {
+  if (attrs.answerLine !== true) return {};
+  const spacing = attrs.answerLineSpacing ?? 1;
+  return {
+    border: {
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: "000000", space: 1 },
+    },
+    spacing: { line: Math.round(240 * spacing), lineRule: LineRuleType.AUTO },
+  };
 }
 
 function makeHeading(
@@ -298,6 +319,7 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
 
   return new Table({
     rows: rowsOut,
+    borders: docxTableBorders(block.attrs.borderPreset),
     ...(columnWidths
       ? {
           columnWidths,
@@ -309,6 +331,41 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
         }
       : { width: { size: 100, type: WidthType.PERCENTAGE } }),
   });
+}
+
+/**
+ * Traduz o preset para `w:tblBorders`. Lado desligado = `BorderStyle.NONE`.
+ *
+ * A tabela-verdade sai direto de `cellBorderColors`: o que aquele helper liga em
+ * TODA célula vira o par externo MAIS o interno correspondente. Ex.: em
+ * `vertical`, toda célula tem left/right ligados — logo as laterais externas
+ * (left/right) E as internas (insideV) ficam ligadas, e topo/base
+ * (top/bottom/insideH) desligados.
+ *
+ * A tabela é a especificação; a função sai dela, não o contrário.
+ */
+function docxTableBorders(preset: TableBorderPreset | undefined) {
+  const on = { style: BorderStyle.SINGLE, size: 6, color: "CBD5E1" };
+  const off = { style: BorderStyle.NONE, size: 0, color: "auto" };
+  const s = (visivel: boolean) => (visivel ? on : off);
+
+  //                                    [top/bottom, left/right, insideH, insideV]
+  const TRUTH: Record<TableBorderPreset, [boolean, boolean, boolean, boolean]> = {
+    all: [true, true, true, true],
+    outer: [true, true, false, false],
+    horizontal: [true, false, true, false],
+    vertical: [false, true, false, true],
+    none: [false, false, false, false],
+  };
+  const [tb, lr, iH, iV] = TRUTH[preset ?? "all"];
+  return {
+    top: s(tb),
+    bottom: s(tb),
+    left: s(lr),
+    right: s(lr),
+    insideHorizontal: s(iH),
+    insideVertical: s(iV),
+  };
 }
 
 function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null>): TableCell {
@@ -377,26 +434,40 @@ function deltaToRuns(
   return out;
 }
 
+/**
+ * Props de um `TextRun` a partir das marks. Fica numa função só porque
+ * `makeTextRun` tem dois caminhos (linha única e multi-linha) que antes
+ * duplicavam esta lista inteira — uma mark acrescentada em apenas um dos dois
+ * se perdia silenciosamente em texto com quebra de linha.
+ *
+ * `highlight` sai como `w:shd` e NÃO como `w:highlight`: este último só aceita
+ * ~15 valores nomeados e não sobreviveria a uma cor arbitrária do picker.
+ */
+function textRunProps(text: string, m: MarkAttrs, defaults: RunDefaults) {
+  const fill = cssColorToDocxHex(m.highlight);
+  return {
+    text,
+    bold: m.bold || defaults.bold,
+    italics: m.italic || defaults.italics,
+    underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
+    strike: m.strike,
+    color: cssColorToDocxHex(m.color),
+    font: m.fontFamily ?? defaults.font,
+    size: parseFontSizeToHalfPoints(m.fontSize) ?? defaults.size,
+    shading: fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined,
+  };
+}
+
 function makeTextRun(
   text: string,
   marks: MarkAttrs | undefined,
   defaults: RunDefaults,
 ): TextRun {
   const m = marks ?? {};
-  const fontSize = parseFontSizeToHalfPoints(m.fontSize);
   // TextRun reads newlines via `break`; convert \n into break runs.
   const segments = text.split("\n");
   if (segments.length === 1) {
-    return new TextRun({
-      text,
-      bold: m.bold || defaults.bold,
-      italics: m.italic || defaults.italics,
-      underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
-      strike: m.strike,
-      color: cssColorToDocxHex(m.color),
-      font: m.fontFamily ?? defaults.font,
-      size: fontSize ?? defaults.size,
-    });
+    return new TextRun(textRunProps(text, m, defaults));
   }
   // Multi-line: rejoin via TextRun children — but TextRun expects a single text
   // string. Approximate with non-printing line breaks: produce a sequence of
@@ -404,16 +475,7 @@ function makeTextRun(
   // Simpler: collapse to a single TextRun with the string, treating \n as a
   // soft-break placeholder. Word renders \n inside a w:t as a literal space,
   // so we replace with a small symbol-friendly fallback.
-  return new TextRun({
-    text: text.replace(/\n/g, " "),
-    bold: m.bold || defaults.bold,
-    italics: m.italic || defaults.italics,
-    underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
-    strike: m.strike,
-    color: cssColorToDocxHex(m.color),
-    font: m.fontFamily ?? defaults.font,
-    size: fontSize ?? defaults.size,
-  });
+  return new TextRun(textRunProps(text.replace(/\n/g, " "), m, defaults));
 }
 
 function makeImageRun(

@@ -65,6 +65,30 @@ function collectRun(
   }
 }
 
+/**
+ * Os valores nomeados de `w:highlight` do OOXML. O Word só aceita esta lista
+ * fechada — documentos com cor arbitrária usam `w:shd`, que é o que o nosso
+ * export emite. `none` fica de fora de propósito: ausência = sem marca.
+ */
+const DOCX_HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: "#ffff00",
+  green: "#00ff00",
+  cyan: "#00ffff",
+  magenta: "#ff00ff",
+  blue: "#0000ff",
+  red: "#ff0000",
+  darkblue: "#000080",
+  darkcyan: "#008080",
+  darkgreen: "#008000",
+  darkmagenta: "#800080",
+  darkred: "#800000",
+  darkyellow: "#808000",
+  darkgray: "#808080",
+  lightgray: "#c0c0c0",
+  black: "#000000",
+  white: "#ffffff",
+};
+
 function runMarks(rPr: OoxmlNode | undefined): MarkAttrs {
   const m: MarkAttrs = {};
   if (!rPr) return m;
@@ -90,6 +114,20 @@ function runMarks(rPr: OoxmlNode | undefined): MarkAttrs {
         const hex = attr(child, "w:val");
         const css = docxHexToCssColor(hex);
         if (css) m.color = css;
+        break;
+      }
+      case "w:shd": {
+        // Sombreamento de RUN = marca-texto. `auto` significa "sem cor".
+        const fill = attr(child, "w:fill");
+        if (fill && fill.toLowerCase() !== "auto") {
+          const css = docxHexToCssColor(fill);
+          if (css) m.highlight = css;
+        }
+        break;
+      }
+      case "w:highlight": {
+        const css = DOCX_HIGHLIGHT_COLORS[(attr(child, "w:val") ?? "").toLowerCase()];
+        if (css) m.highlight = css;
         break;
       }
       // w:rFonts intentionally ignored: school standard is Arial for all

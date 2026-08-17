@@ -1,5 +1,12 @@
 import { Fragment, memo, type CSSProperties, type ReactNode } from "react";
-import { isImageEmbed, type DeltaOp, type ImageEmbed, type MarkAttrs } from "@sofereditor/core";
+import {
+  BLANK_STYLE,
+  isImageEmbed,
+  splitUnderscoreRuns,
+  type DeltaOp,
+  type ImageEmbed,
+  type MarkAttrs,
+} from "@sofereditor/core";
 import { hasOpenModifier } from "./platform";
 
 /**
@@ -263,8 +270,31 @@ function ImageEmbedViewImpl({
   );
 }
 
+/**
+ * Corridas de 3+ underlines viram um traço contínuo (lacuna de prova).
+ *
+ * Os caracteres PERMANECEM no DOM como nós de texto: `dom-bridge` mapeia
+ * posição de DOM → offset do modelo somando `textContent.length`, então dividir
+ * a run em sub-spans é seguro, mas introduzir ou remover caracteres não seria.
+ */
+function decorateBlanks(text: string): ReactNode {
+  const segs = splitUnderscoreRuns(text);
+  // Caminho comum (texto sem lacuna): devolve a string crua, sem wrapper.
+  if (segs.length === 1 && !segs[0].blank) return text;
+  return segs.map((s, i) =>
+    s.blank ? (
+      <span key={i} data-blank="true" style={BLANK_STYLE as CSSProperties}>
+        {s.text}
+      </span>
+    ) : (
+      <Fragment key={i}>{s.text}</Fragment>
+    ),
+  );
+}
+
 function wrap(text: string, attrs?: MarkAttrs): ReactNode {
-  let node: ReactNode = text;
+  // A lacuna fica DENTRO dos wrappers de mark: é decoração do texto, não uma mark.
+  let node: ReactNode = decorateBlanks(text);
   if (!attrs) return node;
 
   if (attrs.bold) node = <strong>{node}</strong>;
@@ -274,6 +304,7 @@ function wrap(text: string, attrs?: MarkAttrs): ReactNode {
 
   const styleParts: CSSProperties = {};
   if (attrs.color) styleParts.color = attrs.color;
+  if (attrs.highlight) styleParts.backgroundColor = attrs.highlight;
   if (attrs.fontFamily) styleParts.fontFamily = attrs.fontFamily;
   if (attrs.fontSize) styleParts.fontSize = attrs.fontSize;
   if (Object.keys(styleParts).length > 0) {

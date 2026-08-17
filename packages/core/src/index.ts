@@ -5,6 +5,8 @@ export * from "./document";
 export * from "./collab-cursor";
 export * from "./selection";
 export * from "./marks";
+export * from "./decorations";
+export * from "./table-borders";
 export * from "./commands";
 export * from "./clipboard";
 export * from "./history";

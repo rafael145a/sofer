@@ -61,6 +61,20 @@ describe("renderInline — text", () => {
     expect(out).toContain(">styled</span>");
   });
 
+  it("puts highlight on the SAME span as color/font (no extra wrapper)", () => {
+    const out = html([
+      { insert: "x", attributes: { color: "rgb(0, 0, 255)", highlight: "#fff176" } },
+    ]);
+    expect(out).toBe(
+      '<span style="color:rgb(0, 0, 255);background-color:#fff176">x</span>',
+    );
+  });
+
+  it("renders highlight alone as a background-color span", () => {
+    const out = html([{ insert: "marcado", attributes: { highlight: "#fff176" } }]);
+    expect(out).toBe('<span style="background-color:#fff176">marcado</span>');
+  });
+
   it("composes multiple marks innermost→outermost (bold inside the color span)", () => {
     const out = html([
       { insert: "x", attributes: { bold: true, color: "rgb(0, 0, 255)" } },

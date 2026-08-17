@@ -26,6 +26,15 @@ export type ListStyleType =
 /** Maximum supported list nesting (0 = top level). */
 export const MAX_LIST_LEVEL = 5;
 
+/** Entrelinha de uma linha de resposta: simples, 1,5 ou dupla. */
+export type AnswerLineSpacing = 1 | 1.5 | 2;
+
+/**
+ * Onde as linhas da grade de uma tabela aparecem.
+ * Vocabulário nativo de `w:tblBorders` (top/left/bottom/right/insideH/insideV).
+ */
+export type TableBorderPreset = "all" | "outer" | "horizontal" | "vertical" | "none";
+
 export interface BlockAttrs {
   align?: AlignValue;
   dir?: DirValue;
@@ -61,6 +70,24 @@ export interface BlockAttrs {
    * an auto distribution at render time.
    */
   colWidths?: number[];
+  /**
+   * Só relevante quando `type === "table"`. Onde as linhas da grade aparecem.
+   * Ausente = "all" — documentos existentes não mudam de aparência.
+   */
+  borderPreset?: TableBorderPreset;
+  /**
+   * Só relevante quando `type === "paragraph"`. Parágrafo pautado para o aluno
+   * escrever a resposta: renderiza com régua inferior de largura total.
+   */
+  answerLine?: true;
+  /**
+   * Só relevante quando `answerLine`. Entrelinha. Ausente = 1.
+   *
+   * Deliberadamente escopado a linhas de resposta em vez de um `lineSpacing`
+   * genérico de parágrafo: entrelinha geral mudaria a medição de paginação de
+   * TODO parágrafo do documento, o que é outra feature com outro raio de impacto.
+   */
+  answerLineSpacing?: AnswerLineSpacing;
 }
 
 export interface CellAttrs {
@@ -110,6 +137,7 @@ export type MarkName =
   | "underline"
   | "strike"
   | "color"
+  | "highlight"
   | "fontFamily"
   | "fontSize"
   | "link"
@@ -131,6 +159,8 @@ export interface MarkAttrs {
   underline?: true;
   strike?: true;
   color?: string;
+  /** Cor de fundo do texto (marca-texto). CSS color, ex. `#fff176`. */
+  highlight?: string;
   fontFamily?: string;
   fontSize?: string;
   link?: LinkAttr;

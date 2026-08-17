@@ -1,5 +1,13 @@
 import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "react";
-import { tableRectSelection, type BlockAttrs, type CellAttrs, type SerializedBlock } from "@sofereditor/core";
+import {
+  answerLineStyle,
+  cellBorderStyle,
+  tableRectSelection,
+  type BlockAttrs,
+  type CellAttrs,
+  type SerializedBlock,
+  type StyleRecord,
+} from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
 import { renderInline } from "./renderInline";
 import { sliceDelta } from "./sliceDelta";
@@ -94,7 +102,7 @@ export function NodeView({ block, index, children, fragment, tableFragment }: No
   }
 }
 
-function commonBlockProps(
+export function commonBlockProps(
   attrs: BlockAttrs,
   index: number,
   type: string,
@@ -102,6 +110,9 @@ function commonBlockProps(
 ) {
   const style: CSSProperties = {};
   if (attrs.align) style.textAlign = attrs.align;
+  // Linha de resposta: régua inferior + entrelinha. Vem de um helper puro em
+  // core para o HTML de servidor emitir exatamente o mesmo estilo.
+  Object.assign(style, answerLineStyle(attrs) ?? {});
   const base: Record<string, unknown> = {
     "data-block-index": index,
     "data-block-type": type,
@@ -129,11 +140,13 @@ function alignClass(a?: BlockAttrs["align"]): string {
  * Inline style for a table cell's visual attrs (align, bgColor).
  * Returns undefined when the cell has none, so the <td> carries no style attr.
  */
-export function cellStyle(attrs?: CellAttrs): CSSProperties | undefined {
-  if (!attrs) return undefined;
-  const style: CSSProperties = {};
-  if (attrs.align) style.textAlign = attrs.align;
-  if (attrs.bgColor) style.backgroundColor = attrs.bgColor;
+export function cellStyle(
+  attrs?: CellAttrs,
+  border?: StyleRecord,
+): CSSProperties | undefined {
+  const style: CSSProperties = { ...(border as CSSProperties | undefined) };
+  if (attrs?.align) style.textAlign = attrs.align;
+  if (attrs?.bgColor) style.backgroundColor = attrs.bgColor;
   return Object.keys(style).length > 0 ? style : undefined;
 }
 
@@ -216,7 +229,16 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                   data-cell-colspan={colspan}
                   rowSpan={rowspan > 1 ? rowspan : undefined}
                   colSpan={colspan > 1 ? colspan : undefined}
-                  style={cellStyle(cell?.attrs)}
+                  style={cellStyle(
+                    cell?.attrs,
+                    // rowStart/rowEnd são os limites do FRAGMENTO: numa tabela
+                    // quebrada entre páginas, cada página fecha a própria caixa.
+                    cellBorderStyle(
+                      block.attrs.borderPreset,
+                      { row: r, col: c, rowspan, colspan, cols, rowStart, rowEnd },
+                      "screen",
+                    ),
+                  )}
                   className={inRect ? "ed-cell ed-cell--selected" : "ed-cell"}
                 >
                   {renderInline(delta, `t${index}-c${flat}`)}

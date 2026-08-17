@@ -12,7 +12,18 @@ import type {
   SerializedCell,
   SerializedDocument,
 } from "@sofereditor/core";
-import { isImageEmbed, isLegacySerializedDocument, pxToMm } from "@sofereditor/core";
+import {
+  BLANK_STYLE,
+  answerLineStyle,
+  cellBorderStyle,
+  isImageEmbed,
+  isLegacySerializedDocument,
+  pxToMm,
+  splitUnderscoreRuns,
+  styleToCssText,
+  type CellBorderPos,
+  type StyleRecord,
+} from "@sofereditor/core";
 
 function normalize(doc: SerializedDocument | LegacySerializedDocument): SerializedDocument {
   return isLegacySerializedDocument(doc) ? { blocks: doc } : doc;
@@ -194,17 +205,33 @@ function renderTable(block: SerializedBlock): string {
   if (rows <= 0 || cols <= 0) return "";
 
   const colGroup = renderColGroup(block.attrs.colWidths, cols);
+  const preset = block.attrs.borderPreset;
   const trs: string[] = [];
   for (let r = 0; r < rows; r++) {
     const tds: string[] = [];
     for (let c = 0; c < cols; c++) {
       const cell = cells[r * cols + c];
+      // Este caminho NÃO fragmenta a tabela (o HTML de servidor não pagina),
+      // então os limites do fragmento são os da tabela lógica.
+      const at = (rowspan: number, colspan: number): CellBorderPos => ({
+        row: r,
+        col: c,
+        rowspan,
+        colspan,
+        cols,
+        rowStart: 0,
+        rowEnd: rows,
+      });
       if (!cell) {
-        tds.push("<td class=\"ed-cell\"></td>");
+        // Célula ausente também precisa das bordas, senão vira um buraco na grade.
+        const style = styleToCssText(cellBorderStyle(preset, at(1, 1), "print"));
+        tds.push(`<td class="ed-cell" style="${style}"></td>`);
         continue;
       }
       if (cell.attrs?.covered) continue;
-      tds.push(renderCell(cell));
+      const rowspan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
+      const colspan = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
+      tds.push(renderCell(cell, cellBorderStyle(preset, at(rowspan, colspan), "print")));
     }
     trs.push(`<tr>${tds.join("")}</tr>`);
   }
@@ -221,14 +248,16 @@ function renderColGroup(widths: number[] | undefined, cols: number): string {
   return `<colgroup>${cells.join("")}</colgroup>`;
 }
 
-function renderCell(cell: SerializedCell): string {
+function renderCell(cell: SerializedCell, border: StyleRecord): string {
   const rs = cell.attrs?.rowspan && cell.attrs.rowspan > 1
     ? ` rowspan="${cell.attrs.rowspan}"`
     : "";
   const cs = cell.attrs?.colspan && cell.attrs.colspan > 1
     ? ` colspan="${cell.attrs.colspan}"`
     : "";
-  const styles: string[] = [];
+  // `variant: "print"` sempre: este HTML é para servidor/PDF, nunca para a tela
+  // do editor — logo, lado desligado é `transparent`, nunca a guia visual.
+  const styles: string[] = [styleToCssText(border)];
   const align = clampAlign(cell.attrs?.align);
   if (align) styles.push(`text-align:${align}`);
   if (cell.attrs?.bgColor) styles.push(`background-color:${cssValue(cell.attrs.bgColor)}`);
@@ -247,7 +276,7 @@ function renderInline(delta: DeltaOp[]): string {
   for (const op of delta) {
     if (typeof op.insert === "string") {
       if (op.insert.length === 0) continue;
-      parts.push(applyMarks(escapeHtml(op.insert), op.attributes));
+      parts.push(applyMarks(decorateBlanks(op.insert), op.attributes));
     } else if (isImageEmbed(op.insert)) {
       const layout = op.insert.layout ?? "inline";
       if (layout === "wrap-left" || layout === "wrap-right") {
@@ -261,6 +290,27 @@ function renderInline(delta: DeltaOp[]): string {
   return wraps.join("") + parts.join("");
 }
 
+/**
+ * Espelha `decorateBlanks` de `@sofereditor/react`: corridas de 3+ underlines
+ * viram traço contínuo, com os caracteres preservados. A segmentação vem do
+ * mesmo helper puro em `@sofereditor/core` — se divergir daqui, o teste de
+ * paridade quebra.
+ *
+ * Devolve HTML já escapado, que é o que `applyMarks` espera receber.
+ */
+function decorateBlanks(text: string): string {
+  const segs = splitUnderscoreRuns(text);
+  if (segs.length === 1 && !segs[0].blank) return escapeHtml(text);
+  const css = styleToCssText(BLANK_STYLE);
+  return segs
+    .map((s) =>
+      s.blank
+        ? `<span data-blank="true" style="${css}">${escapeHtml(s.text)}</span>`
+        : escapeHtml(s.text),
+    )
+    .join("");
+}
+
 function applyMarks(text: string, attrs: MarkAttrs | undefined): string {
   if (!attrs) return text;
   let html = text;
@@ -270,6 +320,7 @@ function applyMarks(text: string, attrs: MarkAttrs | undefined): string {
   if (attrs.strike) html = `<s>${html}</s>`;
   const styles: string[] = [];
   if (attrs.color) styles.push(`color:${cssValue(attrs.color)}`);
+  if (attrs.highlight) styles.push(`background-color:${cssValue(attrs.highlight)}`);
   if (attrs.fontFamily) styles.push(`font-family:${cssValue(attrs.fontFamily)}`);
   if (attrs.fontSize) styles.push(`font-size:${cssValue(attrs.fontSize)}`);
   if (styles.length > 0) html = `<span style="${styles.join(";")}">${html}</span>`;
@@ -369,7 +420,11 @@ function blockAttrs(baseClass: string, attrs: BlockAttrs): string {
   if (align) classes.push(`ed-align-${align}`);
   const dir = clampDir(attrs.dir);
   const dirAttr = dir ? ` dir="${dir}"` : "";
-  return ` class="${classes.join(" ")}"${dirAttr}`;
+  // Linha de resposta: mesmo helper puro que o renderizador do editor usa, para
+  // a régua e a entrelinha saírem idênticas nos dois caminhos.
+  const answer = answerLineStyle(attrs);
+  const styleAttr = answer ? ` style="${styleToCssText(answer)}"` : "";
+  return ` class="${classes.join(" ")}"${dirAttr}${styleAttr}`;
 }
 
 function clampHeadingLevel(l: unknown): 1 | 2 | 3 | 4 | 5 | 6 {

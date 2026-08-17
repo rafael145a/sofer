@@ -1,0 +1,103 @@
+/**
+ * Helpers puros de decoração visual, compartilhados pelos DOIS renderizadores
+ * (`@sofereditor/react` e `@sofereditor/export-pdf`).
+ *
+ * Ficam aqui, e não dentro de cada renderizador, porque decoração divergente
+ * entre editor e PDF é exatamente o modo de falha que a fidelidade de impressão
+ * do projeto existe para impedir.
+ */
+
+import type { BlockAttrs } from "./types";
+
+/** Estilo CSS em camelCase — compatível com `CSSProperties` do React. */
+export type StyleRecord = Record<string, string>;
+
+/** Mínimo de underlines consecutivos que viram lacuna. */
+export const BLANK_MIN_RUN = 3;
+
+/**
+ * Segmenta um texto em trechos normais e corridas de `BLANK_MIN_RUN`+ underlines.
+ *
+ * INVARIANTE: a concatenação dos segmentos reconstrói o texto original
+ * caractere a caractere. Os offsets do modelo dependem disso — `dom-bridge`
+ * mapeia posição de DOM para offset somando `textContent.length`, então dividir
+ * uma run em sub-spans é seguro, mas introduzir ou remover caracteres não é.
+ */
+export function splitUnderscoreRuns(text: string): Array<{ text: string; blank: boolean }> {
+  if (text.length === 0) return [];
+  // Regex local: `lastIndex` de um literal com /g é estado compartilhado entre
+  // chamadas se a instância for reaproveitada.
+  const re = new RegExp(`_{${BLANK_MIN_RUN},}`, "g");
+  const out: Array<{ text: string; blank: boolean }> = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) out.push({ text: text.slice(last, match.index), blank: false });
+    out.push({ text: match[0], blank: true });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), blank: false });
+  return out;
+}
+
+/**
+ * Estilo da lacuna: uma corrida de underlines vira um traço contínuo, sem
+ * serrilhado, com a largura exata da sequência digitada.
+ *
+ * `-webkit-text-fill-color` apaga o GLIFO mas preserva `color`.
+ *
+ * O traço é `border-bottom`, e NÃO `text-decoration: underline`: no Chrome o
+ * `-webkit-text-fill-color` também apaga a decoração de texto — inclusive com
+ * `text-decoration-color: currentColor`, que resolve para a cor de
+ * PREENCHIMENTO, não para `color`. Verificado no navegador: a variante com
+ * `underline` renderiza uma lacuna completamente invisível. `border-bottom`
+ * com `currentColor` resolve para `color` e acompanha a mark de cor do run.
+ *
+ * PROIBIDO acrescentar aqui: `display`, `padding`, `margin`, `letterSpacing`,
+ * `width`. Qualquer um desloca métricas e a paginação diverge do PDF. Bordas de
+ * elemento inline não afetam a altura da linha — medido: linha com e sem
+ * lacuna tem exatamente a mesma altura e a mesma largura.
+ */
+export const BLANK_STYLE: StyleRecord = {
+  WebkitTextFillColor: "transparent",
+  borderBottom: "1px solid currentColor",
+};
+
+/** Cor da régua da linha de resposta. Preto: é uma linha para escrever à caneta. */
+export const ANSWER_LINE_COLOR = "#000000";
+
+/**
+ * Estilo do parágrafo pautado. `undefined` quando o bloco não é linha de
+ * resposta, para o renderizador não emitir atributo `style` à toa.
+ *
+ * Diferente das bordas de tabela (cuja geometria é invariante por construção),
+ * `lineHeight` muda a altura medida do bloco DE PROPÓSITO — a paginação precisa
+ * medir o resultado, não presumir a entrelinha.
+ */
+export function answerLineStyle(attrs: BlockAttrs): StyleRecord | undefined {
+  if (attrs.answerLine !== true) return undefined;
+  const spacing = attrs.answerLineSpacing ?? 1;
+  return {
+    borderBottom: `1px solid ${ANSWER_LINE_COLOR}`,
+    lineHeight: String(spacing),
+    // `minHeight` casado com a entrelinha, e NÃO redundante: o CSS do
+    // consumidor costuma trazer `min-height` em parágrafo (o playground usa
+    // 1.5em "para manter parágrafo vazio visível"). Sem esta linha, "Simples"
+    // e "1,5" renderizariam com a mesma altura.
+    minHeight: `${spacing}em`,
+  };
+}
+
+/** Converte um `StyleRecord` camelCase em texto CSS (`a:b;c:d`). */
+export function styleToCssText(style: StyleRecord): string {
+  return Object.entries(style)
+    .map(([k, v]) => `${kebab(k)}:${v}`)
+    .join(";");
+}
+
+function kebab(prop: string): string {
+  // Custom properties (`--x`) já vêm no formato final.
+  if (prop.startsWith("--")) return prop;
+  // `WebkitTextFillColor` → `-webkit-text-fill-color` (o W inicial vira `-w`).
+  return prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+}
