@@ -12,7 +12,14 @@ import type {
   SerializedCell,
   SerializedDocument,
 } from "@sofereditor/core";
-import { isImageEmbed, isLegacySerializedDocument, pxToMm } from "@sofereditor/core";
+import {
+  BLANK_STYLE,
+  isImageEmbed,
+  isLegacySerializedDocument,
+  pxToMm,
+  splitUnderscoreRuns,
+  styleToCssText,
+} from "@sofereditor/core";
 
 function normalize(doc: SerializedDocument | LegacySerializedDocument): SerializedDocument {
   return isLegacySerializedDocument(doc) ? { blocks: doc } : doc;
@@ -247,7 +254,7 @@ function renderInline(delta: DeltaOp[]): string {
   for (const op of delta) {
     if (typeof op.insert === "string") {
       if (op.insert.length === 0) continue;
-      parts.push(applyMarks(escapeHtml(op.insert), op.attributes));
+      parts.push(applyMarks(decorateBlanks(op.insert), op.attributes));
     } else if (isImageEmbed(op.insert)) {
       const layout = op.insert.layout ?? "inline";
       if (layout === "wrap-left" || layout === "wrap-right") {
@@ -259,6 +266,27 @@ function renderInline(delta: DeltaOp[]): string {
   }
   if (wraps.length === 0 && parts.length === 0) return "<br>";
   return wraps.join("") + parts.join("");
+}
+
+/**
+ * Espelha `decorateBlanks` de `@sofereditor/react`: corridas de 3+ underlines
+ * viram traço contínuo, com os caracteres preservados. A segmentação vem do
+ * mesmo helper puro em `@sofereditor/core` — se divergir daqui, o teste de
+ * paridade quebra.
+ *
+ * Devolve HTML já escapado, que é o que `applyMarks` espera receber.
+ */
+function decorateBlanks(text: string): string {
+  const segs = splitUnderscoreRuns(text);
+  if (segs.length === 1 && !segs[0].blank) return escapeHtml(text);
+  const css = styleToCssText(BLANK_STYLE);
+  return segs
+    .map((s) =>
+      s.blank
+        ? `<span data-blank="true" style="${css}">${escapeHtml(s.text)}</span>`
+        : escapeHtml(s.text),
+    )
+    .join("");
 }
 
 function applyMarks(text: string, attrs: MarkAttrs | undefined): string {

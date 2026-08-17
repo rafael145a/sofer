@@ -99,6 +99,31 @@ describe("documentToHtmlFragment", () => {
     expect(tdCount).toBe(1);
   });
 
+  it("decora corridas de 3+ underlines como lacuna", () => {
+    const html = frag([
+      { type: "paragraph", text: "Nome: _____", delta: [{ insert: "Nome: _____" }], attrs: {} },
+    ]);
+    expect(html).toContain("-webkit-text-fill-color:transparent");
+    expect(html).toContain("text-decoration:underline");
+    // Os caracteres continuam presentes — a lacuna é decoração, não substituição.
+    expect(html.replace(/<[^>]*>/g, "")).toContain("Nome: _____");
+  });
+
+  it("não decora 1 ou 2 underlines", () => {
+    const html = frag([
+      { type: "paragraph", text: "a__b", delta: [{ insert: "a__b" }], attrs: {} },
+    ]);
+    expect(html).not.toContain("text-fill-color");
+  });
+
+  it("escapa o conteúdo dentro da lacuna", () => {
+    const html = frag([
+      { type: "paragraph", text: "<b>___", delta: [{ insert: "<b>___" }], attrs: {} },
+    ]);
+    expect(html).toContain("&lt;b&gt;");
+    expect(html).not.toContain("<b>");
+  });
+
   it("emits highlight as background-color on the same span as color/font", () => {
     const html = frag([
       {
