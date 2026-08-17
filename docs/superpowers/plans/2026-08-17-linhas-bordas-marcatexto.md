@@ -833,7 +833,7 @@ git commit -m "feat(export-pdf): lacuna de underlines no HTML de servidor"
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { EditorDocument } from "../document";
+import { EditorDocument, createTableBlock } from "../document";
 import { insertAnswerLines } from "../commands";
 import { answerLineStyle } from "../decorations";
 import type { Selection } from "../types";
@@ -876,6 +876,27 @@ describe("insertAnswerLines", () => {
     const ctx = ctxFor(doc);
     insertAnswerLines(ctx, 2, 1);
     expect(ctx.getSelection().focus.blockIndex).toBe(1);
+  });
+
+  it("com o caret dentro de uma célula, insere DEPOIS da tabela inteira", () => {
+    const doc = new EditorDocument();
+    doc.blocks.insert(1, [createTableBlock(2, 2)]);
+    let sel: Selection = {
+      anchor: { blockIndex: 1, cellIndex: 0, offset: 0 },
+      focus: { blockIndex: 1, cellIndex: 0, offset: 0 },
+    };
+    const ctx = {
+      doc,
+      getSelection: () => sel,
+      setSelection: (s: Selection) => { sel = s; },
+    };
+    insertAnswerLines(ctx, 2, 1);
+    const json = doc.toJSON();
+    expect(json.blocks[1].type).toBe("table");
+    expect(json.blocks[2].attrs.answerLine).toBe(true);
+    expect(json.blocks[3].attrs.answerLine).toBe(true);
+    // A tabela continua com 4 células — nada foi inserido dentro dela.
+    expect(json.blocks[1].cells).toHaveLength(4);
   });
 });
 
@@ -1402,7 +1423,10 @@ function AnswerLinesMenu(): JSX.Element {
 - [ ] **Step 2: Verificar no playground**
 
 Run: `pnpm dev`
-Verificar: inserir 5 linhas com entrelinha dupla → 5 réguas espaçadas; um único `⌘Z` desfaz todas as 5; a régua acompanha a margem ao trocar o tamanho de página em Configurar página.
+
+1. Inserir 5 linhas com entrelinha dupla → 5 réguas espaçadas; um único `⌘Z` desfaz todas as 5.
+2. A régua acompanha a margem ao trocar o tamanho de página em Configurar página.
+3. **Paginação com entrelinha alterada.** Diferente das bordas de tabela (onde a geometria é invariante por construção), `answerLineStyle` muda `line-height` de propósito — logo muda a altura medida do bloco. Inserir 40 linhas de resposta em cada uma das três entrelinhas, o suficiente para atravessar duas quebras de página, e conferir: nenhuma régua órfã sobre a margem, nenhuma sobreposta ao rodapé, e a última linha de cada página fechando dentro da caixa de conteúdo. Se `usePagination` medir por `getBoundingClientRect`, isso passa naturalmente; se houver qualquer altura estimada a partir de um `line-height` presumido, é aqui que aparece — e o conserto é na medição, não na feature.
 
 - [ ] **Step 3: Rodar a suíte**
 
@@ -1885,15 +1909,34 @@ Em `serializePaginatedHtml` (`pdf.ts`), dentro do `@media print` que já existe,
         .ed-root, .ed-page { --ed-guide-color: transparent !important; }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+**Este é o único ponto do plano onde tela e PDF divergem por design, e a neutralização depende de CSS que não vem do renderizador.** O override no `styles.css` do playground protege só o playground: um consumidor como `portal2-next` que definir `--ed-guide-color` e não tiver o `@media print` correspondente imprimiria as guias. Quem protege todo mundo é o override em `pdf.ts`, porque ele viaja dentro do snapshot — desde que a custom property **herde** de `.ed-root` até o `<td>` no clone.
+
+- [ ] **Step 4: Travar a herança com teste, não com inspeção visual**
+
+Em `packages/export-pdf/src/__tests__/` (arquivo de `pdf.ts`, ou novo):
+
+```ts
+it("o snapshot neutraliza --ed-guide-color dentro de @media print", () => {
+  const root = document.createElement("div");
+  root.className = "ed-root";
+  root.innerHTML = '<div class="ed-page"><table class="ed-table"><tbody><tr><td class="ed-cell"></td></tr></tbody></table></div>';
+  document.body.appendChild(root);
+  const html = serializePaginatedHtml(root);
+  expect(html).toMatch(/@media print[\s\S]*--ed-guide-color:\s*transparent\s*!important/);
+});
+```
+
+Se `serializePaginatedHtml` precisar de `getComputedStyle`, o teste roda no ambiente jsdom que o pacote já usa; conferir o `environment` no `vitest.config` do pacote antes de escrever.
+
+- [ ] **Step 5: Rodar e ver passar**
 
 Run: `pnpm --filter @sofereditor/export-pdf test && pnpm test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/export-pdf/src/html.ts packages/export-pdf/src/pdf.ts apps/playground/src/styles.css packages/export-pdf/src/__tests__/html.test.ts
+git add packages/export-pdf/src/html.ts packages/export-pdf/src/pdf.ts apps/playground/src/styles.css packages/export-pdf/src/__tests__/
 git commit -m "feat(export-pdf): bordas por preset no HTML e guia de tela neutralizada na impressão"
 ```
 
@@ -1948,27 +1991,41 @@ Em `makeTable`, acrescentar às props do `new Table({...})`:
 E, junto de `makeTable`:
 
 ```ts
-/** Traduz o preset para `w:tblBorders`. Lado desligado = BorderStyle.NONE. */
+/**
+ * Traduz o preset para `w:tblBorders`. Lado desligado = BorderStyle.NONE.
+ *
+ * A tabela-verdade sai direto de `cellBorderColors`: o que aquele helper liga
+ * em TODA célula vira o par externo + o interno correspondente. Ex.: em
+ * `vertical`, toda célula tem left/right ligados — logo as laterais externas
+ * (left/right) E as internas (insideV) ficam ligadas, e topo/base (top/bottom/
+ * insideH) desligados.
+ */
 function docxTableBorders(preset: TableBorderPreset | undefined) {
   const on = { style: BorderStyle.SINGLE, size: 6, color: "CBD5E1" };
   const off = { style: BorderStyle.NONE, size: 0, color: "auto" };
-  const p = preset ?? "all";
-  const outer = p !== "none";
-  const insideH = p === "all" || p === "horizontal";
-  const insideV = p === "all" || p === "vertical";
-  const side = (visible: boolean) => (visible ? on : off);
+  const s = (visible: boolean) => (visible ? on : off);
+
+  // [top/bottom, left/right, insideH, insideV]
+  const TRUTH: Record<TableBorderPreset, [boolean, boolean, boolean, boolean]> = {
+    all:        [true,  true,  true,  true],
+    outer:      [true,  true,  false, false],
+    horizontal: [true,  false, true,  false],
+    vertical:   [false, true,  false, true],
+    none:       [false, false, false, false],
+  };
+  const [tb, lr, iH, iV] = TRUTH[preset ?? "all"];
   return {
-    top: side(outer && p !== "vertical" ? true : outer),
-    bottom: side(outer),
-    left: side(outer),
-    right: side(outer),
-    insideHorizontal: side(insideH),
-    insideVertical: side(insideV),
+    top: s(tb),
+    bottom: s(tb),
+    left: s(lr),
+    right: s(lr),
+    insideHorizontal: s(iH),
+    insideVertical: s(iV),
   };
 }
 ```
 
-Atenção ao mapeamento de `horizontal` e `vertical`: no editor, `horizontal` liga topo+base de **toda** célula, o que no Word equivale a `top` + `bottom` + `insideH` ligados e `left`/`right`/`insideV` desligados. Ajustar `docxTableBorders` para essa tabela-verdade e travar cada linha dela com um teste — o esboço acima tem a expressão de `top` deliberadamente redundante justamente para forçar a revisão:
+A tabela-verdade é a especificação; escrever a função a partir dela, não o contrário. Um teste por linha:
 
 | preset | top/bottom | left/right | insideH | insideV |
 |---|---|---|---|---|
