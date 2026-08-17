@@ -99,6 +99,46 @@ describe("documentToHtmlFragment", () => {
     expect(tdCount).toBe(1);
   });
 
+  it("emite régua inferior e entrelinha em linha de resposta", () => {
+    const html = frag([
+      {
+        type: "paragraph",
+        text: "",
+        delta: [],
+        attrs: { answerLine: true, answerLineSpacing: 2 },
+      },
+    ]);
+    expect(html).toContain("border-bottom:1px solid #000000");
+    expect(html).toContain("line-height:2");
+  });
+
+  it("entrelinha ausente na linha de resposta vale 1", () => {
+    const html = frag([
+      { type: "paragraph", text: "", delta: [], attrs: { answerLine: true } },
+    ]);
+    expect(html).toContain("line-height:1");
+  });
+
+  it("parágrafo comum não ganha régua", () => {
+    const html = frag([
+      { type: "paragraph", text: "oi", delta: [{ insert: "oi" }], attrs: {} },
+    ]);
+    expect(html).not.toContain("border-bottom");
+  });
+
+  it("linha de resposta combina régua com alinhamento", () => {
+    const html = frag([
+      {
+        type: "paragraph",
+        text: "",
+        delta: [],
+        attrs: { answerLine: true, align: "center" },
+      },
+    ]);
+    expect(html).toContain("ed-align-center");
+    expect(html).toContain("border-bottom:1px solid #000000");
+  });
+
   it("decora corridas de 3+ underlines como lacuna", () => {
     const html = frag([
       { type: "paragraph", text: "Nome: _____", delta: [{ insert: "Nome: _____" }], attrs: {} },

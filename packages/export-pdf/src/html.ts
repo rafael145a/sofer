@@ -14,6 +14,7 @@ import type {
 } from "@sofereditor/core";
 import {
   BLANK_STYLE,
+  answerLineStyle,
   isImageEmbed,
   isLegacySerializedDocument,
   pxToMm,
@@ -398,7 +399,11 @@ function blockAttrs(baseClass: string, attrs: BlockAttrs): string {
   if (align) classes.push(`ed-align-${align}`);
   const dir = clampDir(attrs.dir);
   const dirAttr = dir ? ` dir="${dir}"` : "";
-  return ` class="${classes.join(" ")}"${dirAttr}`;
+  // Linha de resposta: mesmo helper puro que o renderizador do editor usa, para
+  // a régua e a entrelinha saírem idênticas nos dois caminhos.
+  const answer = answerLineStyle(attrs);
+  const styleAttr = answer ? ` style="${styleToCssText(answer)}"` : "";
+  return ` class="${classes.join(" ")}"${dirAttr}${styleAttr}`;
 }
 
 function clampHeadingLevel(l: unknown): 1 | 2 | 3 | 4 | 5 | 6 {

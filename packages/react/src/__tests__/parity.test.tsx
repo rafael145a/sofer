@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Fragment, createElement } from "react";
 import { documentToHtmlFragment } from "@sofereditor/export-pdf";
-import type { DeltaOp } from "@sofereditor/core";
+import { styleToCssText, type DeltaOp } from "@sofereditor/core";
 import { renderInline } from "../renderInline";
+import { commonBlockProps } from "../NodeView";
 
 /**
  * A renderização inline existe DUAS vezes no monorepo: aqui
@@ -61,6 +62,33 @@ const CASES: Array<{ name: string; delta: DeltaOp[] }> = [
   },
   { name: "múltiplas lacunas", delta: [{ insert: "Nome: ____ Turma: ___" }] },
 ];
+
+describe("paridade de bloco: linha de resposta", () => {
+  for (const spacing of [1, 1.5, 2] as const) {
+    it(`entrelinha ${spacing} sai igual nos dois caminhos`, () => {
+      const attrs = { answerLine: true, answerLineSpacing: spacing } as const;
+      const editorStyle = commonBlockProps(attrs, 0, "paragraph", undefined).style as Record<
+        string,
+        string
+      >;
+      const server = documentToHtmlFragment({
+        blocks: [{ type: "paragraph", text: "", delta: [], attrs }],
+      });
+      // Toda declaração que o editor emite precisa aparecer no HTML de servidor.
+      for (const [k, v] of Object.entries(editorStyle)) {
+        expect(server).toContain(`${styleToCssText({ [k]: v })}`);
+      }
+    });
+  }
+
+  it("parágrafo comum não ganha style em nenhum dos dois", () => {
+    expect(commonBlockProps({}, 0, "paragraph", undefined).style).toBeUndefined();
+    const server = documentToHtmlFragment({
+      blocks: [{ type: "paragraph", text: "x", delta: [{ insert: "x" }], attrs: {} }],
+    });
+    expect(server).not.toContain("style=");
+  });
+});
 
 describe("paridade editor ↔ HTML de servidor", () => {
   for (const c of CASES) {
