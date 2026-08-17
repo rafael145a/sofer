@@ -17,6 +17,7 @@ import type {
   DirValue,
   ImageLayout,
   MarkName,
+  TableBorderPreset,
 } from "@sofereditor/core";
 
 // School standard: Arial only. The dropdown is kept (instead of removed) so
@@ -712,6 +713,23 @@ function TableMenu(): JSX.Element {
               <button type="button" onClick={() => { setOpen(false); editor.setCellBackground(null); }}>
                 Remover cor de fundo
               </button>
+              <hr />
+              <label className="ed-toolbar-label">
+                Bordas
+                <select
+                  value={editor.getTableBorderPreset()}
+                  onChange={(e) =>
+                    editor.setTableBorderPreset(e.target.value as TableBorderPreset)
+                  }
+                  aria-label="Bordas da tabela"
+                >
+                  <option value="all">Todas</option>
+                  <option value="outer">Só externas</option>
+                  <option value="horizontal">Só horizontais</option>
+                  <option value="vertical">Só verticais</option>
+                  <option value="none">Nenhuma</option>
+                </select>
+              </label>
               <hr />
               <button
                 type="button"
