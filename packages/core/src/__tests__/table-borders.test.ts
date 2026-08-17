@@ -235,3 +235,67 @@ describe("setBlockAttrAtIndex", () => {
     expect(() => setBlockAttrAtIndex(ctx, 99, "borderPreset", "all")).not.toThrow();
   });
 });
+
+describe("cellBorderColors — cor customizada", () => {
+  const PRETO = "#000000";
+
+  it("cor ausente cai em TABLE_BORDER_COLOR", () => {
+    expect(cellBorderColors("all", pos(), "print").top).toBe(TABLE_BORDER_COLOR);
+    expect(cellBorderColors("all", pos(), "print", undefined).top).toBe(TABLE_BORDER_COLOR);
+  });
+
+  it("pinta os lados LIGADOS com a cor escolhida, em todos os presets", () => {
+    expect(cellBorderColors("all", pos(), "print", PRETO)).toEqual({
+      top: PRETO, right: PRETO, bottom: PRETO, left: PRETO,
+    });
+    expect(cellBorderColors("horizontal", pos(), "print", PRETO)).toMatchObject({
+      top: PRETO, bottom: PRETO,
+    });
+    expect(cellBorderColors("vertical", pos(), "print", PRETO)).toMatchObject({
+      left: PRETO, right: PRETO,
+    });
+    expect(cellBorderColors("outer", pos({ row: 0, col: 0 }), "print", PRETO)).toMatchObject({
+      top: PRETO, left: PRETO,
+    });
+  });
+
+  it("NÃO pinta os lados desligados — a guia é affordance de tela", () => {
+    // Pintar a guia com a cor escolhida faria "Nenhuma" com borda preta
+    // desenhar linhas na tela e nada no PDF.
+    expect(cellBorderColors("horizontal", pos(), "print", PRETO)).toMatchObject({
+      left: "transparent", right: "transparent",
+    });
+    expect(cellBorderColors("none", pos(), "screen", PRETO)).toEqual({
+      top: TABLE_GUIDE_COLOR, right: TABLE_GUIDE_COLOR,
+      bottom: TABLE_GUIDE_COLOR, left: TABLE_GUIDE_COLOR,
+    });
+  });
+
+  it("aceita qualquer notação CSS de cor", () => {
+    for (const c of ["#000", "#1a2b3c", "rgb(10, 20, 30)", "red"]) {
+      expect(cellBorderColors("all", pos(), "print", c).top).toBe(c);
+    }
+  });
+
+  it("string vazia cai no default em vez de apagar a borda", () => {
+    expect(cellBorderColors("all", pos(), "print", "").top).toBe(TABLE_BORDER_COLOR);
+  });
+});
+
+describe("cellBorderStyle — cor customizada", () => {
+  it("propaga a cor e continua sem emitir espessura", () => {
+    const s = cellBorderStyle("all", pos(), "print", "#ff0000");
+    expect(s).toEqual({
+      borderTopColor: "#ff0000",
+      borderRightColor: "#ff0000",
+      borderBottomColor: "#ff0000",
+      borderLeftColor: "#ff0000",
+    });
+  });
+
+  it("a geometria segue invariante com cor customizada", () => {
+    const chaves = (c?: string) =>
+      Object.keys(cellBorderStyle("all", pos(), "print", c)).sort().join(",");
+    expect(chaves("#ff0000")).toBe(chaves(undefined));
+  });
+});
