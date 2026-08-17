@@ -19,6 +19,7 @@ import {
   tableRectSelection,
   getMarksInRange,
   indentList as cmdIndentList,
+  insertAnswerLines as cmdInsertAnswerLines,
   insertTable as cmdInsertTable,
   insertTableColumn as cmdInsertColumn,
   insertTableRow as cmdInsertRow,
@@ -38,6 +39,7 @@ import {
   toggleMark as cmdToggleMark,
   type AlignValue,
   type BlockAttrs,
+  type AnswerLineSpacing,
   type BlockType,
   type CommandContext,
   type DeltaOp,
@@ -176,6 +178,8 @@ export interface UseEditorResult {
   isInTable: () => boolean;
   /** Returns `{blockIndex, row, col}` for the focus position, or null when outside a table. */
   getTableLocation: () => TableLocation | null;
+  /** Insere `count` linhas de resposta pautadas depois do bloco focado. */
+  insertAnswerLines: (count: number, spacing: AnswerLineSpacing) => void;
   insertTable: (rows: number, cols: number) => void;
   /** Removes the table at `blockIndex`. Defaults to the current focus table. */
   deleteTable: (blockIndex?: number) => void;
@@ -533,6 +537,9 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   const insertTable = useCallback((rows: number, cols: number) => {
     cmdInsertTable(ctxRef.current, rows, cols);
   }, []);
+  const insertAnswerLines = useCallback((count: number, spacing: AnswerLineSpacing) => {
+    cmdInsertAnswerLines(ctxRef.current, count, spacing);
+  }, []);
   const deleteTable = useCallback((blockIndex?: number) => {
     const idx = blockIndex ?? selectionRef.current.focus.blockIndex;
     cmdDeleteTable(ctxRef.current, idx);
@@ -775,6 +782,7 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     resolveLinkRequest,
     isInTable,
     getTableLocation,
+    insertAnswerLines,
     insertTable,
     deleteTable,
     insertRowAbove,

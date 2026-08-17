@@ -1,5 +1,11 @@
 import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "react";
-import { tableRectSelection, type BlockAttrs, type CellAttrs, type SerializedBlock } from "@sofereditor/core";
+import {
+  answerLineStyle,
+  tableRectSelection,
+  type BlockAttrs,
+  type CellAttrs,
+  type SerializedBlock,
+} from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
 import { renderInline } from "./renderInline";
 import { sliceDelta } from "./sliceDelta";
@@ -94,7 +100,7 @@ export function NodeView({ block, index, children, fragment, tableFragment }: No
   }
 }
 
-function commonBlockProps(
+export function commonBlockProps(
   attrs: BlockAttrs,
   index: number,
   type: string,
@@ -102,6 +108,9 @@ function commonBlockProps(
 ) {
   const style: CSSProperties = {};
   if (attrs.align) style.textAlign = attrs.align;
+  // Linha de resposta: régua inferior + entrelinha. Vem de um helper puro em
+  // core para o HTML de servidor emitir exatamente o mesmo estilo.
+  Object.assign(style, answerLineStyle(attrs) ?? {});
   const base: Record<string, unknown> = {
     "data-block-index": index,
     "data-block-type": type,
