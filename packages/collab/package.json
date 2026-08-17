@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/collab",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "@sofereditor/collab — Hocuspocus binding for real-time collaboration with the Sofer editor. Bidirectional Y.Doc sync + awareness.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",

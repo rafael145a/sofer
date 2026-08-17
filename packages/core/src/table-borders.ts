@@ -56,8 +56,14 @@ export function cellBorderColors(
   preset: TableBorderPreset | undefined,
   pos: CellBorderPos,
   variant: "screen" | "print",
+  color?: string,
 ): CellBorderColors {
-  const on = TABLE_BORDER_COLOR;
+  // String vazia cai no default: apagar a borda é papel do preset "none",
+  // não de uma cor vazia.
+  const on = color && color.length > 0 ? color : TABLE_BORDER_COLOR;
+  // `off` NUNCA recebe a cor escolhida. Pintar a guia com ela faria um preset
+  // "none" com borda preta desenhar linhas na tela e nada no PDF — a divergência
+  // tela↔papel que o projeto existe para evitar.
   const off = variant === "screen" ? TABLE_GUIDE_COLOR : "transparent";
   switch (preset ?? "all") {
     case "horizontal":
@@ -89,8 +95,9 @@ export function cellBorderStyle(
   preset: TableBorderPreset | undefined,
   pos: CellBorderPos,
   variant: "screen" | "print",
+  color?: string,
 ): StyleRecord {
-  const c = cellBorderColors(preset, pos, variant);
+  const c = cellBorderColors(preset, pos, variant, color);
   return {
     borderTopColor: c.top,
     borderRightColor: c.right,

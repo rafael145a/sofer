@@ -76,6 +76,11 @@ export interface BlockAttrs {
    */
   borderPreset?: TableBorderPreset;
   /**
+   * Só relevante quando `type === "table"`. Cor das linhas da grade.
+   * Ausente = `TABLE_BORDER_COLOR` — documentos existentes não mudam.
+   */
+  borderColor?: string;
+  /**
    * Só relevante quando `type === "paragraph"`. Parágrafo pautado para o aluno
    * escrever a resposta: renderiza com régua inferior de largura total.
    */

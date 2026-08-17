@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Fragment, createElement } from "react";
 import { documentToHtmlFragment } from "@sofereditor/export-pdf";
-import { styleToCssText, type DeltaOp } from "@sofereditor/core";
+import { cellBorderStyle, styleToCssText, type DeltaOp } from "@sofereditor/core";
 import { renderInline } from "../renderInline";
 import { commonBlockProps } from "../NodeView";
 
@@ -108,4 +108,39 @@ describe("paridade editor ↔ HTML de servidor", () => {
       expect(serverBlanks).toBe(editorBlanks);
     });
   }
+});
+
+describe("paridade de tabela: cor da borda", () => {
+  const cells = [{ text: "", delta: [], attrs: {} }];
+  const attrs = { rows: 1, cols: 1, borderPreset: "all", borderColor: "#123456" } as const;
+
+  it("editor e HTML de servidor concordam nas cores da grade", () => {
+    const editor = cellBorderStyle(
+      attrs.borderPreset,
+      { row: 0, col: 0, rowspan: 1, colspan: 1, cols: 1, rowStart: 0, rowEnd: 1 },
+      "print",
+      attrs.borderColor,
+    );
+    const server = documentToHtmlFragment({
+      blocks: [{ type: "table", text: "", delta: [], attrs, cells }],
+    });
+    for (const [k, v] of Object.entries(editor)) {
+      expect(server).toContain(styleToCssText({ [k]: v }));
+    }
+  });
+
+  it("concordam também com preset parcial, onde os lados desligados divergiriam", () => {
+    const pos = { row: 0, col: 0, rowspan: 1, colspan: 1, cols: 1, rowStart: 0, rowEnd: 1 };
+    const editor = cellBorderStyle("horizontal", pos, "print", "#123456");
+    const server = documentToHtmlFragment({
+      blocks: [{
+        type: "table", text: "", delta: [],
+        attrs: { rows: 1, cols: 1, borderPreset: "horizontal", borderColor: "#123456" },
+        cells,
+      }],
+    });
+    for (const [k, v] of Object.entries(editor)) {
+      expect(server).toContain(styleToCssText({ [k]: v }));
+    }
+  });
 });

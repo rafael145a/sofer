@@ -245,6 +245,61 @@ describe("documentToHtmlFragment", () => {
     for (const td of tds) expect(td).toContain("border-top-color:#cbd5e1");
   });
 
+  it("aplica a cor de borda escolhida", () => {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, borderPreset: "all", borderColor: "#000000" },
+        cells,
+      },
+    ]);
+    expect(html).toContain("border-top-color:#000000");
+    expect(html).not.toContain("border-top-color:#cbd5e1");
+  });
+
+  it("cor escolhida não vaza para os lados desligados", () => {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, borderPreset: "horizontal", borderColor: "#000000" },
+        cells,
+      },
+    ]);
+    expect(html).toContain("border-top-color:#000000");
+    expect(html).toContain("border-left-color:transparent");
+  });
+
+  it("célula ausente também recebe a cor escolhida", () => {
+    // O ramo `if (!cell)` do renderTable: sem a cor, uma célula ausente vira
+    // um buraco cinza no meio de uma grade colorida.
+    const html = frag([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 2, borderPreset: "all", borderColor: "#000000" },
+        cells: [],
+      },
+    ]);
+    const tds = html.match(/<td[^>]*>/g) ?? [];
+    expect(tds).toHaveLength(2);
+    for (const td of tds) expect(td).toContain("border-top-color:#000000");
+  });
+
+  it("sem borderColor mantém o padrão", () => {
+    const cells = Array.from({ length: 1 }, () => ({ text: "", delta: [], attrs: {} }));
+    const html = frag([
+      { type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 }, cells },
+    ]);
+    expect(html).toContain("border-top-color:#cbd5e1");
+  });
+
   it("emits cell background color as inline style on the <td>", () => {
     const html = frag([
       {

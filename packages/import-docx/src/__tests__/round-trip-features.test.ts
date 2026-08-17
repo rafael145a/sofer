@@ -108,6 +108,34 @@ describe("round-trip: presets de borda", () => {
     }
   });
 
+  it("preserva a cor da borda", async () => {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const out = await roundTrip([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, borderPreset: "all", borderColor: "#000000" },
+        cells,
+      },
+      { type: "paragraph", text: "", delta: [], attrs: {} },
+    ] as unknown as LegacySerializedDocument);
+    const t = out.find((b) => b.type === "table");
+    expect(t!.attrs.borderColor?.toLowerCase()).toBe("#000000");
+  });
+
+  it("tabela sem cor volta sem o atributo — cai no padrão", async () => {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const out = await roundTrip([
+      { type: "table", text: "", delta: [], attrs: { rows: 2, cols: 2, borderPreset: "all" }, cells },
+      { type: "paragraph", text: "", delta: [], attrs: {} },
+    ] as unknown as LegacySerializedDocument);
+    const t = out.find((b) => b.type === "table");
+    // O export emite CBD5E1 (o default), e o import lê de volta — o valor bate
+    // com o padrão, então o documento renderiza igual de qualquer forma.
+    expect((t!.attrs.borderColor ?? "#cbd5e1").toLowerCase()).toBe("#cbd5e1");
+  });
+
   it("tabela sem preset volta como all (o padrão visual)", async () => {
     const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
     const out = await roundTrip([

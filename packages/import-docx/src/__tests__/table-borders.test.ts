@@ -96,3 +96,50 @@ describe("import de presets de borda", () => {
     expect(await presetDe(xml)).toBe("none");
   });
 });
+
+async function corDe(bordersXml: string) {
+  const doc = await docxBlobToDocument(await docxFromBody(tabela(bordersXml)));
+  return doc.blocks.find((b) => b.type === "table")!.attrs.borderColor;
+}
+
+describe("import da cor da borda", () => {
+  it("lê a cor do primeiro lado ligado", async () => {
+    const xml =
+      '<w:tblBorders><w:top w:val="single" w:color="000000"/>' +
+      '<w:bottom w:val="single" w:color="000000"/>' +
+      '<w:left w:val="single" w:color="000000"/><w:right w:val="single" w:color="000000"/>' +
+      '<w:insideH w:val="single" w:color="000000"/><w:insideV w:val="single" w:color="000000"/>' +
+      "</w:tblBorders>";
+    expect(await corDe(xml)).toBe("#000000");
+  });
+
+  it("ignora a cor de lados DESLIGADOS", async () => {
+    // O Word emite w:val="none" com w:color="auto"; ler dali gravaria lixo.
+    const xml =
+      '<w:tblBorders><w:top w:val="none" w:color="auto"/>' +
+      '<w:bottom w:val="none" w:color="auto"/>' +
+      '<w:left w:val="single" w:color="FF0000"/><w:right w:val="single" w:color="FF0000"/>' +
+      '<w:insideH w:val="none" w:color="auto"/><w:insideV w:val="single" w:color="FF0000"/>' +
+      "</w:tblBorders>";
+    expect(await corDe(xml)).toBe("#ff0000");
+  });
+
+  it("cor auto não grava o atributo", async () => {
+    const xml =
+      '<w:tblBorders><w:top w:val="single" w:color="auto"/>' +
+      '<w:bottom w:val="single" w:color="auto"/>' +
+      '<w:left w:val="single" w:color="auto"/><w:right w:val="single" w:color="auto"/>' +
+      '<w:insideH w:val="single" w:color="auto"/><w:insideV w:val="single" w:color="auto"/>' +
+      "</w:tblBorders>";
+    expect(await corDe(xml)).toBeUndefined();
+  });
+
+  it("sem w:color não grava o atributo", async () => {
+    expect(await corDe(borders(["top", "bottom", "left", "right", "insideH", "insideV"])))
+      .toBeUndefined();
+  });
+
+  it("tabela sem tblBorders não grava o atributo", async () => {
+    expect(await corDe("")).toBeUndefined();
+  });
+});

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useEditorContext } from "./EditorContext";
-import { ANSWER_LINE_MAX } from "@sofereditor/core";
+import { ANSWER_LINE_MAX, TABLE_BORDER_COLOR } from "@sofereditor/core";
 import type {
   AlignValue,
   AnswerLineSpacing,
@@ -746,6 +746,26 @@ function TableMenu(): JSX.Element {
                   <option value="none">Nenhuma</option>
                 </select>
               </label>
+              <label className="ed-toolbar-label ed-table-bgcolor">
+                <span
+                  className="ed-toolbar-swatch"
+                  aria-hidden
+                  style={{ background: editor.getTableBorderColor() ?? TABLE_BORDER_COLOR }}
+                />
+                Cor da borda
+                <input
+                  type="color"
+                  value={editor.getTableBorderColor() ?? TABLE_BORDER_COLOR}
+                  onChange={(e) => editor.setTableBorderColor(e.target.value)}
+                  aria-label="Cor da borda"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); editor.setTableBorderColor(null); }}
+              >
+                Restaurar cor padrão
+              </button>
               <hr />
               <button
                 type="button"

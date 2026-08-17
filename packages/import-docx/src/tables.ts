@@ -15,7 +15,7 @@ import {
   type OoxmlNode,
 } from "./parse-xml";
 import { paragraphChildrenToDelta, type RunContext } from "./runs";
-import { parseIntAttr } from "./units";
+import { docxHexToCssColor, parseIntAttr } from "./units";
 
 /**
  * Map a `<w:tbl>` element to a SerializedBlock(table). The output `cells` array
@@ -116,6 +116,8 @@ export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
   const attrs: BlockAttrs = { rows, cols };
   const preset = readBorderPreset(tbl);
   if (preset) attrs.borderPreset = preset;
+  const borderColor = readBorderColor(tbl);
+  if (borderColor) attrs.borderColor = borderColor;
   return { type: "table", text: "", delta: [], attrs, cells };
 }
 
@@ -129,6 +131,40 @@ export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
  * Retorna `undefined` quando a tabela não declara `tblBorders`, para não gravar
  * a chave à toa.
  */
+/**
+ * Cor da grade, lida do PRIMEIRO lado LIGADO do `w:tblBorders`.
+ *
+ * Lados desligados são ignorados de propósito: o Word emite `w:val="none"` com
+ * `w:color="auto"`, que não carrega informação de cor — ler dali gravaria lixo.
+ * `auto` também não grava, para o documento cair no default do modelo.
+ */
+function readBorderColor(tbl: OoxmlNode): string | undefined {
+  const tblPr = findChild(tbl, "w:tblPr");
+  const b = tblPr ? findChild(tblPr, "w:tblBorders") : undefined;
+  if (!b) return undefined;
+  const LADOS = [
+    "w:top",
+    "w:bottom",
+    "w:left",
+    "w:start",
+    "w:right",
+    "w:end",
+    "w:insideH",
+    "w:insideV",
+  ];
+  for (const nome of LADOS) {
+    const n = findChild(b, nome);
+    if (!n) continue;
+    const val = (attr(n, "w:val") ?? "").toLowerCase();
+    if (val === "" || val === "none" || val === "nil") continue;
+    const hex = attr(n, "w:color");
+    if (!hex || hex.toLowerCase() === "auto") continue;
+    const css = docxHexToCssColor(hex);
+    if (css) return css;
+  }
+  return undefined;
+}
+
 function readBorderPreset(tbl: OoxmlNode): TableBorderPreset | undefined {
   const tblPr = findChild(tbl, "w:tblPr");
   const b = tblPr ? findChild(tblPr, "w:tblBorders") : undefined;

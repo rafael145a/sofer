@@ -3,6 +3,7 @@ import { cellStyle } from "../NodeView";
 import {
   cellBorderStyle,
   TABLE_BORDER_COLOR,
+  TABLE_GUIDE_COLOR,
   type CellBorderPos,
   type TableBorderPreset,
 } from "@sofereditor/core";
@@ -60,5 +61,40 @@ describe("cellStyle com bordas", () => {
       expect(s.borderWidth).toBeUndefined();
       expect(s.borderTopWidth).toBeUndefined();
     }
+  });
+});
+
+describe("cellStyle com cor de borda customizada", () => {
+  it("propaga a cor escolhida para os lados ligados", () => {
+    const s = cellStyle({}, cellBorderStyle("all", pos(), "screen", "#ff0000"))!;
+    expect(s.borderTopColor).toBe("#ff0000");
+    expect(s.borderLeftColor).toBe("#ff0000");
+  });
+
+  it("mantém a guia nos lados desligados", () => {
+    const s = cellStyle({}, cellBorderStyle("horizontal", pos(), "screen", "#ff0000"))!;
+    expect(s.borderTopColor).toBe("#ff0000");
+    expect(s.borderLeftColor).toBe(TABLE_GUIDE_COLOR);
+  });
+
+  it("cor customizada convive com bgColor da célula", () => {
+    const s = cellStyle({ bgColor: "#ffe58f" }, cellBorderStyle("all", pos(), "screen", "#000000"))!;
+    expect(s.backgroundColor).toBe("#ffe58f");
+    expect(s.borderTopColor).toBe("#000000");
+  });
+
+  it("o atributo borderColor do bloco chega ao estilo da célula", () => {
+    // Mesma composição que TableView faz no <td>.
+    const attrsDoBloco = { rows: 1, cols: 1, borderPreset: "all", borderColor: "#123456" } as const;
+    const s = cellStyle(
+      {},
+      cellBorderStyle(
+        attrsDoBloco.borderPreset,
+        { row: 0, col: 0, rowspan: 1, colspan: 1, cols: 1, rowStart: 0, rowEnd: 1 },
+        "screen",
+        attrsDoBloco.borderColor,
+      ),
+    )!;
+    expect(s.borderTopColor).toBe("#123456");
   });
 });

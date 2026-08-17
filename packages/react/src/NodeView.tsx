@@ -237,6 +237,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                       block.attrs.borderPreset,
                       { row: r, col: c, rowspan, colspan, cols, rowStart, rowEnd },
                       "screen",
+                      block.attrs.borderColor,
                     ),
                   )}
                   className={inRect ? "ed-cell ed-cell--selected" : "ed-cell"}
