@@ -365,6 +365,29 @@ export function setBlockAttr<K extends keyof BlockAttrs>(
 }
 
 /**
+ * Como `setBlockAttr`, mas em um bloco específico por índice.
+ *
+ * Existe porque `setBlockAttr` opera sobre a seleção e é INERTE quando o caret
+ * está dentro de uma célula — que é exatamente a situação em que se quer mudar
+ * um atributo da tabela (ex.: preset de borda).
+ */
+export function setBlockAttrAtIndex<K extends keyof BlockAttrs>(
+  ctx: CommandContext,
+  blockIndex: number,
+  key: K,
+  value: BlockAttrs[K] | null,
+): void {
+  transact(ctx.doc, () => {
+    const block = ctx.doc.getBlock(blockIndex);
+    if (!block) return;
+    const attrsMap = (block.get("attrs") as Y.Map<unknown> | undefined) ?? new Y.Map<unknown>();
+    if (!block.get("attrs")) block.set("attrs", attrsMap);
+    if (value === null || value === undefined) attrsMap.delete(key as string);
+    else attrsMap.set(key as string, value);
+  });
+}
+
+/**
  * Set a single attribute on the table cell(s) under the selection.
  * - Caret numa única célula → essa célula (tableRectSelection retorna null
  *   para seleção colapsada (ou âncora/foco no mesmo owner), então usamos

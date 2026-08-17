@@ -13,6 +13,7 @@ import {
   mergeRight as cmdMergeRight,
   mergeSelection as cmdMergeSelection,
   moveEmbedAnchor as cmdMoveEmbedAnchor,
+  setBlockAttrAtIndex as cmdSetBlockAttrAtIndex,
   setColumnWidth as cmdSetColumnWidth,
   setImageAttrs as cmdSetImageAttrs,
   splitCell as cmdSplitCell,
@@ -41,6 +42,7 @@ import {
   type BlockAttrs,
   type AnswerLineSpacing,
   type BlockType,
+  type TableBorderPreset,
   type CommandContext,
   type DeltaOp,
   type EmbedLoc,
@@ -130,6 +132,10 @@ export interface UseEditorResult {
   setCellBackground: (color: string | null) => void;
   /** Cor de fundo da célula focada; undefined fora de tabela ou sem cor. */
   getCellBackground: () => string | undefined;
+  /** Onde as linhas da grade da tabela focada aparecem. No-op fora de tabela. */
+  setTableBorderPreset: (preset: TableBorderPreset) => void;
+  /** Preset da tabela focada; "all" fora de tabela ou quando ausente. */
+  getTableBorderPreset: () => TableBorderPreset;
 
   // ---- List API (added in Sub-phase 2.3) ----
   isListActive: (kind: ListKind) => boolean;
@@ -501,6 +507,20 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).bgColor;
   }, [doc]);
 
+  const setTableBorderPreset = useCallback((preset: TableBorderPreset) => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return;
+    // setBlockAttr é inerte com o caret dentro de uma célula — que é sempre o
+    // caso aqui. Por isso a escrita é por índice de bloco.
+    cmdSetBlockAttrAtIndex(ctxRef.current, sel.focus.blockIndex, "borderPreset", preset);
+  }, [doc]);
+
+  const getTableBorderPreset = useCallback((): TableBorderPreset => {
+    const sel = selectionRef.current;
+    if (!doc.isTable(sel.focus.blockIndex)) return "all";
+    return doc.getBlockAttrs(sel.focus.blockIndex).borderPreset ?? "all";
+  }, [doc]);
+
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
@@ -772,6 +792,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     getAlign,
     setCellBackground,
     getCellBackground,
+    setTableBorderPreset,
+    getTableBorderPreset,
     isListActive,
     toggleList,
     indentList,

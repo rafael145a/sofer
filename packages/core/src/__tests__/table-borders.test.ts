@@ -187,3 +187,51 @@ describe("cellBorderStyle", () => {
     }
   });
 });
+
+describe("setBlockAttrAtIndex", () => {
+  it("muda o attr da TABELA com o caret dentro de uma célula", async () => {
+    const { EditorDocument, createTableBlock } = await import("../document");
+    const { setBlockAttrAtIndex, setBlockAttr } = await import("../commands");
+    const { collapsedSelection } = await import("../selection");
+
+    const doc = new EditorDocument();
+    doc.blocks.insert(1, [createTableBlock(2, 2)]);
+    let sel = collapsedSelection({ blockIndex: 1, cellIndex: 0, offset: 0 });
+    const ctx = { doc, getSelection: () => sel, setSelection: (s: typeof sel) => { sel = s; } };
+
+    // setBlockAttr é inerte com o caret dentro de célula — é por isso que
+    // setBlockAttrAtIndex existe.
+    setBlockAttr(ctx, "borderPreset", "outer");
+    expect(doc.toJSON().blocks[1].attrs.borderPreset).toBeUndefined();
+
+    setBlockAttrAtIndex(ctx, 1, "borderPreset", "outer");
+    expect(doc.toJSON().blocks[1].attrs.borderPreset).toBe("outer");
+  });
+
+  it("apaga a chave quando o valor é null", async () => {
+    const { EditorDocument, createTableBlock } = await import("../document");
+    const { setBlockAttrAtIndex } = await import("../commands");
+    const { collapsedSelection } = await import("../selection");
+
+    const doc = new EditorDocument();
+    doc.blocks.insert(1, [createTableBlock(1, 1)]);
+    let sel = collapsedSelection({ blockIndex: 1, cellIndex: 0, offset: 0 });
+    const ctx = { doc, getSelection: () => sel, setSelection: (s: typeof sel) => { sel = s; } };
+
+    setBlockAttrAtIndex(ctx, 1, "borderPreset", "none");
+    expect(doc.toJSON().blocks[1].attrs.borderPreset).toBe("none");
+    setBlockAttrAtIndex(ctx, 1, "borderPreset", null);
+    expect(doc.toJSON().blocks[1].attrs.borderPreset).toBeUndefined();
+  });
+
+  it("índice inexistente é no-op", async () => {
+    const { EditorDocument } = await import("../document");
+    const { setBlockAttrAtIndex } = await import("../commands");
+    const { collapsedSelection } = await import("../selection");
+
+    const doc = new EditorDocument();
+    let sel = collapsedSelection({ blockIndex: 0, offset: 0 });
+    const ctx = { doc, getSelection: () => sel, setSelection: (s: typeof sel) => { sel = s; } };
+    expect(() => setBlockAttrAtIndex(ctx, 99, "borderPreset", "all")).not.toThrow();
+  });
+});
