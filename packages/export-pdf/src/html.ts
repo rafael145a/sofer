@@ -206,6 +206,7 @@ function renderTable(block: SerializedBlock): string {
 
   const colGroup = renderColGroup(block.attrs.colWidths, cols);
   const preset = block.attrs.borderPreset;
+  const borderColor = block.attrs.borderColor;
   const trs: string[] = [];
   for (let r = 0; r < rows; r++) {
     const tds: string[] = [];
@@ -224,14 +225,16 @@ function renderTable(block: SerializedBlock): string {
       });
       if (!cell) {
         // Célula ausente também precisa das bordas, senão vira um buraco na grade.
-        const style = styleToCssText(cellBorderStyle(preset, at(1, 1), "print"));
+        const style = styleToCssText(cellBorderStyle(preset, at(1, 1), "print", borderColor));
         tds.push(`<td class="ed-cell" style="${style}"></td>`);
         continue;
       }
       if (cell.attrs?.covered) continue;
       const rowspan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
       const colspan = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
-      tds.push(renderCell(cell, cellBorderStyle(preset, at(rowspan, colspan), "print")));
+      tds.push(
+        renderCell(cell, cellBorderStyle(preset, at(rowspan, colspan), "print", borderColor)),
+      );
     }
     trs.push(`<tr>${tds.join("")}</tr>`);
   }
