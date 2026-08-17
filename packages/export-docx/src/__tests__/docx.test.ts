@@ -378,6 +378,73 @@ describe("células de tabela", () => {
   });
 });
 
+describe("presets de borda de tabela", () => {
+  async function bordasDe(preset?: string) {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const { buffer } = await documentToDocxBuffer([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, ...(preset ? { borderPreset: preset } : {}) },
+        cells,
+      },
+      { type: "paragraph", text: "", delta: [], attrs: {} },
+    ] as unknown as LegacySerializedDocument);
+    const xml = await documentXml(buffer);
+    const tblBorders = /<w:tblBorders>([\s\S]*?)<\/w:tblBorders>/.exec(xml)?.[1] ?? "";
+    const ligado = (lado: string) => {
+      const m = new RegExp(`<w:${lado}\\b[^>]*w:val="([^"]+)"`).exec(tblBorders);
+      return m ? m[1] !== "none" && m[1] !== "nil" : false;
+    };
+    return {
+      top: ligado("top"),
+      bottom: ligado("bottom"),
+      left: ligado("left"),
+      right: ligado("right"),
+      insideH: ligado("insideH"),
+      insideV: ligado("insideV"),
+    };
+  }
+
+  // Um teste por linha da tabela-verdade — a tabela É a especificação.
+  it("all: os seis lados ligados", async () => {
+    expect(await bordasDe("all")).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: true, insideV: true,
+    });
+  });
+
+  it("outer: só os quatro externos", async () => {
+    expect(await bordasDe("outer")).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: false, insideV: false,
+    });
+  });
+
+  it("horizontal: top/bottom/insideH", async () => {
+    expect(await bordasDe("horizontal")).toEqual({
+      top: true, bottom: true, left: false, right: false, insideH: true, insideV: false,
+    });
+  });
+
+  it("vertical: left/right/insideV", async () => {
+    expect(await bordasDe("vertical")).toEqual({
+      top: false, bottom: false, left: true, right: true, insideH: false, insideV: true,
+    });
+  });
+
+  it("none: nenhum lado ligado", async () => {
+    expect(await bordasDe("none")).toEqual({
+      top: false, bottom: false, left: false, right: false, insideH: false, insideV: false,
+    });
+  });
+
+  it("preset ausente mantém a grade completa", async () => {
+    expect(await bordasDe(undefined)).toEqual({
+      top: true, bottom: true, left: true, right: true, insideH: true, insideV: true,
+    });
+  });
+});
+
 describe("linhas de resposta", () => {
   async function xmlForAttrs(attrs: Record<string, unknown>): Promise<string> {
     const { buffer } = await documentToDocxBuffer([

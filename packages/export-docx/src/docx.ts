@@ -8,6 +8,7 @@ import type {
   SerializedBlock,
   SerializedCell,
   SerializedDocument,
+  TableBorderPreset,
 } from "@sofereditor/core";
 import {
   DEFAULT_PAGE_SETTINGS,
@@ -318,6 +319,7 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
 
   return new Table({
     rows: rowsOut,
+    borders: docxTableBorders(block.attrs.borderPreset),
     ...(columnWidths
       ? {
           columnWidths,
@@ -329,6 +331,41 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
         }
       : { width: { size: 100, type: WidthType.PERCENTAGE } }),
   });
+}
+
+/**
+ * Traduz o preset para `w:tblBorders`. Lado desligado = `BorderStyle.NONE`.
+ *
+ * A tabela-verdade sai direto de `cellBorderColors`: o que aquele helper liga em
+ * TODA célula vira o par externo MAIS o interno correspondente. Ex.: em
+ * `vertical`, toda célula tem left/right ligados — logo as laterais externas
+ * (left/right) E as internas (insideV) ficam ligadas, e topo/base
+ * (top/bottom/insideH) desligados.
+ *
+ * A tabela é a especificação; a função sai dela, não o contrário.
+ */
+function docxTableBorders(preset: TableBorderPreset | undefined) {
+  const on = { style: BorderStyle.SINGLE, size: 6, color: "CBD5E1" };
+  const off = { style: BorderStyle.NONE, size: 0, color: "auto" };
+  const s = (visivel: boolean) => (visivel ? on : off);
+
+  //                                    [top/bottom, left/right, insideH, insideV]
+  const TRUTH: Record<TableBorderPreset, [boolean, boolean, boolean, boolean]> = {
+    all: [true, true, true, true],
+    outer: [true, true, false, false],
+    horizontal: [true, false, true, false],
+    vertical: [false, true, false, true],
+    none: [false, false, false, false],
+  };
+  const [tb, lr, iH, iV] = TRUTH[preset ?? "all"];
+  return {
+    top: s(tb),
+    bottom: s(tb),
+    left: s(lr),
+    right: s(lr),
+    insideHorizontal: s(iH),
+    insideVertical: s(iV),
+  };
 }
 
 function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null>): TableCell {
