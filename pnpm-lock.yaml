@@ -198,6 +198,9 @@ importers:
         specifier: ^13.6.20
         version: 13.6.30
     devDependencies:
+      '@sofereditor/export-pdf':
+        specifier: workspace:*
+        version: link:../export-pdf
       '@types/react':
         specifier: ^18.3.12
         version: 18.3.28
