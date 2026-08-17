@@ -104,6 +104,10 @@ export function serializePaginatedHtml(
          window.print(), onde "gráficos de fundo" vem desmarcado por padrão. */
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       @media print {
+        /* Guias de tela das bordas desligadas por preset. O snapshot clona o DOM
+           vivo do editor, então elas viriam junto — aqui somem. A geometria não
+           muda: o lado continua com 1px, só perde a cor. */
+        .ed-root, .ed-page, .ed-table, .ed-cell { --ed-guide-color: transparent !important; }
         @page { size: ${pageSize.width} ${pageSize.height}; margin: 0; }
         .ed-page { box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; page-break-after: always; break-after: page; }
         .ed-page:last-child { page-break-after: auto; break-after: auto; }

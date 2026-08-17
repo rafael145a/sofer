@@ -422,6 +422,18 @@ main {
   border-collapse: collapse;
   table-layout: fixed;
 }
+/* Guia de tela para lados de borda desligados por preset. Sem esta variável,
+   `var(--ed-guide-color, transparent)` cai em transparent — que é o correto
+   para impressão e para consumidores sem CSS próprio. Nunca muda a geometria:
+   o lado continua com 1px, só troca de cor. */
+.ed-root {
+  --ed-guide-color: #e9edf2;
+}
+@media print {
+  .ed-root {
+    --ed-guide-color: transparent;
+  }
+}
 .ed-cell {
   border: 1px solid #cbd5e1;
   padding: 6px 8px;

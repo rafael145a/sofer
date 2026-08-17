@@ -15,11 +15,14 @@ import type {
 import {
   BLANK_STYLE,
   answerLineStyle,
+  cellBorderStyle,
   isImageEmbed,
   isLegacySerializedDocument,
   pxToMm,
   splitUnderscoreRuns,
   styleToCssText,
+  type CellBorderPos,
+  type StyleRecord,
 } from "@sofereditor/core";
 
 function normalize(doc: SerializedDocument | LegacySerializedDocument): SerializedDocument {
@@ -202,17 +205,33 @@ function renderTable(block: SerializedBlock): string {
   if (rows <= 0 || cols <= 0) return "";
 
   const colGroup = renderColGroup(block.attrs.colWidths, cols);
+  const preset = block.attrs.borderPreset;
   const trs: string[] = [];
   for (let r = 0; r < rows; r++) {
     const tds: string[] = [];
     for (let c = 0; c < cols; c++) {
       const cell = cells[r * cols + c];
+      // Este caminho NÃO fragmenta a tabela (o HTML de servidor não pagina),
+      // então os limites do fragmento são os da tabela lógica.
+      const at = (rowspan: number, colspan: number): CellBorderPos => ({
+        row: r,
+        col: c,
+        rowspan,
+        colspan,
+        cols,
+        rowStart: 0,
+        rowEnd: rows,
+      });
       if (!cell) {
-        tds.push("<td class=\"ed-cell\"></td>");
+        // Célula ausente também precisa das bordas, senão vira um buraco na grade.
+        const style = styleToCssText(cellBorderStyle(preset, at(1, 1), "print"));
+        tds.push(`<td class="ed-cell" style="${style}"></td>`);
         continue;
       }
       if (cell.attrs?.covered) continue;
-      tds.push(renderCell(cell));
+      const rowspan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
+      const colspan = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
+      tds.push(renderCell(cell, cellBorderStyle(preset, at(rowspan, colspan), "print")));
     }
     trs.push(`<tr>${tds.join("")}</tr>`);
   }
@@ -229,14 +248,16 @@ function renderColGroup(widths: number[] | undefined, cols: number): string {
   return `<colgroup>${cells.join("")}</colgroup>`;
 }
 
-function renderCell(cell: SerializedCell): string {
+function renderCell(cell: SerializedCell, border: StyleRecord): string {
   const rs = cell.attrs?.rowspan && cell.attrs.rowspan > 1
     ? ` rowspan="${cell.attrs.rowspan}"`
     : "";
   const cs = cell.attrs?.colspan && cell.attrs.colspan > 1
     ? ` colspan="${cell.attrs.colspan}"`
     : "";
-  const styles: string[] = [];
+  // `variant: "print"` sempre: este HTML é para servidor/PDF, nunca para a tela
+  // do editor — logo, lado desligado é `transparent`, nunca a guia visual.
+  const styles: string[] = [styleToCssText(border)];
   const align = clampAlign(cell.attrs?.align);
   if (align) styles.push(`text-align:${align}`);
   if (cell.attrs?.bgColor) styles.push(`background-color:${cssValue(cell.attrs.bgColor)}`);
