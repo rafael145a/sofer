@@ -377,26 +377,40 @@ function deltaToRuns(
   return out;
 }
 
+/**
+ * Props de um `TextRun` a partir das marks. Fica numa função só porque
+ * `makeTextRun` tem dois caminhos (linha única e multi-linha) que antes
+ * duplicavam esta lista inteira — uma mark acrescentada em apenas um dos dois
+ * se perdia silenciosamente em texto com quebra de linha.
+ *
+ * `highlight` sai como `w:shd` e NÃO como `w:highlight`: este último só aceita
+ * ~15 valores nomeados e não sobreviveria a uma cor arbitrária do picker.
+ */
+function textRunProps(text: string, m: MarkAttrs, defaults: RunDefaults) {
+  const fill = cssColorToDocxHex(m.highlight);
+  return {
+    text,
+    bold: m.bold || defaults.bold,
+    italics: m.italic || defaults.italics,
+    underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
+    strike: m.strike,
+    color: cssColorToDocxHex(m.color),
+    font: m.fontFamily ?? defaults.font,
+    size: parseFontSizeToHalfPoints(m.fontSize) ?? defaults.size,
+    shading: fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined,
+  };
+}
+
 function makeTextRun(
   text: string,
   marks: MarkAttrs | undefined,
   defaults: RunDefaults,
 ): TextRun {
   const m = marks ?? {};
-  const fontSize = parseFontSizeToHalfPoints(m.fontSize);
   // TextRun reads newlines via `break`; convert \n into break runs.
   const segments = text.split("\n");
   if (segments.length === 1) {
-    return new TextRun({
-      text,
-      bold: m.bold || defaults.bold,
-      italics: m.italic || defaults.italics,
-      underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
-      strike: m.strike,
-      color: cssColorToDocxHex(m.color),
-      font: m.fontFamily ?? defaults.font,
-      size: fontSize ?? defaults.size,
-    });
+    return new TextRun(textRunProps(text, m, defaults));
   }
   // Multi-line: rejoin via TextRun children — but TextRun expects a single text
   // string. Approximate with non-printing line breaks: produce a sequence of
@@ -404,16 +418,7 @@ function makeTextRun(
   // Simpler: collapse to a single TextRun with the string, treating \n as a
   // soft-break placeholder. Word renders \n inside a w:t as a literal space,
   // so we replace with a small symbol-friendly fallback.
-  return new TextRun({
-    text: text.replace(/\n/g, " "),
-    bold: m.bold || defaults.bold,
-    italics: m.italic || defaults.italics,
-    underline: m.underline ? { type: UnderlineType.SINGLE } : undefined,
-    strike: m.strike,
-    color: cssColorToDocxHex(m.color),
-    font: m.fontFamily ?? defaults.font,
-    size: fontSize ?? defaults.size,
-  });
+  return new TextRun(textRunProps(text.replace(/\n/g, " "), m, defaults));
 }
 
 function makeImageRun(

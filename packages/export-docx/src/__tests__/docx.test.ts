@@ -377,3 +377,42 @@ describe("células de tabela", () => {
     expect(xml).not.toContain("w:tblLayout");
   });
 });
+
+describe("marca-texto (highlight)", () => {
+  async function xmlFor(delta: LegacySerializedDocument[0]["delta"]): Promise<string> {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "", delta, attrs: {} },
+    ] as LegacySerializedDocument);
+    return documentXml(buffer);
+  }
+
+  it("emite w:shd com o fill da cor de marca-texto", async () => {
+    const xml = await xmlFor([{ insert: "oi", attributes: { highlight: "#fff176" } }]);
+    expect(xml).toContain('w:fill="FFF176"');
+  });
+
+  it("não emite w:shd quando não há marca-texto", async () => {
+    const xml = await xmlFor([{ insert: "oi" }]);
+    expect(xml).not.toContain("w:shd");
+  });
+
+  it("usa w:shd e NÃO w:highlight (que só aceita ~15 cores nomeadas)", async () => {
+    const xml = await xmlFor([{ insert: "oi", attributes: { highlight: "#fff176" } }]);
+    expect(xml).not.toContain("w:highlight");
+  });
+
+  it("preserva a marca-texto em run com quebra de linha", async () => {
+    // O caminho multi-linha de makeTextRun é um segundo sítio de props; sem a
+    // extração, texto com \n perderia o fundo silenciosamente.
+    const xml = await xmlFor([{ insert: "a\nb", attributes: { highlight: "#a5d6a7" } }]);
+    expect(xml).toContain('w:fill="A5D6A7"');
+  });
+
+  it("combina marca-texto com cor de texto no mesmo run", async () => {
+    const xml = await xmlFor([
+      { insert: "oi", attributes: { color: "#ff0000", highlight: "#fff176" } },
+    ]);
+    expect(xml).toContain('w:fill="FFF176"');
+    expect(xml).toContain('w:val="FF0000"');
+  });
+});
