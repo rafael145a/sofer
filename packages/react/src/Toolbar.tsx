@@ -54,6 +54,31 @@ const ALIGN_OPTIONS: { value: AlignValue; label: string; title: string }[] = [
 
 const IMAGE_ALIGN_VALUES = new Set<AlignValue>(["left", "center", "right"]);
 
+/**
+ * Controles nativos que PRECISAM receber o `mousedown` para abrir seu
+ * dropdown/picker. Prevenir o mousedown num `<select>` impede o dropdown de
+ * abrir — foi exatamente assim que o seletor de bordas da tabela nasceu morto.
+ *
+ * A regra vivia duplicada em três handlers com três listas diferentes; fica
+ * aqui numa fonte só para não voltar a divergir.
+ */
+const NATIVE_CONTROL_TAGS = new Set(["SELECT", "INPUT", "OPTION"]);
+
+export function isNativeControl(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  return !!el && NATIVE_CONTROL_TAGS.has(el.tagName);
+}
+
+/**
+ * Alvos dentro de um popover que mantêm o próprio `mousedown`. Superconjunto de
+ * `isNativeControl` mais `BUTTON` — o resto é fundo de popover, onde o
+ * `preventDefault` protege a seleção do editor.
+ */
+export function keepsOwnMouseDown(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  return !!el && (NATIVE_CONTROL_TAGS.has(el.tagName) || el.tagName === "BUTTON");
+}
+
 const IMAGE_LAYOUT_OPTIONS: { value: ImageLayout; label: string; title: string }[] = [
   { value: "inline", label: "↔", title: "Inline (no fluxo do texto)" },
   { value: "wrap-left", label: "◧", title: "Texto contorna à direita" },
@@ -95,10 +120,7 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
   // BUT let native form controls (select/input) receive mousedown normally so their
   // dropdowns/pickers can open.
   const stop = (e: MouseEvent) => {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === "SELECT" || t.tagName === "INPUT" || t.tagName === "OPTION")) {
-      return;
-    }
+    if (isNativeControl(e.target)) return;
     e.preventDefault();
   };
 
@@ -562,10 +584,7 @@ function AnswerLinesMenu(): JSX.Element {
           className="ed-table-popover ed-answerlines-popover"
           role="menu"
           onMouseDown={(e) => {
-            const t = e.target as HTMLElement | null;
-            if (!t || (t.tagName !== "INPUT" && t.tagName !== "BUTTON" && t.tagName !== "SELECT")) {
-              e.preventDefault();
-            }
+            if (!keepsOwnMouseDown(e.target)) e.preventDefault();
           }}
         >
           <label className="ed-toolbar-label">
@@ -644,10 +663,7 @@ function TableMenu(): JSX.Element {
           role="menu"
           onMouseDown={(e) => {
             // Do not let mousedown clear the editor selection.
-            const t = e.target as HTMLElement | null;
-            if (!t || (t.tagName !== "INPUT" && t.tagName !== "BUTTON")) {
-              e.preventDefault();
-            }
+            if (!keepsOwnMouseDown(e.target)) e.preventDefault();
           }}
         >
           <TableSizePicker
