@@ -119,6 +119,13 @@ header h1 { margin: 0 0 4px; font-size: 18px; }
   border-radius: 3px;
   border: 1px solid var(--border);
 }
+/* Marca-texto: barra larga e baixa, para não virar um segundo quadrado igual
+   ao da cor do texto logo ao lado. */
+.ed-toolbar-swatch--highlight {
+  width: 16px;
+  height: 7px;
+  border-radius: 2px;
+}
 
 .ed-history-controls {
   display: flex;

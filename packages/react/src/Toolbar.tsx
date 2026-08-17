@@ -102,6 +102,10 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
     setMark("color", e.target.value);
   };
 
+  const onHighlightChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setMark("highlight", e.target.value);
+  };
+
   const onFontFamilyChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value;
     if (v === "") removeMark("fontFamily");
@@ -179,6 +183,8 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
   );
 
   const colorValue = typeof active.color === "string" ? active.color : "#000000";
+  // Amarelo clássico de marca-texto como padrão do picker quando nada está marcado.
+  const highlightValue = typeof active.highlight === "string" ? active.highlight : "#fff176";
   const fontFamilyValue = typeof active.fontFamily === "string" ? active.fontFamily : "";
   const fontSizeValue = typeof active.fontSize === "string" ? active.fontSize : "";
   const blockValue = blockSelectValue(blockType, blockLevel);
@@ -258,6 +264,32 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
           onClick={(e) => {
             e.preventDefault();
             removeMark("color");
+          }}
+        >
+          ⌫
+        </button>
+        <label className="ed-toolbar-label" title="Marca-texto">
+          <span
+            className="ed-toolbar-swatch ed-toolbar-swatch--highlight"
+            aria-hidden
+            style={{ background: highlightValue }}
+          />
+          <input
+            type="color"
+            value={highlightValue}
+            onChange={onHighlightChange}
+            onMouseDown={stop}
+            aria-label="Marca-texto"
+          />
+        </label>
+        <button
+          type="button"
+          className="ed-toolbar-btn"
+          title="Remover marca-texto"
+          onMouseDown={stop}
+          onClick={(e) => {
+            e.preventDefault();
+            removeMark("highlight");
           }}
         >
           ⌫
