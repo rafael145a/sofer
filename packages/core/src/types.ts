@@ -110,6 +110,7 @@ export type MarkName =
   | "underline"
   | "strike"
   | "color"
+  | "highlight"
   | "fontFamily"
   | "fontSize"
   | "link"
@@ -131,6 +132,8 @@ export interface MarkAttrs {
   underline?: true;
   strike?: true;
   color?: string;
+  /** Cor de fundo do texto (marca-texto). CSS color, ex. `#fff176`. */
+  highlight?: string;
   fontFamily?: string;
   fontSize?: string;
   link?: LinkAttr;

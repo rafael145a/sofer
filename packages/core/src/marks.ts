@@ -17,6 +17,7 @@ const ALL_MARKS: Record<MarkName, true> = {
   underline: true,
   strike: true,
   color: true,
+  highlight: true,
   fontFamily: true,
   fontSize: true,
   link: true,

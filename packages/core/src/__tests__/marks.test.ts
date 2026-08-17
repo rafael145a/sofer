@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  CLEAR_ALL_MARKS,
   EditorDocument,
   EditorHistory,
   collapsedSelection,
+  getMarksInRange,
   insertParagraph,
   insertText,
   removeMark,
@@ -170,5 +172,51 @@ describe("marks", () => {
     const d = h.delta();
     expect(d[0]).toEqual({ insert: "bold", attributes: { bold: true } });
     expect(d[1]).toEqual({ insert: "plain" });
+  });
+});
+
+describe("highlight (marca-texto)", () => {
+  it("aparece em CLEAR_ALL_MARKS", () => {
+    expect(CLEAR_ALL_MARKS).toHaveProperty("highlight", null);
+  });
+
+  it("setMark aplica e substitui a cor de fundo", () => {
+    const h = harness();
+    insertText(h.ctx, "abc");
+    select(h, 0, 3);
+    setMark(h.ctx, "highlight", "#fff176");
+    expect(h.delta()).toEqual([{ insert: "abc", attributes: { highlight: "#fff176" } }]);
+    setMark(h.ctx, "highlight", "#a5d6a7");
+    expect(h.delta()).toEqual([{ insert: "abc", attributes: { highlight: "#a5d6a7" } }]);
+  });
+
+  it("removeMark limpa a marca-texto", () => {
+    const h = harness();
+    insertText(h.ctx, "abc");
+    select(h, 0, 3);
+    setMark(h.ctx, "highlight", "#fff176");
+    removeMark(h.ctx, "highlight");
+    expect(h.delta()).toEqual([{ insert: "abc" }]);
+  });
+
+  it("getMarksInRange devolve a cor quando uniforme e 'mixed' quando não", () => {
+    const h = harness();
+    insertText(h.ctx, "abcdef");
+    select(h, 2, 4);
+    setMark(h.ctx, "highlight", "#fff176");
+    const yText = h.doc.getBlockText(0)!;
+    expect(getMarksInRange(yText, 2, 4)).toEqual({ highlight: "#fff176" });
+    expect(getMarksInRange(yText, 0, 6).highlight).toBe("mixed");
+  });
+
+  it("convive com as outras marks no mesmo run", () => {
+    const h = harness();
+    insertText(h.ctx, "abc");
+    select(h, 0, 3);
+    setMark(h.ctx, "highlight", "#fff176");
+    toggleMark(h.ctx, "bold");
+    expect(h.delta()).toEqual([
+      { insert: "abc", attributes: { highlight: "#fff176", bold: true } },
+    ]);
   });
 });
