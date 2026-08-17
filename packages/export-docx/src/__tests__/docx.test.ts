@@ -378,6 +378,44 @@ describe("células de tabela", () => {
   });
 });
 
+describe("linhas de resposta", () => {
+  async function xmlForAttrs(attrs: Record<string, unknown>): Promise<string> {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "", delta: [], attrs },
+    ] as unknown as LegacySerializedDocument);
+    return documentXml(buffer);
+  }
+
+  it("emite pBdr inferior em linha de resposta", async () => {
+    const xml = await xmlForAttrs({ answerLine: true });
+    expect(xml).toContain("w:pBdr");
+    expect(xml).toContain("w:bottom");
+  });
+
+  it("mapeia entrelinha para twips (240 = 1 linha)", async () => {
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 1 })).toContain(
+      'w:line="240"',
+    );
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 1.5 })).toContain(
+      'w:line="360"',
+    );
+    expect(await xmlForAttrs({ answerLine: true, answerLineSpacing: 2 })).toContain(
+      'w:line="480"',
+    );
+  });
+
+  it("entrelinha ausente vale 1 linha", async () => {
+    expect(await xmlForAttrs({ answerLine: true })).toContain('w:line="240"');
+  });
+
+  it("não emite pBdr em parágrafo comum", async () => {
+    const { buffer } = await documentToDocxBuffer([
+      { type: "paragraph", text: "oi", delta: [{ insert: "oi" }], attrs: {} },
+    ] as LegacySerializedDocument);
+    expect(await documentXml(buffer)).not.toContain("w:pBdr");
+  });
+});
+
 describe("marca-texto (highlight)", () => {
   async function xmlFor(delta: LegacySerializedDocument[0]["delta"]): Promise<string> {
     const { buffer } = await documentToDocxBuffer([

@@ -23,6 +23,7 @@ import {
   HeadingLevel,
   ImageRun,
   LevelFormat,
+  LineRuleType,
   Packer,
   Paragraph,
   PageOrientation,
@@ -208,8 +209,27 @@ function makeParagraph(
   return new Paragraph({
     alignment: alignFor(block.attrs.align),
     bidirectional: block.attrs.dir === "rtl" ? true : undefined,
+    ...answerLineProps(block.attrs),
     children: deltaToRuns(block.delta, ARIAL, images),
   });
+}
+
+/**
+ * Linha de resposta → borda inferior de parágrafo (`w:pBdr`) + entrelinha.
+ * É como um documento profissional desenha uma pauta: a régua acompanha a
+ * margem automaticamente, ao contrário de uma fileira de underlines.
+ *
+ * 240 twips = uma linha simples no OOXML.
+ */
+function answerLineProps(attrs: SerializedBlock["attrs"]) {
+  if (attrs.answerLine !== true) return {};
+  const spacing = attrs.answerLineSpacing ?? 1;
+  return {
+    border: {
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: "000000", space: 1 },
+    },
+    spacing: { line: Math.round(240 * spacing), lineRule: LineRuleType.AUTO },
+  };
 }
 
 function makeHeading(
