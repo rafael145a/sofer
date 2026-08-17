@@ -99,6 +99,18 @@ describe("documentToHtmlFragment", () => {
     expect(tdCount).toBe(1);
   });
 
+  it("emits highlight as background-color on the same span as color/font", () => {
+    const html = frag([
+      {
+        type: "paragraph",
+        text: "x",
+        delta: [{ insert: "x", attributes: { color: "#ff0000", highlight: "#fff176" } }],
+        attrs: {},
+      },
+    ]);
+    expect(html).toContain('<span style="color:#ff0000;background-color:#fff176">x</span>');
+  });
+
   it("emits cell background color as inline style on the <td>", () => {
     const html = frag([
       {

@@ -270,6 +270,7 @@ function applyMarks(text: string, attrs: MarkAttrs | undefined): string {
   if (attrs.strike) html = `<s>${html}</s>`;
   const styles: string[] = [];
   if (attrs.color) styles.push(`color:${cssValue(attrs.color)}`);
+  if (attrs.highlight) styles.push(`background-color:${cssValue(attrs.highlight)}`);
   if (attrs.fontFamily) styles.push(`font-family:${cssValue(attrs.fontFamily)}`);
   if (attrs.fontSize) styles.push(`font-size:${cssValue(attrs.fontSize)}`);
   if (styles.length > 0) html = `<span style="${styles.join(";")}">${html}</span>`;

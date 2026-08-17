@@ -274,6 +274,7 @@ function wrap(text: string, attrs?: MarkAttrs): ReactNode {
 
   const styleParts: CSSProperties = {};
   if (attrs.color) styleParts.color = attrs.color;
+  if (attrs.highlight) styleParts.backgroundColor = attrs.highlight;
   if (attrs.fontFamily) styleParts.fontFamily = attrs.fontFamily;
   if (attrs.fontSize) styleParts.fontSize = attrs.fontSize;
   if (Object.keys(styleParts).length > 0) {
