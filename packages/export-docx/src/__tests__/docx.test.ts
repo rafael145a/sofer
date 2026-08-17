@@ -407,6 +407,35 @@ describe("presets de borda de tabela", () => {
     };
   }
 
+  async function corDaBorda(preset: string, borderColor?: string): Promise<string> {
+    const cells = Array.from({ length: 4 }, () => ({ text: "", delta: [], attrs: {} }));
+    const { buffer } = await documentToDocxBuffer([
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 2, cols: 2, borderPreset: preset, ...(borderColor ? { borderColor } : {}) },
+        cells,
+      },
+      { type: "paragraph", text: "", delta: [], attrs: {} },
+    ] as unknown as LegacySerializedDocument);
+    const xml = await documentXml(buffer);
+    const tblBorders = /<w:tblBorders>([\s\S]*?)<\/w:tblBorders>/.exec(xml)?.[1] ?? "";
+    return /<w:top\b[^>]*w:color="([^"]+)"/.exec(tblBorders)?.[1] ?? "";
+  }
+
+  it("emite a cor escolhida no w:tblBorders", async () => {
+    expect(await corDaBorda("all", "#000000")).toBe("000000");
+  });
+
+  it("sem cor escolhida emite o padrão CBD5E1", async () => {
+    expect(await corDaBorda("all")).toBe("CBD5E1");
+  });
+
+  it("cor inválida cai no padrão em vez de emitir lixo", async () => {
+    expect(await corDaBorda("all", "não-é-cor")).toBe("CBD5E1");
+  });
+
   // Um teste por linha da tabela-verdade — a tabela É a especificação.
   it("all: os seis lados ligados", async () => {
     expect(await bordasDe("all")).toEqual({

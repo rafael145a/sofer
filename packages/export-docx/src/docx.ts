@@ -319,7 +319,7 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
 
   return new Table({
     rows: rowsOut,
-    borders: docxTableBorders(block.attrs.borderPreset),
+    borders: docxTableBorders(block.attrs.borderPreset, block.attrs.borderColor),
     ...(columnWidths
       ? {
           columnWidths,
@@ -344,8 +344,11 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
  *
  * A tabela é a especificação; a função sai dela, não o contrário.
  */
-function docxTableBorders(preset: TableBorderPreset | undefined) {
-  const on = { style: BorderStyle.SINGLE, size: 6, color: "CBD5E1" };
+function docxTableBorders(preset: TableBorderPreset | undefined, color?: string) {
+  // Cor inválida ou ausente cai no padrão: `cssColorToDocxHex` devolve undefined
+  // para o que não souber converter.
+  const hex = cssColorToDocxHex(color) ?? "CBD5E1";
+  const on = { style: BorderStyle.SINGLE, size: 6, color: hex };
   const off = { style: BorderStyle.NONE, size: 0, color: "auto" };
   const s = (visivel: boolean) => (visivel ? on : off);
 
