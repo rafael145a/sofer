@@ -191,3 +191,24 @@ export function textOf(node: OoxmlNode): string {
   }
   return out;
 }
+
+/**
+ * Um lado de borda (`w:top`, `w:left`, `w:insideH`, …) está LIGADO?
+ *
+ * A mera presença do elemento não basta: o Word grava blocos de borda
+ * COMPLETOS com todos os lados `w:val="none"` — uma declaração no-op. Ler só a
+ * presença fazia parágrafos comuns virarem blockquote (cinza e itálico) só
+ * porque traziam um `w:pBdr` vazio de significado.
+ *
+ * Aceita nomes alternativos porque o OOXML estrito usa `w:start`/`w:end` no
+ * lugar de `w:left`/`w:right`.
+ */
+export function borderSideOn(parent: OoxmlNode | undefined, ...names: string[]): boolean {
+  if (!parent) return false;
+  return names.some((name) => {
+    const n = findChild(parent, name);
+    if (!n) return false;
+    const val = (attr(n, "w:val") ?? "").toLowerCase();
+    return val !== "" && val !== "none" && val !== "nil";
+  });
+}

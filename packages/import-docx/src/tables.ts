@@ -8,6 +8,7 @@ import type {
 } from "@sofereditor/core";
 import {
   attr,
+  borderSideOn,
   childrenOf,
   findChild,
   findChildren,
@@ -170,14 +171,9 @@ function readBorderPreset(tbl: OoxmlNode): TableBorderPreset | undefined {
   const b = tblPr ? findChild(tblPr, "w:tblBorders") : undefined;
   if (!b) return undefined;
 
-  // OOXML estrito usa start/end no lugar de left/right.
-  const ligado = (...nomes: string[]): boolean =>
-    nomes.some((nome) => {
-      const n = findChild(b, nome);
-      if (!n) return false;
-      const val = (attr(n, "w:val") ?? "").toLowerCase();
-      return val !== "" && val !== "none" && val !== "nil";
-    });
+  // `borderSideOn` trata os nomes alternativos do OOXML estrito (start/end) e
+  // ignora lados declarados como "none"/"nil".
+  const ligado = (...nomes: string[]): boolean => borderSideOn(b, ...nomes);
 
   const top = ligado("w:top");
   const bottom = ligado("w:bottom");
