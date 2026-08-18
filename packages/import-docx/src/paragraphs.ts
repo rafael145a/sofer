@@ -8,6 +8,7 @@ import type {
 } from "@sofereditor/core";
 import {
   attr,
+  borderSideOn,
   childrenOf,
   findChild,
   tagOf,
@@ -101,10 +102,7 @@ function readAnswerLine(pPr: OoxmlNode | undefined, hasText: boolean): Partial<B
   if (!pPr || hasText) return {};
   const pBdr = findChild(pPr, "w:pBdr");
   if (!pBdr) return {};
-  const bottom = findChild(pBdr, "w:bottom");
-  if (!bottom) return {};
-  const val = (attr(bottom, "w:val") ?? "").toLowerCase();
-  if (val === "" || val === "none" || val === "nil") return {};
+  if (!borderSideOn(pBdr, "w:bottom")) return {};
   return { answerLine: true, answerLineSpacing: readAnswerLineSpacing(pPr) };
 }
 
@@ -144,7 +142,10 @@ function headingFromStyleId(id: string): 1 | 2 | 3 | 4 | 5 | 6 | null {
 function hasLeftBorder(pPr: OoxmlNode): boolean {
   const pBdr = findChild(pPr, "w:pBdr");
   if (!pBdr) return false;
-  return !!findChild(pBdr, "w:left");
+  // `borderSideOn` (e não a mera presença do elemento): o Word grava pBdr
+  // completo com todos os lados "none", e ler a presença convertia parágrafo
+  // comum em blockquote.
+  return borderSideOn(pBdr, "w:left", "w:start");
 }
 
 function hasCodeBlockShading(pPr: OoxmlNode): boolean {
