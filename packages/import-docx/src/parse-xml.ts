@@ -104,12 +104,50 @@ export function tagOf(node: OoxmlNode): string | null {
   return null;
 }
 
-/** Returns the children array of an element, or [] when none. */
+/**
+ * Returns the children array of an element, or [] when none.
+ *
+ * Content controls (`w:sdt`) são desembrulhados aqui, no lugar. No OOXML eles
+ * são wrappers TRANSPARENTES: o conteúdo real vive em `w:sdtContent` e o
+ * `w:sdtPr` carrega só metadados (alias, trava). O Word emite `w:sdt` ao
+ * BLOQUEAR um trecho, e ele pode aparecer em qualquer nível — envolvendo uma
+ * tabela no body, uma `w:tc` dentro de `w:tr`, um `w:p` dentro de `w:tc`, ou um
+ * `w:r` dentro de `w:p`.
+ *
+ * Desembrulhar aqui, e não em cada chamador, é o que garante que todos esses
+ * níveis funcionem: `findChild` e `findChildren` também passam por aqui. Antes
+ * disso, cada lista branca de tag ignorava o `w:sdt` e o conteúdo travado sumia
+ * silenciosamente.
+ */
 export function childrenOf(node: OoxmlNode): OoxmlNode[] {
   const tag = tagOf(node);
   if (!tag) return [];
   const v = node[tag];
-  return Array.isArray(v) ? (v as OoxmlNode[]) : [];
+  if (!Array.isArray(v)) return [];
+  const kids = v as OoxmlNode[];
+  // Caminho rápido: sem content control, devolve o array original sem alocar.
+  // `childrenOf` é chamada em todo nó do documento.
+  let temSdt = false;
+  for (const k of kids) {
+    if (tagOf(k) === "w:sdt") {
+      temSdt = true;
+      break;
+    }
+  }
+  if (!temSdt) return kids;
+
+  const out: OoxmlNode[] = [];
+  for (const k of kids) {
+    if (tagOf(k) !== "w:sdt") {
+      out.push(k);
+      continue;
+    }
+    // Só `w:sdtContent` é conteúdo; `w:sdtPr`/`w:sdtEndPr` são metadados.
+    // A recursão trata content controls aninhados.
+    const content = childrenOf(k).find((c) => tagOf(c) === "w:sdtContent");
+    if (content) out.push(...childrenOf(content));
+  }
+  return out;
 }
 
 /** Returns the attribute bag (already with `@_` prefix) for an element. */
