@@ -1,7 +1,30 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import type { DeltaOp, SerializedBlock } from "@sofereditor/core";
+import {
+  collapsedSelection,
+  EditorDocument,
+  insertSlice,
+  insertText,
+  setBlockType,
+  type CommandContext,
+  type DeltaOp,
+  type Selection,
+  type SerializedBlock,
+} from "@sofereditor/core";
 import { htmlToSlice } from "../htmlToSlice";
+
+function harness() {
+  const doc = new EditorDocument();
+  let selection: Selection = collapsedSelection({ blockIndex: 0, offset: 0 });
+  const ctx: CommandContext = {
+    doc,
+    getSelection: () => selection,
+    setSelection: (s) => {
+      selection = s;
+    },
+  };
+  return { ctx, doc, get selection() { return selection; } };
+}
 
 // As fixtures abaixo copiam a FORMA real que Word e Google Docs emitem no
 // clipboard HTML (mso-*, class=MsoNormal, o wrapper <b style="font-weight:
@@ -420,6 +443,78 @@ describe("htmlToSlice — headings, blockquote, link", () => {
     const slice = htmlToSlice(html);
     const linkOp = slice!.blocks[0].delta.find((o) => o.insert === "o portal");
     expect(linkOp?.attributes?.link).toEqual({ href: "https://alefperetz.org.br" });
+  });
+});
+
+describe("htmlToSlice — C1: blockLevel só quando o bloco único NÃO é parágrafo", () => {
+  // As três formas reais que o clipboard emite ao copiar um trecho curto
+  // (duas palavras) de cada origem — sem <p>/<div> em volta na maioria dos
+  // casos, só nós inline soltos que `flushLoose` junta num único parágrafo.
+  it("site/Chrome: span solto com meta charset na frente não marca blockLevel", () => {
+    const html = `<meta charset='utf-8'><span style="color:#000">duas palavras</span>`;
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blocks[0].type).toBe("paragraph");
+    expect(slice.blocks[0].text).toBe("duas palavras");
+    expect(slice.blockLevel).toBeFalsy();
+  });
+
+  it("Word: <div class=WordSection1><p class=MsoNormal><span>...</span></p></div> não marca blockLevel", () => {
+    const html = `<div class=WordSection1><p class=MsoNormal><span>duas palavras</span></p></div>`;
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blocks[0].type).toBe("paragraph");
+    expect(slice.blockLevel).toBeFalsy();
+  });
+
+  it("Google Docs: wrapper <b style='font-weight:normal' id=docs-internal-guid-...> não marca blockLevel", () => {
+    const html = `<b style="font-weight:normal" id="docs-internal-guid-abc123"><span>duas palavras</span></b>`;
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blocks[0].type).toBe("paragraph");
+    expect(slice.blockLevel).toBeFalsy();
+  });
+
+  it("via insertSlice: colar no MEIO de um parágrafo resulta em UM bloco só (não três)", () => {
+    const h = harness();
+    insertText(h.ctx, "Antes  depois");
+    // "Antes " tem 6 chars — caret entre "Antes " e " depois".
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 6 }));
+    const slice = htmlToSlice(`<span>duas palavras</span>`)!;
+    expect(slice.blockLevel).toBeFalsy();
+    insertSlice(h.ctx, slice);
+    expect(h.doc.blockCount()).toBe(1);
+    expect(h.doc.getBlockText(0)!.toString()).toBe("Antes duas palavras depois");
+  });
+
+  it("via insertSlice: colar no INÍCIO de um <h1> não rebaixa o título a paragraph", () => {
+    const h = harness();
+    insertText(h.ctx, "Título");
+    setBlockType(h.ctx, "heading", { level: 1 });
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 0 }));
+    const slice = htmlToSlice(`<span>duas palavras</span>`)!;
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(0)).toBe("heading");
+    expect(h.doc.getBlockText(0)!.toString()).toBe("duas palavrasTítulo");
+  });
+
+  it("não-regressão: <h1> sozinho continua adotando o tipo (blockLevel true)", () => {
+    const slice = htmlToSlice(`<h1>Título</h1>`)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blockLevel).toBe(true);
+  });
+
+  it("não-regressão: <li> sozinho continua adotando o tipo (blockLevel true)", () => {
+    const slice = htmlToSlice(`<ul><li>item</li></ul>`)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blocks[0].type).toBe("listItem");
+    expect(slice.blockLevel).toBe(true);
+  });
+
+  it("não-regressão: <blockquote> sozinho continua adotando o tipo (blockLevel true)", () => {
+    const slice = htmlToSlice(`<blockquote>citação</blockquote>`)!;
+    expect(slice.blocks).toHaveLength(1);
+    expect(slice.blockLevel).toBe(true);
   });
 });
 

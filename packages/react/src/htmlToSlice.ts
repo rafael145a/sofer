@@ -70,7 +70,25 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   const temTexto = blocks.some((b) => b.text.trim().length > 0);
   if (!temTexto) return null;
 
-  return { blocks, openStart: false, openEnd: false, blockLevel: true };
+  // `blockLevel: true` diz a `insertSlice` para ADOTAR o type/attrs do bloco
+  // colado em vez de fazer splice inline (ver o comentário em `insertSlice`).
+  // Isso só vale a pena quando o resultado tem mais de um bloco (é
+  // inequivocamente uma sequência de blocos externa) OU quando o único bloco
+  // NÃO é um parágrafo simples (heading/listItem/blockquote — adotar o tipo é
+  // o ganho real). Um ÚNICO parágrafo — a forma mais comum de colagem curta,
+  // vinda de nós inline soltos (site/Chrome `<span>`, Word `<p class=
+  // MsoNormal><span>`, Docs `<b style="font-weight:normal">`) — NÃO é uma
+  // "colagem de bloco inteiro" no sentido que importa aqui: marcar
+  // `blockLevel` nesse caso faz `insertSlice` tratar até um trecho de duas
+  // palavras como bloco externo, partindo o parágrafo do professor em três
+  // (Dhead / bloco colado / tail) em vez de um splice inline, e — pior —
+  // colar no offset 0 de um heading fazia `am.clear()` nos attrs do bloco
+  // alvo, rebaixando o título a `paragraph`. Sem `blockLevel`, esse caso cai
+  // no ramo de splice inline (comportamento de antes da branch); um bloco
+  // único que É heading/listItem/blockquote continua adotando o tipo — o
+  // ganho que motivou esta branch.
+  const blockLevel = blocks.length > 1 || blocks[0].type !== "paragraph";
+  return { blocks, openStart: false, openEnd: false, ...(blockLevel ? { blockLevel: true as const } : {}) };
 }
 
 // ---------------------------------------------------------------------------
