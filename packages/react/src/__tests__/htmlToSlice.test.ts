@@ -745,6 +745,25 @@ describe("htmlToSlice — tabela", () => {
   });
 });
 
+describe("htmlToSlice — I3: <br> vira espaço, nunca \\n literal no texto do bloco", () => {
+  // "\n" literal só é legítimo dentro de célula de tabela (ver
+  // core/src/commands.ts, com white-space: pre-wrap no CSS da célula).
+  // .ed-block não tem pre-wrap, então "\n" virava espaço visual mas era um
+  // caractere invisível que contava offset e travava o caret.
+  it("<p>linha1<br>linha2</p> vira 'linha1 linha2', sem \\n no texto", () => {
+    const html = `<p>linha1<br>linha2</p>`;
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks[0].text).toBe("linha1 linha2");
+    expect(slice.blocks[0].text).not.toContain("\n");
+  });
+
+  it("múltiplos <br> seguidos não deixam \\n no texto", () => {
+    const html = `<p>a<br><br>b</p>`;
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks[0].text).not.toContain("\n");
+  });
+});
+
 describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
   it("<img> é ignorado sem quebrar o texto ao redor", () => {
     const html = `<p>antes <img src="data:image/png;base64,xyz"> depois</p>`;

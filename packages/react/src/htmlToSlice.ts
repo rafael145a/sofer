@@ -522,7 +522,15 @@ function walkInlineNode(node: ChildNode, marks: MarkAttrs, ops: DeltaOp[]): void
   if (IGNORED_TAGS.has(tag) || isNamespacedTag(tag)) return;
   if (tag === "img") return; // imagens ignoradas neste caminho.
   if (tag === "br") {
-    ops.push({ insert: "\n" });
+    // "\n" literal só é legítimo dentro de célula de tabela (ver
+    // `core/src/commands.ts`, com `white-space: pre-wrap` no CSS da célula).
+    // `.ed-block` não tem `pre-wrap`, então um "\n" aqui virava espaço visual
+    // mas continuava sendo um caractere invisível que contava offset e
+    // travava o caret ao passar por ele. Correção mínima pra esta release:
+    // emitir " " em vez de quebrar em blocos de verdade — quebrar em blocos
+    // mudaria o contrato de `inlineDeltaFromNodes` (que hoje devolve um delta
+    // pra um bloco só). Fica como trabalho futuro.
+    ops.push({ insert: " " });
     return;
   }
 
