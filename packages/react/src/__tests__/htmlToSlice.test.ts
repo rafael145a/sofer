@@ -147,6 +147,108 @@ describe("htmlToSlice — Word: mso-list vira listItem com nível certo, sem o m
   });
 });
 
+describe("htmlToSlice — Word: mso-list nível pela indentação (margin-left), não só por levelN", () => {
+  // Dado real capturado do clipboard de um documento Word: um <li> pai
+  // (mso-list:l0 level1) seguido de quatro <p> irmãos (mso-list:l1 level1,
+  // margin-left:72.0pt) — duas listas mso-list DIFERENTES (l0/lfo1 e
+  // l1/lfo2), ambas "level1". O Word representa a profundidade dos filhos
+  // só pela margem, não pelo levelN. Sem considerar a margem, os quatro
+  // filhos caem em listLevel 0 igual ao pai (bug real).
+  it("caso real: <li> pai (level1, sem margem) + 4 <p> filhos (level1, margin-left:72pt) → pai nível 0, filhos nível 1", () => {
+    const filho = (texto: string) =>
+      `<p class=MsoNormal style='margin-top:0cm;margin-right:0cm;margin-bottom:0cm;` +
+      `margin-left:72.0pt;text-align:justify;text-indent:-18.0pt;line-height:150%;` +
+      `mso-list:l1 level1 lfo2'>` +
+      `<span style='mso-list:Ignore'>●<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;</span></span>` +
+      `${texto}</p>`;
+    const html =
+      `<li class=MsoNormal style='color:#2F222A;margin-top:12.0pt;margin-bottom:0cm;` +
+      `text-align:justify;line-height:150%;mso-list:l0 level1 lfo1'>Item pai</li>` +
+      filho("Sub-item 1") +
+      filho("Sub-item 2") +
+      filho("Sub-item 3") +
+      filho("Sub-item 4");
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    expect(slice!.blocks).toHaveLength(5);
+
+    const [pai, ...filhos] = slice!.blocks;
+    expect(pai.type).toBe("listItem");
+    expect(pai.attrs.listLevel).toBe(0);
+    expect(pai.text).toBe("Item pai");
+
+    expect(filhos).toHaveLength(4);
+    filhos.forEach((f, i) => {
+      expect(f.type).toBe("listItem");
+      expect(f.attrs.listLevel).toBe(1);
+      expect(f.attrs.listKind).toBe("bullet");
+      expect(f.text).toBe(`Sub-item ${i + 1}`);
+      expect(f.text).not.toContain("●");
+    });
+  });
+
+  it("não-regressão: mso-list:l0 level1 sem margin-left continua nível 0", () => {
+    const html = `<p style='mso-list:l0 level1 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(0);
+  });
+
+  it("não-regressão: mso-list:l0 level2 sem margin-left continua nível 1", () => {
+    const html = `<p style='mso-list:l0 level2 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(1);
+  });
+
+  it("margin-left em cm (2.54cm ≈ 72pt) dá o mesmo nível que 72.0pt", () => {
+    const htmlPt = `<p style='margin-left:72.0pt;mso-list:l1 level1 lfo2'>item</p>`;
+    const htmlCm = `<p style='margin-left:2.54cm;mso-list:l1 level1 lfo2'>item</p>`;
+    const sliceCm = htmlToSlice(htmlCm);
+    const slicePt = htmlToSlice(htmlPt);
+    expect(sliceCm!.blocks[0].attrs.listLevel).toBe(slicePt!.blocks[0].attrs.listLevel);
+    expect(sliceCm!.blocks[0].attrs.listLevel).toBe(1);
+  });
+
+  it("margin-left:36.0pt dá nível 0 (primeiro nível, não o segundo)", () => {
+    const html = `<p style='margin-left:36.0pt;mso-list:l0 level1 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(0);
+  });
+
+  it("margin-left:108.0pt dá nível 2", () => {
+    const html = `<p style='margin-left:108.0pt;mso-list:l0 level1 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(2);
+  });
+
+  it("text-indent:-18.0pt sozinho, sem margin-left, não cria nível", () => {
+    const html = `<p style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(0);
+  });
+
+  it("margin-left ausente ou 'auto' → nível vem só do levelN", () => {
+    const htmlAusente = `<p style='mso-list:l1 level3 lfo2'>item</p>`;
+    const htmlAuto = `<p style='margin-left:auto;mso-list:l1 level3 lfo2'>item</p>`;
+    const sliceAusente = htmlToSlice(htmlAusente);
+    const sliceAuto = htmlToSlice(htmlAuto);
+    expect(sliceAusente!.blocks[0].attrs.listLevel).toBe(2);
+    expect(sliceAuto!.blocks[0].attrs.listLevel).toBe(2);
+  });
+
+  it("levelN alto com margem pequena continua vencendo (max funciona nos dois sentidos)", () => {
+    const html = `<p style='margin-left:5.0pt;mso-list:l1 level3 lfo2'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(2);
+  });
+
+  it("nível acima do teto (MAX_LIST_LEVEL) é limitado, não estoura", () => {
+    const html = `<p style='margin-left:999.0pt;mso-list:l0 level1 lfo1'>item</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].attrs.listLevel).toBeLessThanOrEqual(5);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(5);
+  });
+});
+
 describe("htmlToSlice — Word: marcador numérico vs símbolo", () => {
   it("marcador '1.' vira ordered", () => {
     const html =

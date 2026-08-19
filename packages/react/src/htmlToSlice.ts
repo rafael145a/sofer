@@ -388,13 +388,57 @@ function directRows(table: Element): Element[] {
 // Word: `mso-list` (sem <ul>/<ol>/<li> reais)
 // ---------------------------------------------------------------------------
 
-/** `mso-list:l0 level2 lfo1` → nível 1 (level é 1-based no Word). */
+/**
+ * `mso-list:l0 level2 lfo1` → nível 1 (level é 1-based no Word).
+ *
+ * Isso sozinho não basta: o Word pode usar duas listas mso-list *separadas*
+ * para pai e filho (`l0`/`lfo1` vs `l1`/`lfo2`) e marcar as duas como
+ * `level1` — a profundidade real então só aparece no `margin-left` do
+ * parágrafo, não no `levelN`. Por isso o nível final é o MAIOR entre o que
+ * vem do `levelN` e o que vem da indentação (`nivelPelaMargem`): nenhum dos
+ * dois caminhos é descartado, porque cada um cobre um caso que o outro não
+ * cobre (levelN real sem margin-left; margin-left real com level1 repetido).
+ */
 function parseWordListLevel(styleAttr: string): number | null {
   const m = /mso-list\s*:\s*l\d+\s+level(\d+)/i.exec(styleAttr);
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);
-  if (!Number.isFinite(n)) return 0;
-  return clampLevel(n - 1);
+  const fromLevelN = Number.isFinite(n) ? Math.max(0, n - 1) : 0;
+  const fromMargin = wordListLevelFromMarginLeft(marginLeftPt(styleAttr));
+  return clampLevel(Math.max(fromLevelN, fromMargin));
+}
+
+/** `margin-left` do parágrafo, convertido para pt. Aceita `pt`/`cm`/`in`/`px`;
+ *  ausente, `auto`, negativo ou não-parseável conta como 0 (nunca reduz o
+ *  nível abaixo do que `levelN` já indicava). Ignora `text-indent` de
+ *  propósito — é o recuo pendente do marcador (`-18pt` típico), não a
+ *  profundidade do item. */
+function marginLeftPt(styleAttr: string): number {
+  const raw = parseStyle(styleAttr)["margin-left"];
+  if (!raw) return 0;
+  const m = /^(-?[\d.]+)\s*(pt|cm|in|px)$/i.exec(raw.trim());
+  if (!m) return 0;
+  const val = Number.parseFloat(m[1]);
+  if (!Number.isFinite(val) || val < 0) return 0;
+  switch (m[2].toLowerCase()) {
+    case "pt":
+      return val;
+    case "cm":
+      return val * 28.3465;
+    case "in":
+      return val * 72;
+    case "px":
+      return val * 0.75;
+    default:
+      return 0;
+  }
+}
+
+/** 36pt (0,5") é o passo padrão de indentação de lista do Word: primeiro
+ *  nível de recuo (36pt) é nível 0, cada 36pt adicional soma 1 nível. */
+function wordListLevelFromMarginLeft(pt: number): number {
+  if (pt <= 0) return 0;
+  return Math.max(0, Math.round(pt / 36) - 1);
 }
 
 /** Acha o span `mso-list:Ignore` que embrulha o marcador (número/símbolo +
