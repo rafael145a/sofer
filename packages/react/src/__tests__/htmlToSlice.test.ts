@@ -523,23 +523,106 @@ describe("htmlToSlice — cor e marca-texto", () => {
   });
 });
 
-describe("htmlToSlice — fontFamily/fontSize sempre descartados", () => {
-  it("font-family e font-size no style nunca viram marca no delta", () => {
+describe("htmlToSlice — fontFamily sempre descartada; fontSize preservado quando resolvível", () => {
+  it("font-family no style nunca vira marca; font-size em pt vira marca fontSize", () => {
     const html =
       `<p><span style="font-family:'Times New Roman';font-size:14pt;color:#ff0000">texto</span></p>`;
     const slice = htmlToSlice(html);
     const attrs = slice!.blocks[0].delta[0].attributes;
     expect(attrs?.fontFamily).toBeUndefined();
-    expect(attrs?.fontSize).toBeUndefined();
+    expect(attrs?.fontSize).toBe("14pt");
     expect(attrs?.color).toBe("#ff0000"); // outras marcas do mesmo span continuam.
   });
 
-  it("<font face=... size=...> não introduz fontFamily/fontSize", () => {
+  it("<font face=... size=...> não introduz fontFamily/fontSize (atributo HTML legado, não style)", () => {
     const html = `<p><font face="Arial" size="4">texto</font></p>`;
     const slice = htmlToSlice(html);
     const attrs = slice!.blocks[0].delta[0]?.attributes;
     expect(attrs?.fontFamily).toBeUndefined();
     expect(attrs?.fontSize).toBeUndefined();
+  });
+
+  it("caso real: título do Google Docs — span de 37.5pt em negrito dentro do wrapper docs-internal-guid", () => {
+    // HTML real copiado de um título colado do Google Docs: não é <h1>, é um
+    // <span> de 37.5pt em negrito, sem nenhum elemento de bloco/heading.
+    const html =
+      `<b style="font-weight:normal" id="docs-internal-guid-7acd8e83-abcd">` +
+      `<span style="font-size:37.5pt;font-family:'Times New Roman',serif;color:#000000;` +
+      `background-color:transparent;font-weight:700;font-style:normal;` +
+      `text-decoration:none;vertical-align:baseline;white-space:pre-wrap;">Artigo Engenharia</span>` +
+      `</b>`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    expect(slice!.blocks).toHaveLength(1);
+    const block = slice!.blocks[0];
+    expect(block.text).toBe("Artigo Engenharia");
+    const attrs = block.delta[0].attributes;
+    expect(attrs?.fontSize).toBe("37.5pt");
+    expect(attrs?.bold).toBe(true);
+    expect(attrs?.fontFamily).toBeUndefined();
+  });
+
+  it("font-size:11pt simples vira fontSize '11pt'", () => {
+    const html = `<p><span style="font-size:11pt">texto</span></p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBe("11pt");
+  });
+
+  it("font-size:16px converte para pt (×0.75) → '12pt'", () => {
+    const html = `<p><span style="font-size:16px">texto</span></p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBe("12pt");
+  });
+
+  it("font-size:1in converte para pt (×72) → '72pt'", () => {
+    const html = `<p><span style="font-size:1in">texto</span></p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBe("72pt");
+  });
+
+  it("unidades relativas ao contexto de herança (em/%/larger) não emitem fontSize — sem heurística de adivinhação", () => {
+    for (const size of ["1.5em", "120%", "larger", "smaller", "medium"]) {
+      const html = `<p><span style="font-size:${size}">texto</span></p>`;
+      const slice = htmlToSlice(html);
+      expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBeUndefined();
+    }
+  });
+
+  it("valores absurdos (<=0 ou >200pt) não emitem fontSize — defesa contra CSS malformado", () => {
+    for (const size of ["0pt", "0px", "-5pt", "500pt", "0.04pt"]) {
+      const html = `<p><span style="font-size:${size}">texto</span></p>`;
+      const slice = htmlToSlice(html);
+      expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBeUndefined();
+    }
+  });
+
+  it("herança: tamanho no ancestral vale no descendente; descendente com tamanho próprio sobrescreve", () => {
+    const html =
+      `<p><span style="font-size:18pt">herdado<span style="font-size:24pt">próprio</span></span></p>`;
+    const slice = htmlToSlice(html);
+    const delta = slice!.blocks[0].delta;
+    const herdado = delta.find((o) => o.insert === "herdado");
+    const proprio = delta.find((o) => o.insert === "próprio");
+    expect(herdado?.attributes?.fontSize).toBe("18pt");
+    expect(proprio?.attributes?.fontSize).toBe("24pt");
+  });
+
+  it("Word: <span style='font-size:14.0pt'> vira '14pt' (sem zero à toa)", () => {
+    const html = `<p><span style='font-size:14.0pt'>texto</span></p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].delta[0].attributes?.fontSize).toBe("14pt");
+  });
+
+  it("não-regressão: fontFamily continua fora mesmo quando fontSize é emitido", () => {
+    const variants = [
+      `<p><span style="font-family:Arial;font-size:11pt">a</span></p>`,
+      `<p><span style="font-size:37.5pt;font-family:'Times New Roman'">b</span></p>`,
+      `<p><span style="font-size:1.5em;font-family:Calibri">c</span></p>`,
+    ];
+    for (const html of variants) {
+      const slice = htmlToSlice(html);
+      expect(slice!.blocks[0].delta[0].attributes?.fontFamily).toBeUndefined();
+    }
   });
 });
 

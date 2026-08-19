@@ -33,9 +33,14 @@ import { MAX_LIST_LEVEL } from "@sofereditor/core";
  *    com o marcador (número/símbolo) como texto literal dentro de um span
  *    `mso-list:Ignore`. `parseWordListLevel` + a exclusão desse span tratam isso.
  *
- * fontFamily/fontSize são deliberadamente NUNCA emitidos: a escola padroniza
- * Arial e cada documento tem sua própria tipografia (mesma decisão de
- * `import-docx`, que descarta `w:rFonts`).
+ * fontFamily é deliberadamente NUNCA emitida: a escola padroniza Arial e cada
+ * documento tem sua própria tipografia (mesma decisão de `import-docx`, que
+ * descarta `w:rFonts`). fontSize É preservado (ver `parseFontSizePt`): o
+ * modelo já suporta a mark, a barra já tem controle de tamanho, e descartar o
+ * tamanho perdia informação real (título de 37.5pt colado do Google Docs saía
+ * do tamanho do corpo). Unidades que dependem do contexto de herança do
+ * documento de origem (em/rem/%/larger/smaller/medium) não são resolvíveis
+ * aqui e por isso não emitem marca — sem tamanho é melhor que tamanho errado.
  */
 export function htmlToSlice(html: string): ClipboardSlice | null {
   if (!html || html.trim().length === 0) return null;
@@ -556,8 +561,10 @@ function parseStyle(styleAttr: string | null): Record<string, string> {
  * style VENCEM o nome da tag — é o que impede o wrapper `<b style="font-
  * weight:normal">` do Google Docs de deixar o documento inteiro em negrito.
  *
- * `fontFamily`/`fontSize` são intencionalmente NUNCA lidos daqui — descartados
- * sempre, junto com `w:rFonts` no import-docx, pelo mesmo motivo (Arial-only).
+ * `fontFamily` é intencionalmente NUNCA lida daqui — descartada sempre, junto
+ * com `w:rFonts` no import-docx, pelo mesmo motivo (Arial-only). `fontSize` É
+ * lida e normalizada para `pt` via `parseFontSizePt` — ver o comentário no
+ * topo do arquivo.
  */
 function applyStyleMarks(styleAttr: string | null, marks: MarkAttrs): MarkAttrs {
   const decls = parseStyle(styleAttr);
@@ -598,7 +605,63 @@ function applyStyleMarks(styleAttr: string | null, marks: MarkAttrs): MarkAttrs 
     else delete next.highlight;
   }
 
+  if ("font-size" in decls) {
+    const pt = parseFontSizePt(decls["font-size"]);
+    // Só troca quando dá para resolver. Quando NÃO dá (em/%/larger/... ou
+    // valor absurdo), o local não sobrescreve — mantém o que já veio herdado
+    // do ancestral em vez de apagar um tamanho que já tínhamos resolvido
+    // corretamente. Não é o mesmo padrão de `color`/`highlight` (que apagam
+    // no valor não resolvível): lá um valor ausente/errado é positivamente
+    // "sem cor"; aqui um `em`/`%` não resolvível não é "sem tamanho", é
+    // "tamanho relativo que não sabemos calcular" — silenciar é melhor que
+    // apagar informação que já tínhamos.
+    if (pt != null) next.fontSize = formatFontSizePt(pt);
+  }
+
   return next;
+}
+
+/** `font-size` do CSS → pt, ou `undefined` quando a unidade depende do
+ *  contexto de herança do documento de origem (que não temos) ou o valor é
+ *  absurdo. `px`/`in` convertem para pt; `pt` passa direto; `em`/`rem`/`%`/
+ *  palavras-chave relativas (`larger`/`smaller`) e `medium`/`small`/`large`
+ *  (que também dependem do tamanho herdado) são ignorados de propósito — ver
+ *  o comentário no topo do arquivo. */
+function parseFontSizePt(raw: string): number | undefined {
+  const v = raw.trim().toLowerCase();
+  const m = /^(-?[\d.]+)\s*(pt|px|in)$/.exec(v);
+  if (!m) return undefined;
+  const num = Number.parseFloat(m[1]);
+  if (!Number.isFinite(num)) return undefined;
+  let pt: number;
+  switch (m[2]) {
+    case "pt":
+      pt = num;
+      break;
+    case "px":
+      pt = num * 0.75;
+      break;
+    case "in":
+      pt = num * 72;
+      break;
+    default:
+      return undefined;
+  }
+  // O bound usa o valor JÁ ARREDONDADO pra uma casa decimal — é isso que vai
+  // pro `formatFontSizePt`. Sem isso, algo como `0.04pt` passa no `pt > 0`
+  // aqui mas arredonda pra `"0pt"` lá na frente, violando a regra de "≤0 não
+  // emite" por trás do arredondamento em vez de antes dele.
+  const rounded = Math.round(pt * 10) / 10;
+  if (rounded <= 0 || rounded > 200) return undefined;
+  return rounded;
+}
+
+/** No máximo uma casa decimal, sem zero à toa: `37.5pt`, `11pt` — nunca
+ *  `37.50pt` nem `11.0pt`. */
+function formatFontSizePt(pt: number): string {
+  const rounded = Math.round(pt * 10) / 10;
+  const str = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `${str}pt`;
 }
 
 const NAMED_COLORS: Record<string, string> = {
