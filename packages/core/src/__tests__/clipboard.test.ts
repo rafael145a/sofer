@@ -259,6 +259,104 @@ describe("clipboard — insertSlice / deleteSelection", () => {
     expect(h.selection.focus).toEqual({ blockIndex: 3, offset: 3 });
   });
 
+  it("does NOT adopt type for an internal whole-block copy pasted mid-paragraph (non-regression)", () => {
+    // This is the exact bug from code review: selecting an entire line inside
+    // the editor and copying it produces openStart:false, openEnd:false with a
+    // single block from `serializeSelection` — the SAME shape as an external
+    // whole block, but WITHOUT `blockLevel`. Pasting it mid-paragraph must
+    // still be a plain inline splice (one resulting block, target keeps its
+    // own type), exactly like before htmlToSlice was introduced. If this
+    // regresses, a heading line copied internally and pasted into the middle
+    // of a paragraph would split that paragraph into three blocks and steal
+    // its type — one parapgraph becomes three.
+    const h = harness();
+    insertText(h.ctx, "Título"); // block 0: heading "Título"
+    setBlockType(h.ctx, "heading", { level: 1 });
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 0, offset: 6 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.openStart).toBe(false);
+    expect(slice.openEnd).toBe(false);
+    expect(slice.blockLevel).toBeUndefined();
+
+    h.doc.blocks.insert(1, [createBlock("paragraph", "HelloWorld")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 5 })); // "Hello|World"
+    insertSlice(h.ctx, slice);
+
+    // Must stay ONE paragraph block, type unchanged, splice inline.
+    expect(h.doc.blockCount()).toBe(2);
+    expect(h.doc.getBlockType(1)).toBe("paragraph");
+    expect(h.doc.getBlockText(1)!.toString()).toBe("HelloTítuloWorld");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 11 });
+  });
+
+  it("serializeSelection never sets blockLevel, even for a whole-block selection", () => {
+    const h = harness();
+    insertText(h.ctx, "wholeline");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 0 }, focus: { blockIndex: 0, offset: 9 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.openStart).toBe(false);
+    expect(slice.openEnd).toBe(false);
+    expect(slice.blockLevel).toBeUndefined();
+  });
+
+  it("adopts type/attrs for a single-block WHOLE fragment (not a partial selection) into an empty target", () => {
+    // `blockLevel: true` + a single block = the shape htmlToSlice produces
+    // for a lone external <h1>: this must NOT degrade to a plain paragraph,
+    // unlike a genuine partial in-block selection or an internal whole-line copy.
+    const h = harness();
+    const slice: ClipboardSlice = {
+      blocks: [{ type: "heading", text: "Título", delta: [{ insert: "Título" }], attrs: { level: 1 } }],
+      openStart: false,
+      openEnd: false,
+      blockLevel: true,
+    };
+    h.doc.blocks.insert(1, [createBlock("paragraph", "")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(1)).toBe("heading");
+    expect(h.doc.getBlockAttrs(1)).toEqual({ level: 1 });
+    expect(h.doc.getBlockText(1)!.toString()).toBe("Título");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 6 });
+  });
+
+  it("a single-block WHOLE fragment pasted mid-paragraph keeps the Dhead's type and pushes the tail to its own block with the ORIGINAL type", () => {
+    const h = harness();
+    insertText(h.ctx, "HelloWorld");
+    const slice: ClipboardSlice = {
+      blocks: [{ type: "listItem", text: "item", delta: [{ insert: "item" }], attrs: { listKind: "bullet", listLevel: 0 } }],
+      openStart: false,
+      openEnd: false,
+      blockLevel: true,
+    };
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 5 })); // "Hello|World"
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(0)).toBe("paragraph");
+    expect(h.doc.getBlockText(0)!.toString()).toBe("Hello");
+    expect(h.doc.getBlockType(1)).toBe("listItem");
+    expect(h.doc.getBlockText(1)!.toString()).toBe("item");
+    expect(h.doc.getBlockType(2)).toBe("paragraph"); // tail keeps the ORIGINAL type, not listItem
+    expect(h.doc.getBlockText(2)!.toString()).toBe("World");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 4 });
+  });
+
+  it("a genuine partial single-block fragment (openEnd) still keeps the target's own type", () => {
+    // Regression guard for the case above: a mid-selection copy from within
+    // ONE block (e.g. select "bcd" out of "abcdef" and copy) must still
+    // inline-splice and keep the target's type — this is the common internal
+    // copy/paste shape and must not start adopting types.
+    const h = harness();
+    insertText(h.ctx, "abcdef");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 4 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.openStart).toBe(true);
+    expect(slice.openEnd).toBe(true);
+    h.doc.blocks.insert(1, [createBlock("heading", "", { level: 3 })]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(1)).toBe("heading"); // unchanged — not adopted
+    expect(h.doc.getBlockText(1)!.toString()).toBe("bcd");
+  });
+
   it("survives a JSON round-trip (the real clipboard path) preserving marks and embeds", () => {
     const h = harness();
     insertText(h.ctx, "Xbo");

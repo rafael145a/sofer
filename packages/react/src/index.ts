@@ -44,3 +44,4 @@ export type {
 export { sliceDelta, deltaLength } from "./sliceDelta";
 export type { NodeViewFragment } from "./NodeView";
 export * from "./dom-bridge";
+export { htmlToSlice } from "./htmlToSlice";

@@ -13,6 +13,20 @@ export interface ClipboardSlice {
   openStart: boolean;
   /** último bloco é fragmento parcial → conteúdo após o caret continua nele. */
   openEnd: boolean;
+  /**
+   * Marca explícita: quando presente (`true`) e `blocks.length === 1`, esse
+   * único bloco é uma unidade INTEIRA (ex.: um `<h1>`/`<li>`/`<blockquote>`
+   * inteiro colado de fora) — `insertSlice` deve adotar o `type`/`attrs` dele
+   * em vez de tratá-lo como fragmento de uma seleção.
+   *
+   * `serializeSelection` NUNCA define este campo — uma cópia interna é sempre
+   * um fragmento de seleção, mesmo quando por coincidência cobre o bloco
+   * inteiro (nesse caso `openStart`/`openEnd` também saem `false`, mas isso
+   * não significa "bloco externo inteiro": significa apenas que a seleção
+   * tocou as bordas do bloco). Só produtores de blocos externos inteiros
+   * (hoje: `htmlToSlice`) devem marcar `blockLevel: true`.
+   */
+  blockLevel?: true;
 }
 
 /** Texto puro de um delta (embeds não contribuem caractere visível). */
