@@ -52,6 +52,19 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   walkBlockLevel(body, {}, blocks);
   if (blocks.length === 0) return null;
 
+  // Nada aproveitável = TODO bloco sem texto. Acontece quando o HTML só
+  // carregava imagem, que este conversor ignora por escopo: o Word manda uma
+  // imagem como `<p class=MsoNormal><img ...><o:p></o:p></p>`, o que produziria
+  // um parágrafo vazio. Devolver esse parágrafo faria `planPaste` escolher o
+  // ramo de HTML e a imagem seria DESCARTADA — colar imagem do Word passaria a
+  // inserir uma linha em branco. Devolvendo null, a colagem segue para o ramo
+  // de arquivos, que insere a imagem.
+  //
+  // Parágrafo vazio NO MEIO de conteúdo real é linha em branco de propósito e
+  // continua preservado — a regra só descarta quando não sobrou texto nenhum.
+  const temTexto = blocks.some((b) => b.text.trim().length > 0);
+  if (!temTexto) return null;
+
   return { blocks, openStart: false, openEnd: false, blockLevel: true };
 }
 

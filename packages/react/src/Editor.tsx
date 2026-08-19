@@ -21,14 +21,13 @@ import {
   serializeSelection,
   sliceToText,
   SOFER_MIME,
-  type ClipboardSlice,
   type CommandContext,
   type ListKind,
   type MarkName,
   type SerializedBlock,
 } from "@sofereditor/core";
 import { applyDomSelection, isTableRectSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
-import { htmlToSlice } from "./htmlToSlice";
+import { planPaste } from "./pastePlan";
 import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
 import { LinkHoverTooltip } from "./LinkHoverTooltip";
 import { EditorProvider } from "./EditorContext";
@@ -668,50 +667,31 @@ export function Editor({
       const ctx = ctxRef.current;
       const cd = e.clipboardData;
       if (!cd) return;
-      // 1) Our own rich slice.
-      const raw = cd.getData(SOFER_MIME);
-      if (raw) {
-        try {
-          const slice = JSON.parse(raw) as ClipboardSlice;
-          if (slice && Array.isArray(slice.blocks)) {
-            e.preventDefault();
-            insertSlice(ctx, slice);
-            return;
-          }
-        } catch {
-          // fall through to plain handling
-        }
-      }
-      // 2) Image files (OS paste).
-      const images = Array.from(cd.files ?? []).filter((f) => f.type.startsWith("image/"));
-      if (images.length > 0) {
-        e.preventDefault();
-        void (async () => {
-          for (const f of images) await editorRef.current.insertImageFromFile(f);
-        })();
-        return;
-      }
-      // 3) Rich HTML from an external source (Word, Google Docs, browser).
-      const html = cd.getData("text/html");
-      if (html) {
-        const htmlSlice = htmlToSlice(html);
-        if (htmlSlice) {
-          e.preventDefault();
-          insertSlice(ctx, htmlSlice);
+      // A escolha do ramo (e sobretudo a ORDEM deles) vive em `planPaste`, para
+      // ser testável sem montar o editor. Ver o comentário lá sobre por que o
+      // HTML precisa vir antes dos arquivos de imagem.
+      const plan = planPaste(cd);
+      if (plan.kind === "none") return;
+      e.preventDefault();
+      switch (plan.kind) {
+        case "sofer":
+        case "html":
+          insertSlice(ctx, plan.slice);
+          return;
+        case "images":
+          void (async () => {
+            for (const f of plan.files) await editorRef.current.insertImageFromFile(f);
+          })();
+          return;
+        case "text": {
+          const lines = plan.text.split(/\r\n|\r|\n/);
+          lines.forEach((line, i) => {
+            if (i > 0) insertParagraph(ctx);
+            if (line.length > 0) insertText(ctx, line);
+          });
           return;
         }
-        // No usable content (e.g. only markup/whitespace) — fall through to
-        // plain text so the paste isn't silently swallowed.
       }
-      // 4) Plain text.
-      const text = cd.getData("text/plain");
-      if (text.length === 0) return;
-      e.preventDefault();
-      const lines = text.split(/\r\n|\r|\n/);
-      lines.forEach((line, i) => {
-        if (i > 0) insertParagraph(ctx);
-        if (line.length > 0) insertText(ctx, line);
-      });
     };
 
     root.addEventListener("copy", onCopy);
