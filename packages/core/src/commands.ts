@@ -437,14 +437,18 @@ export function deleteSelection(ctx: CommandContext): void {
 
 /**
  * Replace the current selection with a clipboard slice (A1).
- * - Single-block slice that is a FRAGMENT (openStart and/or openEnd) → inline
- *   splice (Dhead + S0 + Dtail), target keeps its type. Common shape for an
- *   internal copy of a mid-selection range within one block.
- * - Single-block slice that is a WHOLE external block (openStart=openEnd=false,
- *   e.g. one <h1>/<li>/<blockquote> from an HTML paste) → adopts S0's type/attrs
- *   instead, same rules as the multi-block case below (reuse target in place
- *   when the caret is at offset 0, otherwise insert S0 as its own block; any
- *   tail becomes a separate block with the target's original type).
+ * - Single-block slice WITHOUT `blockLevel` → always an inline splice
+ *   (Dhead + S0 + Dtail), target keeps its type. This is the internal
+ *   copy/paste shape, including a full-block internal copy (selecting an
+ *   entire line and copying it also yields `openStart:false, openEnd:false`
+ *   with one block — that is NOT the same thing as an external whole block;
+ *   `openStart`/`openEnd` do not carry that distinction, so branching on them
+ *   here regressed plain in-editor copy/paste. See `ClipboardSlice.blockLevel`.
+ * - Single-block slice WITH `blockLevel: true` (e.g. one <h1>/<li>/<blockquote>
+ *   from an HTML paste via `htmlToSlice`) → adopts S0's type/attrs instead,
+ *   same rules as the multi-block case below (reuse target in place when the
+ *   caret is at offset 0, otherwise insert S0 as its own block; any tail
+ *   becomes a separate block with the target's original type).
  * - Multi-block slice → openStart merges S0 inline; middle/last blocks inserted
  *   discretely; openEnd appends the post-caret tail onto the last pasted block.
  * - Target inside a table cell → slice flattened to inline (no block structure).
@@ -473,7 +477,7 @@ export function insertSlice(ctx: CommandContext, slice: ClipboardSlice): void {
 
     const blocks = slice.blocks;
 
-    if (blocks.length === 1 && !slice.openStart && !slice.openEnd) {
+    if (blocks.length === 1 && slice.blockLevel) {
       // Whole external block (e.g. a single <h1>/<li>/<blockquote> pasted from
       // HTML) — NOT a fragment of a larger selection. Adopt S0's type/attrs
       // instead of always keeping the target's, mirroring the multi-block
@@ -481,6 +485,12 @@ export function insertSlice(ctx: CommandContext, slice: ClipboardSlice): void {
       // Word/Docs silently degraded to a plain paragraph: text and marks
       // survived, but the heading-ness (and same for listItem/blockquote) did
       // not — this is the single most common shape for an external paste.
+      //
+      // Gated on `blockLevel`, NOT on `openStart`/`openEnd` being false: an
+      // internal copy of an entire line (select a whole paragraph, Ctrl+C)
+      // produces that exact same openStart/openEnd signature from
+      // `serializeSelection`, but it is a selection fragment, not an external
+      // whole block — it must still inline-splice below.
       //
       // Any real tail (content already past the caret in the target) never
       // gets absorbed into the pasted block's type — it becomes its own new

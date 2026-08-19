@@ -14,9 +14,12 @@ import { MAX_LIST_LEVEL } from "@sofereditor/core";
  * Converte o HTML do clipboard (Word / Google Docs / navegador) num
  * `ClipboardSlice` que o editor já sabe inserir via `insertSlice`.
  *
- * Sempre bloco-inteiro: `openStart`/`openEnd` são `false` — o conteúdo colado
- * de fora não é um fragmento de um dos blocos do editor, é uma sequência de
- * blocos novos.
+ * Sempre bloco-inteiro: `openStart`/`openEnd` são `false` e `blockLevel` é
+ * `true` — o conteúdo colado de fora não é um fragmento de um dos blocos do
+ * editor, é uma sequência de blocos novos. `blockLevel: true` é o que diz a
+ * `insertSlice` (em `@sofereditor/core`) para adotar type/attrs do bloco
+ * colado em vez de tratá-lo como fragmento de seleção — ver o comentário em
+ * `ClipboardSlice.blockLevel`.
  *
  * Retorna `null` quando não sobra nada aproveitável, para o chamador (`Editor.tsx`)
  * cair no ramo de texto puro em vez de engolir a colagem.
@@ -49,7 +52,7 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   walkBlockLevel(body, {}, blocks);
   if (blocks.length === 0) return null;
 
-  return { blocks, openStart: false, openEnd: false };
+  return { blocks, openStart: false, openEnd: false, blockLevel: true };
 }
 
 // ---------------------------------------------------------------------------
