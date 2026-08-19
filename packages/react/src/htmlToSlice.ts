@@ -172,9 +172,19 @@ function walkBlockLevel(container: Element, marks: MarkAttrs, blocks: Serialized
       }
       case "li": {
         // <li> fora de <ul>/<ol> (defensivo) — trata como bullet nível 0.
+        // Mesma exclusão de listas aninhadas do <li> normal (handleList):
+        // sem isso, um <li> defensivo com filho <ul> vazaria o texto do
+        // filho pro pai e perderia a estrutura de listItem do filho.
         flushLoose();
-        const delta = inlineDeltaFromNodes(Array.from(el.childNodes), marks);
+        const nestedLists = topLevelListDescendants(el);
+        const clone = el.cloneNode(true) as Element;
+        for (const l of topLevelListDescendants(clone)) l.remove();
+        const delta = inlineDeltaFromNodes(Array.from(clone.childNodes), marks);
         blocks.push(makeBlock("listItem", delta, { listKind: "bullet", listLevel: 0 }));
+        for (const nested of nestedLists) {
+          const nestedKind: ListKind = nested.tagName.toLowerCase() === "ol" ? "ordered" : "bullet";
+          handleList(nested, nestedKind, 1, marks, blocks);
+        }
         break;
       }
       case "img":
@@ -227,7 +237,18 @@ function walkBlockLevel(container: Element, marks: MarkAttrs, blocks: Serialized
   flushLoose();
 }
 
-/** Listas do Google Docs: `<ul>/<ol>` reais aninhados; nível = profundidade. */
+/**
+ * Listas do Google Docs: `<ul>/<ol>` reais aninhados; nível = profundidade.
+ *
+ * Duas formas de aninhamento coexistem na prática e as duas têm que
+ * funcionar:
+ *  - Canônica: `<li>texto<ul>...</ul></li>` — a lista filha é descendente do
+ *    `<li>` (direta, ou dentro de outro container como `<div>`).
+ *  - Real do Google Docs: `<li>texto</li><ul>...</ul>` — a lista filha é
+ *    IRMÃ do `<li>` dentro do mesmo `<ul>/<ol>` pai, não descendente dele.
+ *    Sem tratar essa forma, o item aninhado inteiro some (não aparece nem
+ *    como filho de outro bloco nem como block próprio).
+ */
 function handleList(
   listEl: Element,
   kind: ListKind,
@@ -236,20 +257,33 @@ function handleList(
   blocks: SerializedBlock[],
 ): void {
   for (const child of Array.from(listEl.children)) {
-    if (child.tagName.toLowerCase() !== "li") continue;
-    const nestedLists: Element[] = [];
-    const inlineNodes: ChildNode[] = [];
-    for (const n of Array.from(child.childNodes)) {
-      if (n.nodeType === Node.ELEMENT_NODE) {
-        const t = (n as Element).tagName.toLowerCase();
-        if (t === "ul" || t === "ol") {
-          nestedLists.push(n as Element);
-          continue;
-        }
-      }
-      inlineNodes.push(n);
+    const tag = child.tagName.toLowerCase();
+    if (tag === "ul" || tag === "ol") {
+      // Forma "irmã": lista aninhada emitida como irmã do <li> anterior, não
+      // dentro dele. Semanticamente ela pertence ao item anterior — sobe um
+      // nível a partir do nível da lista atual.
+      const siblingKind: ListKind = tag === "ol" ? "ordered" : "bullet";
+      handleList(child, siblingKind, level + 1, marks, blocks);
+      continue;
     }
-    const delta = inlineDeltaFromNodes(inlineNodes, marks);
+    if (tag !== "li") continue;
+
+    // Acha as listas aninhadas descendentes do <li> — diretas (forma
+    // canônica) ou dentro de outro container (`<div>` etc; `<p>` nunca
+    // aninha `<ul>` porque o parser HTML fecha o `<p>` antes). Só pega as
+    // "de fora para dentro": uma lista aninhada dentro de outra lista já
+    // encontrada não conta de novo aqui — ela é tratada recursivamente
+    // quando a lista externa for percorrida.
+    const nestedLists = topLevelListDescendants(child);
+
+    // Clona o <li> e remove as listas aninhadas correspondentes do clone
+    // antes de extrair o delta inline — sem isso, o texto do item filho
+    // vaza para dentro do item pai (ex.: "B1" + "B2" viram "B1B2" quando a
+    // lista aninhada está dentro de um <div> em vez de direta no <li>).
+    const clone = child.cloneNode(true) as Element;
+    for (const l of topLevelListDescendants(clone)) l.remove();
+    const delta = inlineDeltaFromNodes(Array.from(clone.childNodes), marks);
+
     const attrs: BlockAttrs = { listKind: kind, listLevel: clampLevel(level) };
     const align = readAlign(child);
     if (align) attrs.align = align;
@@ -259,6 +293,28 @@ function handleList(
       handleList(nested, nestedKind, level + 1, marks, blocks);
     }
   }
+}
+
+/** `<ul>/<ol>` descendentes de `root` que não estão, por sua vez, dentro de
+ *  outro `<ul>/<ol>` descendente de `root` — ou seja, o nível mais externo
+ *  de listas aninhadas dentro de `root`, não importa quantos containers
+ *  (`<div>`, `<p>`...) estejam no meio. Não atravessa fronteira de tabela:
+ *  uma lista dentro de uma `<td>`/`<th>` de uma `<table>` que por sua vez
+ *  esteja dentro de `root` pertence à célula, não ao `<li>` que contém a
+ *  tabela — não é "promovida" a listItem irmão (edge case raro, tabela
+ *  dentro de item de lista; ver `handleTable`, que não é chamado a partir
+ *  daqui, então o conteúdo da tabela continua achatado como antes). */
+function topLevelListDescendants(root: Element): Element[] {
+  const all = Array.from(root.querySelectorAll("ul, ol"));
+  return all.filter((el) => {
+    let p = el.parentElement;
+    while (p && p !== root) {
+      const t = p.tagName.toLowerCase();
+      if (t === "ul" || t === "ol" || t === "table" || t === "td" || t === "th") return false;
+      p = p.parentElement;
+    }
+    return true;
+  });
 }
 
 /** `<blockquote>` — se tiver filhos de bloco (ex.: `<p>` internos), cada um

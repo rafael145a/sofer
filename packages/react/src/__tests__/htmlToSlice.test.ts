@@ -201,6 +201,100 @@ describe("htmlToSlice — Docs: <ul>/<ol> aninhado, nível pela profundidade", (
   });
 });
 
+describe("htmlToSlice — Docs: <ul> aninhado como IRMÃO de <li> (forma real do Google Docs)", () => {
+  it("defeito A: <ul><li>A1</li><ul><li>A2</li></ul></ul> não perde A2", () => {
+    const html = `<ul><li>A1</li><ul><li>A2</li></ul></ul>`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    const texts = slice!.blocks.map((b) => b.text);
+    expect(texts).toEqual(["A1", "A2"]);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(0);
+    expect(slice!.blocks[1].attrs.listLevel).toBe(1);
+    for (const b of slice!.blocks) expect(b.type).toBe("listItem");
+  });
+
+  it("defeito B: <ul><li>B1<ul><li>B2</li></ul></li></ul> (forma canônica) não duplica/corrompe B1", () => {
+    const html = `<ul><li>B1<ul><li>B2</li></ul></li></ul>`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    const texts = slice!.blocks.map((b) => b.text);
+    expect(texts).toEqual(["B1", "B2"]);
+    expect(slice!.blocks[0].attrs.listLevel).toBe(0);
+    expect(slice!.blocks[1].attrs.listLevel).toBe(1);
+  });
+
+  it("formas misturadas (irmã e canônica) no mesmo HTML", () => {
+    const html =
+      `<ul>` +
+      `<li>A1</li><ul><li>A2</li></ul>` +
+      `<li>B1<ul><li>B2</li></ul></li>` +
+      `</ul>`;
+    const slice = htmlToSlice(html);
+    const texts = slice!.blocks.map((b) => b.text);
+    const levels = slice!.blocks.map((b) => b.attrs.listLevel);
+    expect(texts).toEqual(["A1", "A2", "B1", "B2"]);
+    expect(levels).toEqual([0, 1, 0, 1]);
+  });
+
+  it("três níveis de profundidade, misturando forma irmã e canônica", () => {
+    const html =
+      `<ul><li>N0` +
+      `<ul><li>N1</li>` +
+      `<ul><li>N2</li></ul>` +
+      `</ul>` +
+      `</li></ul>`;
+    const slice = htmlToSlice(html);
+    const texts = slice!.blocks.map((b) => b.text);
+    const levels = slice!.blocks.map((b) => b.attrs.listLevel);
+    expect(texts).toEqual(["N0", "N1", "N2"]);
+    expect(levels).toEqual([0, 1, 2]);
+  });
+
+  it("<ol> dentro de <ul> (irmão de li): listKind segue a lista mais próxima, não a raiz", () => {
+    const html = `<ul><li>bullet</li><ol><li>ordered</li></ol></ul>`;
+    const slice = htmlToSlice(html);
+    const kinds = slice!.blocks.map((b) => b.attrs.listKind);
+    expect(kinds).toEqual(["bullet", "ordered"]);
+  });
+
+  it("<p> dentro de <li> (forma do Docs) continua funcionando — não regride", () => {
+    const html = `<ul><li><p>parágrafo dentro do item</p></li></ul>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks).toHaveLength(1);
+    expect(slice!.blocks[0].type).toBe("listItem");
+    expect(slice!.blocks[0].text).toBe("parágrafo dentro do item");
+  });
+
+  it("outro container (<div>) dentro de <li> envolvendo a lista aninhada não vaza o texto do filho pro pai", () => {
+    const html = `<ul><li><div>B1<ul><li>B2</li></ul></div></li></ul>`;
+    const slice = htmlToSlice(html);
+    const texts = slice!.blocks.map((b) => b.text);
+    const levels = slice!.blocks.map((b) => b.attrs.listLevel);
+    expect(texts).toEqual(["B1", "B2"]);
+    expect(levels).toEqual([0, 1]);
+  });
+
+  it("<li> fora de <ul>/<ol> (caminho defensivo) também exclui a lista aninhada do texto do pai", () => {
+    const html = `<li>X<ul><li>Y</li></ul></li>`;
+    const slice = htmlToSlice(html);
+    const texts = slice!.blocks.map((b) => b.text);
+    const levels = slice!.blocks.map((b) => b.attrs.listLevel);
+    expect(texts).toEqual(["X", "Y"]);
+    expect(levels).toEqual([0, 1]);
+  });
+
+  it("tabela dentro de <li> não faz a lista da célula vazar pra fora da tabela (limitação preexistente, não piora)", () => {
+    const html =
+      `<ul><li>text<table><tr><td><ul><li>inner</li></ul></td></tr></table></li></ul>`;
+    const slice = htmlToSlice(html);
+    // Tabela dentro de item de lista não é suportada (handleTable não é
+    // chamado neste caminho) — o texto sobrevive todo, só a estrutura de
+    // tabela/lista interna se perde, igual já acontecia antes desta rodada.
+    expect(slice!.blocks).toHaveLength(1);
+    expect(slice!.blocks[0].text).toBe("textinner");
+  });
+});
+
 describe("htmlToSlice — headings, blockquote, link", () => {
   it("h1..h6 viram heading com o level certo", () => {
     for (let i = 1; i <= 6; i++) {
