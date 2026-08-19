@@ -768,10 +768,29 @@ describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
     expect(slice!.blocks[0].text).toBe("texto real");
   });
 
-  it("&nbsp; vira espaço normal", () => {
+  it("&nbsp; único sobrevive como U+00A0, não vira espaço ASCII (I2)", () => {
     const html = `<p>uma&nbsp;palavra</p>`;
     const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("uma palavra");
+  });
+
+  it("I2: dez &nbsp; seguidos entre 'Nome:' e 'Turma:' sobrevivem como U+00A0 (cabeçalho de prova)", () => {
+    const html = `<p>Nome:${"&nbsp;".repeat(10)}Turma:</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("Nome:" + " ".repeat(10) + "Turma:");
+  });
+
+  it("I2: colapso de espaços ASCII comuns continua funcionando (não-regressão)", () => {
+    const html = `<p>uma     palavra</p>`;
+    const slice = htmlToSlice(html);
     expect(slice!.blocks[0].text).toBe("uma palavra");
+  });
+
+  it("I2: spans mso-tab-count do Word (corrida de &nbsp;) sobrevivem intactos", () => {
+    const html =
+      `<p class=MsoNormal>Nome:<span style='mso-tab-count:1'>${"&nbsp;".repeat(6)}</span>Turma:</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("Nome:" + " ".repeat(6) + "Turma:");
   });
 });
 

@@ -761,10 +761,17 @@ function pushOp(ops: DeltaOp[], text: string, marks: MarkAttrs): void {
   ops.push(hasMarks ? { insert: text, attributes: { ...marks } } : { insert: text });
 }
 
-/** HTML colapsa espaço/tab/quebra-de-linha em um único espaço; `&nbsp;`
- *  (já decodificado pelo DOMParser em U+00A0) vira espaço normal. */
+/** HTML colapsa espaço/tab/quebra-de-linha ASCII em um único espaço; `&nbsp;`
+ *  (já decodificado pelo DOMParser em U+00A0) é preservado literalmente — NÃO
+ *  vira espaço normal (I2). "Nome:&nbsp;&nbsp;…&nbsp;Turma:" (a linha mais
+ *  comum de uma prova) e os spans `mso-tab-count` do Word (corridas de
+ *  `&nbsp;`) dependem disso: colapsar U+00A0 pra espaço ASCII destrói o
+ *  espaçamento intencional do cabeçalho. As regexes de colapso
+ *  (`collapseRepeatedSpaces`) e trim (`trimEdgeWhitespace`) abaixo são
+ *  ASCII-only de propósito — `/ {2,}/` e `/[ \t\r\n]+/` — então o nbsp passa
+ *  por elas intacto. */
 function normalizeWhitespace(raw: string): string {
-  return raw.replace(/[ \t\r\n]+/g, " ").replace(/ /g, " ");
+  return raw.replace(/[ \t\r\n]+/g, " ");
 }
 
 /** Remove espaço em branco nas bordas do bloco — HTML não renderiza
