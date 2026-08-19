@@ -1056,7 +1056,7 @@ type TopLevel =
       key: number;
     };
 
-function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
+export function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
   const out: TopLevel[] = [];
   let i = 0;
   while (i < snapshot.length) {
@@ -1065,6 +1065,7 @@ function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
       const groupStart = i;
       const items: ListEntry[] = [];
       const kind: ListKind = block.attrs.listKind === "ordered" ? "ordered" : "bullet";
+      const leaderLevel = clampListLevel(block.attrs.listLevel);
       const groupStyle = block.attrs.listStyle as string | undefined;
       // A `listStart` on the FIRST item of the group seeds the `<ol start>`.
       // A `listStart` or `listStyle` on a LATER item breaks the group at that
@@ -1072,7 +1073,18 @@ function groupTopLevels(snapshot: SerializedBlock[]): TopLevel[] {
       while (i < snapshot.length) {
         const b = snapshot[i];
         if (b.type !== "listItem") break;
-        if ((b.attrs.listKind ?? "bullet") !== kind) break;
+        // A type change breaks the group whenever the item sits AT OR ABOVE
+        // the group leader's level — that's a genuine sibling list of a
+        // different type (or a return to a shallower level, which
+        // `buildListTree`'s stack treats as a new root, same as the leader).
+        // Only a type change STRICTLY DEEPER than the leader stays in the
+        // group: that's a sublist (e.g. a bullet sub-list under a numbered
+        // item pasted from Word), and `buildListTree` nests it under its
+        // parent instead of making it a root.
+        const bLevel = clampListLevel(b.attrs.listLevel);
+        if (bLevel <= leaderLevel && (b.attrs.listKind ?? "bullet") !== kind) {
+          break;
+        }
         if (i > groupStart) {
           // Continuation: break the group ONLY when this item EXPLICITLY
           // declares a renumbering. An undefined `listStart` / `listStyle`
@@ -1140,7 +1152,7 @@ function renderSlot(slot: PageSlot, topLevels: TopLevel[]): JSX.Element | null {
   return renderTopLevel(top);
 }
 
-function renderTopLevel(top: TopLevel): JSX.Element {
+export function renderTopLevel(top: TopLevel): JSX.Element {
   if (top.kind === "list") {
     const tree = buildListTree(top.items);
     return renderListTree(tree, top, top.ordinalStart, `list-${top.key}`);
@@ -1153,7 +1165,7 @@ function renderTopLevel(top: TopLevel): JSX.Element {
  * `placeFragmentedList`. The continuation `<ol>` carries an adjusted `start`
  * so numbering remains contiguous across the page break.
  */
-function renderListFragment(top: TopLevel & { kind: "list" }, frag: { index: number; itemStart: number; itemEnd: number }): JSX.Element {
+export function renderListFragment(top: TopLevel & { kind: "list" }, frag: { index: number; itemStart: number; itemEnd: number }): JSX.Element {
   const ranges = topLevelItemRanges(top.items);
   const startRange = ranges[frag.itemStart];
   const endRange = ranges[frag.itemEnd - 1];
@@ -1173,7 +1185,7 @@ function renderListFragment(top: TopLevel & { kind: "list" }, frag: { index: num
  * slice the flat list on a top-level boundary that matches what the paginator
  * measured against direct `<li>` children.
  */
-function topLevelItemRanges(items: ListEntry[]): Array<[number, number]> {
+export function topLevelItemRanges(items: ListEntry[]): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   let currentStart = -1;
   items.forEach((it, idx) => {
@@ -1218,7 +1230,7 @@ function renderListTree(
   const items = tree.map((node) => (
     <NodeView key={node.entry.index} block={node.entry.block} index={node.entry.index}>
       {node.children.length > 0
-        ? renderNestedListTree(node.children, top.listKind, `nested-${node.entry.index}`)
+        ? renderNestedListTree(node.children, `nested-${node.entry.index}`)
         : null}
     </NodeView>
   ));
@@ -1247,15 +1259,23 @@ function renderListTree(
  * item: the cascade in `sofer-editor.css` handles the per-level style cycle
  * (decimal → lower-alpha → lower-roman). Only the TOP-level `<ol>` for a
  * group needs an explicit `start`/`listStyleType`.
+ *
+ * The sublist's own `listKind` comes from ITS first item, never from the
+ * parent/ancestor group. A numbered item pasted from Word can have a bullet
+ * sub-list underneath (or vice-versa) — `groupTopLevels` now keeps those
+ * together in one group since the type change happens below the group's
+ * level-0 leader, so this function must not impose the ancestor's kind on
+ * every descendant level.
  */
-function renderNestedListTree(tree: ListNode[], kind: ListKind, key: string): JSX.Element {
+function renderNestedListTree(tree: ListNode[], key: string): JSX.Element {
+  const kind: ListKind = tree[0]?.entry.block.attrs.listKind === "ordered" ? "ordered" : "bullet";
   const Tag = kind === "ordered" ? "ol" : "ul";
   return (
     <Tag key={key} className={`ed-list ed-list-${kind}`} data-list-kind={kind}>
       {tree.map((node) => (
         <NodeView key={node.entry.index} block={node.entry.block} index={node.entry.index}>
           {node.children.length > 0
-            ? renderNestedListTree(node.children, kind, `nested-${node.entry.index}`)
+            ? renderNestedListTree(node.children, `nested-${node.entry.index}`)
             : null}
         </NodeView>
       ))}
