@@ -28,6 +28,7 @@ import {
   type SerializedBlock,
 } from "@sofereditor/core";
 import { applyDomSelection, isTableRectSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
+import { htmlToSlice } from "./htmlToSlice";
 import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
 import { LinkHoverTooltip } from "./LinkHoverTooltip";
 import { EditorProvider } from "./EditorContext";
@@ -690,7 +691,19 @@ export function Editor({
         })();
         return;
       }
-      // 3) Plain text.
+      // 3) Rich HTML from an external source (Word, Google Docs, browser).
+      const html = cd.getData("text/html");
+      if (html) {
+        const htmlSlice = htmlToSlice(html);
+        if (htmlSlice) {
+          e.preventDefault();
+          insertSlice(ctx, htmlSlice);
+          return;
+        }
+        // No usable content (e.g. only markup/whitespace) — fall through to
+        // plain text so the paste isn't silently swallowed.
+      }
+      // 4) Plain text.
       const text = cd.getData("text/plain");
       if (text.length === 0) return;
       e.preventDefault();

@@ -259,6 +259,62 @@ describe("clipboard — insertSlice / deleteSelection", () => {
     expect(h.selection.focus).toEqual({ blockIndex: 3, offset: 3 });
   });
 
+  it("adopts type/attrs for a single-block WHOLE fragment (not a partial selection) into an empty target", () => {
+    // openStart/openEnd both false + a single block = the shape htmlToSlice
+    // produces for a lone external <h1>: this must NOT degrade to a plain
+    // paragraph, unlike a genuine partial in-block selection.
+    const h = harness();
+    const slice: ClipboardSlice = {
+      blocks: [{ type: "heading", text: "Título", delta: [{ insert: "Título" }], attrs: { level: 1 } }],
+      openStart: false,
+      openEnd: false,
+    };
+    h.doc.blocks.insert(1, [createBlock("paragraph", "")]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(1)).toBe("heading");
+    expect(h.doc.getBlockAttrs(1)).toEqual({ level: 1 });
+    expect(h.doc.getBlockText(1)!.toString()).toBe("Título");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 6 });
+  });
+
+  it("a single-block WHOLE fragment pasted mid-paragraph keeps the Dhead's type and pushes the tail to its own block with the ORIGINAL type", () => {
+    const h = harness();
+    insertText(h.ctx, "HelloWorld");
+    const slice: ClipboardSlice = {
+      blocks: [{ type: "listItem", text: "item", delta: [{ insert: "item" }], attrs: { listKind: "bullet", listLevel: 0 } }],
+      openStart: false,
+      openEnd: false,
+    };
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 5 })); // "Hello|World"
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(0)).toBe("paragraph");
+    expect(h.doc.getBlockText(0)!.toString()).toBe("Hello");
+    expect(h.doc.getBlockType(1)).toBe("listItem");
+    expect(h.doc.getBlockText(1)!.toString()).toBe("item");
+    expect(h.doc.getBlockType(2)).toBe("paragraph"); // tail keeps the ORIGINAL type, not listItem
+    expect(h.doc.getBlockText(2)!.toString()).toBe("World");
+    expect(h.selection.focus).toEqual({ blockIndex: 1, offset: 4 });
+  });
+
+  it("a genuine partial single-block fragment (openEnd) still keeps the target's own type", () => {
+    // Regression guard for the case above: a mid-selection copy from within
+    // ONE block (e.g. select "bcd" out of "abcdef" and copy) must still
+    // inline-splice and keep the target's type — this is the common internal
+    // copy/paste shape and must not start adopting types.
+    const h = harness();
+    insertText(h.ctx, "abcdef");
+    select(h.ctx, { anchor: { blockIndex: 0, offset: 1 }, focus: { blockIndex: 0, offset: 4 } });
+    const slice = serializeSelection(h.doc, h.selection)!;
+    expect(slice.openStart).toBe(true);
+    expect(slice.openEnd).toBe(true);
+    h.doc.blocks.insert(1, [createBlock("heading", "", { level: 3 })]);
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    insertSlice(h.ctx, slice);
+    expect(h.doc.getBlockType(1)).toBe("heading"); // unchanged — not adopted
+    expect(h.doc.getBlockText(1)!.toString()).toBe("bcd");
+  });
+
   it("survives a JSON round-trip (the real clipboard path) preserving marks and embeds", () => {
     const h = harness();
     insertText(h.ctx, "Xbo");

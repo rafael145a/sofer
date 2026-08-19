@@ -437,7 +437,14 @@ export function deleteSelection(ctx: CommandContext): void {
 
 /**
  * Replace the current selection with a clipboard slice (A1).
- * - Single-block slice → inline splice (Dhead + S0 + Dtail), target keeps its type.
+ * - Single-block slice that is a FRAGMENT (openStart and/or openEnd) → inline
+ *   splice (Dhead + S0 + Dtail), target keeps its type. Common shape for an
+ *   internal copy of a mid-selection range within one block.
+ * - Single-block slice that is a WHOLE external block (openStart=openEnd=false,
+ *   e.g. one <h1>/<li>/<blockquote> from an HTML paste) → adopts S0's type/attrs
+ *   instead, same rules as the multi-block case below (reuse target in place
+ *   when the caret is at offset 0, otherwise insert S0 as its own block; any
+ *   tail becomes a separate block with the target's original type).
  * - Multi-block slice → openStart merges S0 inline; middle/last blocks inserted
  *   discretely; openEnd appends the post-caret tail onto the last pasted block.
  * - Target inside a table cell → slice flattened to inline (no block structure).
@@ -466,7 +473,51 @@ export function insertSlice(ctx: CommandContext, slice: ClipboardSlice): void {
 
     const blocks = slice.blocks;
 
+    if (blocks.length === 1 && !slice.openStart && !slice.openEnd) {
+      // Whole external block (e.g. a single <h1>/<li>/<blockquote> pasted from
+      // HTML) — NOT a fragment of a larger selection. Adopt S0's type/attrs
+      // instead of always keeping the target's, mirroring the multi-block
+      // whole-fragment handling below. Without this, pasting one heading from
+      // Word/Docs silently degraded to a plain paragraph: text and marks
+      // survived, but the heading-ness (and same for listItem/blockquote) did
+      // not — this is the single most common shape for an external paste.
+      //
+      // Any real tail (content already past the caret in the target) never
+      // gets absorbed into the pasted block's type — it becomes its own new
+      // block with the target's ORIGINAL type, same as the multi-block !openEnd
+      // case a few lines down.
+      const originalType = ctx.doc.getBlockType(blockIndex);
+      const originalAttrs = ctx.doc.getBlockAttrs(blockIndex);
+      let hostIndex = blockIndex;
+      if (offset === 0) {
+        const blk = ctx.doc.blocks.get(blockIndex) as Y.Map<unknown>;
+        blk.set("type", blocks[0].type);
+        const am = blk.get("attrs") as Y.Map<unknown>;
+        am.clear();
+        for (const [k, v] of Object.entries(blocks[0].attrs)) {
+          if (v !== undefined) am.set(k, v);
+        }
+        writeDeltaInto(targetText, 0, blocks[0].delta);
+      } else {
+        hostIndex = blockIndex + 1;
+        const b = createBlock(blocks[0].type, "", blocks[0].attrs);
+        ctx.doc.blocks.insert(hostIndex, [b]);
+        writeDeltaInto(b.get("text") as Y.Text, 0, blocks[0].delta);
+      }
+      const caretPos = ctx.doc.getBlockText(hostIndex)!.length;
+      if (tailDelta.length > 0) {
+        const tb = createBlock(originalType ?? "paragraph", "", originalAttrs);
+        ctx.doc.blocks.insert(hostIndex + 1, [tb]);
+        writeDeltaInto(tb.get("text") as Y.Text, 0, tailDelta);
+      }
+      ctx.setSelection(collapsedSelection({ blockIndex: hostIndex, offset: caretPos }));
+      return;
+    }
+
     if (blocks.length === 1) {
+      // Partial fragment (openStart and/or openEnd) — inline splice, target
+      // keeps its own type. This is the common internal copy/paste shape: a
+      // mid-selection range copied from within one block.
       const afterS0 = writeDeltaInto(targetText, offset, blocks[0].delta);
       writeDeltaInto(targetText, afterS0, tailDelta);
       ctx.setSelection(collapsedSelection({ blockIndex, offset: afterS0 }));
