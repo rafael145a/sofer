@@ -57,6 +57,16 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   walkBlockLevel(body, {}, blocks);
   if (blocks.length === 0) return null;
 
+  // I4: se o professor copia a partir de um sub-item, o primeiro listItem da
+  // colagem pode não ser nível 0 (forma irmã do Docs, ou um `mso-list …
+  // level2` sozinho/em sequência). O renderizador (`topLevelItemRanges`,
+  // `Editor.tsx`) só abre um range de página em `level === 0` — sem esse
+  // nível presente, o fatiamento de página perde um item num fragmento e
+  // duplica a lista inteira noutro. Não é conserto na paginação (fora de
+  // escopo aqui): fecha o caminho normalizando cada sequência contígua de
+  // listItem para que o primeiro item sempre comece em 0.
+  normalizeListLevels(blocks);
+
   // Nada aproveitável = TODO bloco sem texto. Acontece quando o HTML só
   // carregava imagem, que este conversor ignora por escopo: o Word manda uma
   // imagem como `<p class=MsoNormal><img ...><o:p></o:p></p>`, o que produziria
@@ -758,6 +768,49 @@ function readAlign(el: Element): AlignValue | undefined {
 function clampLevel(n: number): number {
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(MAX_LIST_LEVEL, Math.trunc(n)));
+}
+
+/**
+ * Normaliza `listLevel` de cada sequência CONTÍGUA de blocos `listItem` em
+ * `blocks`, subtraindo o nível mínimo da sequência — o primeiro item da
+ * colagem sempre acaba em nível 0, e as profundidades relativas entre os
+ * itens são preservadas (ver I4 no comentário de `htmlToSlice`).
+ *
+ * Só desloca sequências com MAIS de um item. Um item sozinho não desloca:
+ * o defeito de paginação que motiva esta normalização (`topLevelItemRanges`
+ * em `Editor.tsx` só abrindo range em `level === 0`) exige pelo menos dois
+ * itens pra se manifestar — com um item só, `topLevelItemRanges` devolve `[]`
+ * e `renderListFragment` cai no fallback `renderTopLevel` (sem perda nem
+ * duplicação). Deslocar um item sozinho SEMPRE daria nível 0 (o mínimo de um
+ * conjunto de um elemento é o próprio elemento), apagando o nível real que
+ * `parseWordListLevel` calculou a partir de `levelN`/`margin-left` — o que
+ * destruiria informação sem nenhum ganho, porque o bug que isso fecha não
+ * existe nesse caso.
+ */
+function normalizeListLevels(blocks: SerializedBlock[]): void {
+  let i = 0;
+  while (i < blocks.length) {
+    if (blocks[i].type !== "listItem") {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    while (j < blocks.length && blocks[j].type === "listItem") j++;
+    if (j - i > 1) {
+      let min = Number.POSITIVE_INFINITY;
+      for (let k = i; k < j; k++) {
+        const lvl = (blocks[k].attrs.listLevel as number | undefined) ?? 0;
+        if (lvl < min) min = lvl;
+      }
+      if (min > 0) {
+        for (let k = i; k < j; k++) {
+          const lvl = (blocks[k].attrs.listLevel as number | undefined) ?? 0;
+          blocks[k].attrs.listLevel = clampLevel(lvl - min);
+        }
+      }
+    }
+    i = j;
+  }
 }
 
 // ---------------------------------------------------------------------------

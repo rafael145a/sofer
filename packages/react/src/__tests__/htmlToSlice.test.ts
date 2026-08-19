@@ -272,6 +272,85 @@ describe("htmlToSlice — Word: mso-list nível pela indentação (margin-left),
   });
 });
 
+describe("htmlToSlice — I4: normaliza sequência de listItem cujo primeiro item não é nível 0", () => {
+  // Defeito pré-existente em Editor.tsx: `topLevelItemRanges` só abre range em
+  // level===0, mas `buildListTree` promove à raiz qualquer item cujo nível
+  // seja ≤ o topo da pilha. Com [1,0,0] o fatiamento de página perde um item
+  // num fragmento e duplica a lista inteira noutro (não é conserto aqui — é
+  // fechado normalizando o nível na entrada, em htmlToSlice).
+  //
+  // O deslocamento só se aplica a sequências com MAIS de um item: com um item
+  // só, o renderer nunca fatia (topLevelItemRanges devolve [] e
+  // renderListFragment cai no fallback renderTopLevel — Editor.tsx:1172), e
+  // deslocar destruiria o nível que `parseWordListLevel` calculou a partir de
+  // levelN/margin-left (ver describe acima) — sempre viraria 0.
+  it("caso real: professor copia só os sub-itens (mso-list:l1 level1, sem o 'Item pai') → todos nível 0", () => {
+    const filho = (texto: string) =>
+      `<p class=MsoNormal style='margin-left:72.0pt;text-indent:-18.0pt;mso-list:l1 level1 lfo2'>` +
+      `<span style='mso-list:Ignore'>●<span>&nbsp;&nbsp;&nbsp;&nbsp;</span></span>${texto}</p>`;
+    const html = filho("Sub-item 1") + filho("Sub-item 2") + filho("Sub-item 3");
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks).toHaveLength(3);
+    for (const b of slice.blocks) {
+      expect(b.type).toBe("listItem");
+      expect(b.attrs.listLevel).toBe(0);
+    }
+  });
+
+  it("[1,2,1] vira [0,1,0] — profundidades relativas preservadas", () => {
+    const item = (levelN: number, texto: string) =>
+      `<p style='mso-list:l0 level${levelN} lfo1'>${texto}</p>`;
+    const html = item(2, "A") + item(3, "B") + item(2, "C");
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks.map((b) => b.attrs.listLevel)).toEqual([0, 1, 0]);
+  });
+
+  it("sequência já começando em 0 não muda", () => {
+    const item = (levelN: number, texto: string) =>
+      `<p style='mso-list:l0 level${levelN} lfo1'>${texto}</p>`;
+    const html = item(1, "A") + item(2, "B") + item(1, "C");
+    const slice = htmlToSlice(html)!;
+    expect(slice.blocks.map((b) => b.attrs.listLevel)).toEqual([0, 1, 0]);
+  });
+
+  it("duas sequências separadas por um parágrafo são normalizadas INDEPENDENTEMENTE", () => {
+    const item = (levelN: number, texto: string) =>
+      `<p style='mso-list:l0 level${levelN} lfo1'>${texto}</p>`;
+    const runA = item(2, "A1") + item(3, "A2") + item(2, "A3"); // raw [1,2,1] → [0,1,0]
+    const separador = `<p>separador</p>`;
+    const runB = item(3, "B1") + item(2, "B2") + item(2, "B3"); // raw [2,1,1] → [1,0,0]
+    const slice = htmlToSlice(runA + separador + runB)!;
+    expect(slice.blocks).toHaveLength(7);
+    expect(slice.blocks.map((b) => b.type)).toEqual([
+      "listItem", "listItem", "listItem",
+      "paragraph",
+      "listItem", "listItem", "listItem",
+    ]);
+    expect(slice.blocks.slice(0, 3).map((b) => b.attrs.listLevel)).toEqual([0, 1, 0]);
+    expect(slice.blocks.slice(4, 7).map((b) => b.attrs.listLevel)).toEqual([1, 0, 0]);
+  });
+
+  it("item único não é deslocado — o nível resolvido por margin-left/levelN sobrevive (gate do run.length > 1)", () => {
+    const html = `<p style='margin-left:108.0pt;mso-list:l0 level1 lfo1'>item</p>`;
+    expect(htmlToSlice(html)!.blocks[0].attrs.listLevel).toBe(2);
+  });
+
+  it("composição com C1: sequência de sub-itens copiada sozinha (sem 'Item pai') normaliza para nível 0 E continua adotando listItem (blockLevel true)", () => {
+    const filho = (texto: string) =>
+      `<p class=MsoNormal style='margin-left:72.0pt;text-indent:-18.0pt;mso-list:l1 level2 lfo2'>` +
+      `<span style='mso-list:Ignore'>●<span>&nbsp;&nbsp;&nbsp;&nbsp;</span></span>${texto}</p>`;
+    const slice = htmlToSlice(filho("Sub-item 1") + filho("Sub-item 2"))!;
+    expect(slice.blocks).toHaveLength(2);
+    for (const b of slice.blocks) {
+      expect(b.type).toBe("listItem");
+      expect(b.attrs.listLevel).toBe(0); // normalizado (run length 2 > 1)
+    }
+    // C1: bloco único não seria isto (dois blocos aqui), mas confirma que a
+    // interação C1+I4 não regride blockLevel para uma sequência de listItem.
+    expect(slice.blockLevel).toBe(true);
+  });
+});
+
 describe("htmlToSlice — Word: marcador numérico vs símbolo", () => {
   it("marcador '1.' vira ordered", () => {
     const html =
