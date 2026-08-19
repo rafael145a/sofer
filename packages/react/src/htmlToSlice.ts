@@ -54,7 +54,17 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   if (!body) return null;
 
   const blocks: SerializedBlock[] = [];
-  walkBlockLevel(body, {}, blocks);
+  try {
+    walkBlockLevel(body, {}, blocks);
+  } catch {
+    // M7: aninhamento extremo (milhares de <span> aninhados, por exemplo)
+    // estoura a pilha de chamadas em `walkInlineNode`/`walkBlockLevel`, que
+    // são recursivas. O try/catch original só cobria o `DOMParser`, não o
+    // walk — a exceção subia por `planPaste` e a colagem não fazia nada, nem
+    // caía no fallback de texto puro. Devolvendo `null` aqui, o chamador
+    // degrada para esse fallback em vez de engolir a colagem em silêncio.
+    return null;
+  }
   if (blocks.length === 0) return null;
 
   // I4: se o professor copia a partir de um sub-item, o primeiro listItem da

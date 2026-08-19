@@ -892,6 +892,15 @@ describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
   });
 });
 
+describe("htmlToSlice — M7: HTML patológico degrada para null em vez de lançar", () => {
+  it("aninhamento extremo de <span> (~8000 níveis) devolve null em vez de estourar a pilha", () => {
+    const NIVEIS = 8000;
+    const html = `<p>${"<span>".repeat(NIVEIS)}texto${"</span>".repeat(NIVEIS)}</p>`;
+    expect(() => htmlToSlice(html)).not.toThrow();
+    expect(htmlToSlice(html)).toBeNull();
+  });
+});
+
 describe("htmlToSlice — vazio / sem conteúdo aproveitável", () => {
   it("string vazia retorna null", () => {
     expect(htmlToSlice("")).toBeNull();
