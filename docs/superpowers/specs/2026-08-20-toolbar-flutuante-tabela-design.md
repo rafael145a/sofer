@@ -54,16 +54,19 @@ não foi levantado nesta sessão. A confirmação visual fica para a implementa�
 
 ### O painel de bordas — um só, nas três superfícies
 
-Colapsado, as configurações de borda viram **uma linha só**: um ícone de bordas
-(o quadrado dividido em quatro do Word/Docs) com o rótulo "Bordas" e um caret.
+Colapsado, as configurações de borda viram **um botão-ícone só** — sem rótulo em
+texto e sem caret, igual ao botão Bordas do Word e do Docs. O ícone é o quadrado
+dividido em quatro. `title` e `aria-label` carregam "Bordas da tabela" para o
+hover e para leitor de tela.
+
 Expandido, tudo que é borda aparece logo abaixo dele:
 
 ```
-▦ Bordas ▾
+⊞
 ┌──────────────────────────────────┐
-│  ▦ Todas          ▣ Só externas  │
+│  ⊞ Todas          □ Só externas  │
 │  ▤ Só horizontais ▥ Só verticais │
-│  ▢ Nenhuma                       │
+│  ⬚ Nenhuma                       │
 ├──────────────────────────────────┤
 │  Cor da linha   [▮]   [Padrão]   │
 └──────────────────────────────────┘
@@ -89,7 +92,7 @@ O conteúdo é o mesmo; o mecanismo muda porque o hospedeiro muda.
 disclosure **inline** — o painel expande dentro do próprio menu, empurrando o
 que vem depois. Sem segunda camada flutuante. É literalmente "abaixo do ícone",
 e evita popover-dentro-de-popover, que no HeroUI significa portal aninhado
-(ver risco abaixo). Colapsado, o menu ▦ fica três linhas mais curto do que hoje.
+(ver risco abaixo). Colapsado, três linhas viram uma: o menu ▦ encurta duas.
 
 **Barra flutuante (horizontal):** não existe "inline abaixo" numa linha só, então
 o painel é um `<div>` absoluto ancorado no botão, **filho da própria barra**.
@@ -108,16 +111,35 @@ Nos consumidores, `react-icons/tb` traz o vocabulário do Word inteiro:
 
 | Preset | Ícone (consumidores) | Glifo (`Toolbar.tsx`) |
 | --- | --- | --- |
-| gatilho | `TbBorderAll` | `⊞` |
-| `all` | `TbBorderAll` | `▦` |
+| gatilho do menu | `TbBorderAll` | `⊞` |
+| `all` | `TbBorderAll` | `⊞` |
 | `outer` | `TbBorderOuter` | `□` |
 | `horizontal` | `TbBorderHorizontal` | `▤` |
 | `vertical` | `TbBorderVertical` | `▥` |
 | `none` | `TbBorderNone` | `⬚` |
 
+`TbBorderAll` **é** o ícone do Word — conferido no path SVG do pacote, não pela
+memória do nome:
+
+```
+M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z
+M4 12l16 0     ← divisória horizontal do meio
+M12 4l0 16     ← divisória vertical do meio
+```
+
+Quadrado com as duas divisórias centrais: dividido em quatro partes. Não trocar
+por `TbTable`, `TbGrid3x3` ou `TbLayoutGrid` — esses são grades finas de 9
+células, que é outro desenho.
+
+O gatilho e o preset `all` usam o mesmo ícone, como no Word. Não confunde porque
+os presets dentro do painel têm rótulo em texto e o ativo fica destacado; o
+gatilho não tem rótulo nenhum.
+
 `packages/react/src/Toolbar.tsx` não tem biblioteca de ícones e usa glifos de
 texto em toda a barra (`⇤ ≡ ⇥ ☰ • 🔗 ▦ 🖼 ⚙`). Manter o idioma do arquivo custa
-menos que introduzir uma dependência de ícones num pacote publicado.
+menos que introduzir uma dependência de ícones num pacote publicado. `⊞`
+(U+229E) é o glifo do quadrado dividido em quatro — `▦` é grade fina e **não**
+serve.
 
 ### Cor de fundo da célula (só na barra flutuante)
 
@@ -133,7 +155,7 @@ Nova disposição da barra:
 
 ```
 [+↑ Linha │ +↓ Linha │ − Linha]  [+← Col. │ +→ Col. │ − Col.]  [Mesclar │ Dividir]
-[🪣 ▮]  [Sem cor]  [▦ Bordas ▾]  [🗑 Excluir tabela]
+[🪣 ▮]  [Sem cor]  [⊞]  [🗑 Excluir tabela]
 ```
 
 ### Conflito com a barra da imagem
