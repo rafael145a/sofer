@@ -478,9 +478,18 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
           onMouseDown={stop}
           onClick={(e) => {
             e.preventDefault();
-            void editor.requestFormula().then((r) => {
-              if (r) void editor.insertFormula(r.latex, r.display);
-            });
+            // `insertFormula` retornada (não disparada solta) para cair na
+            // MESMA cadeia: um só `.catch` cobre tanto `requestFormula`
+            // quanto `insertFormula`. Nenhuma das duas deveria rejeitar hoje
+            // (`insertFormula` já protege o import dinâmico com try/catch),
+            // mas sem este `.catch` uma rejeição inesperada vira unhandled
+            // rejection — ruído em qualquer monitoramento de erro.
+            void editor
+              .requestFormula()
+              .then((r) => (r ? editor.insertFormula(r.latex, r.display) : undefined))
+              .catch((err) => {
+                console.error("Falha ao inserir fórmula:", err);
+              });
           }}
         >
           √x

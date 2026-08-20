@@ -836,8 +836,19 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     async (latex: string, display: boolean): Promise<void> => {
       // Import DINÂMICO, pelo mesmo motivo do modal: manter o mathjax-full
       // fora do bundle principal. Como esta função já é async, não custa nada.
-      const { renderLatexToSvg, measureExInPx, svgToDataUrl, svgToPngDataUrl } =
-        await import("@sofereditor/math");
+      let mathModule: typeof import("@sofereditor/math");
+      try {
+        mathModule = await import("@sofereditor/math");
+      } catch {
+        // Chunk falhou ao carregar (ex.: deploy do portal trocou o hash dos
+        // assets enquanto a aba estava aberta). Sair em silêncio é certo
+        // aqui: quem chama `insertFormula` só chega depois de já ter visto
+        // o preview funcionar no modal (mesmo import, resolvido lá) — o
+        // feedback de erro é responsabilidade do `FormulaDialog`, não desta
+        // função.
+        return;
+      }
+      const { renderLatexToSvg, measureExInPx, svgToDataUrl, svgToPngDataUrl } = mathModule;
       const r = renderLatexToSvg(latex, display);
       if (!r.ok) return; // o modal já barra isto; aqui é cinto de segurança
       // `useEditor` não tem ref do elemento raiz — conferido. `.ed-root` é o

@@ -37,15 +37,34 @@ export function FormulaDialog(): JSX.Element | null {
   const rendererRef = useRef<((l: string, d: boolean) => FormulaRender) | null>(null);
   const [preview, setPreview] = useState<FormulaRender | null>(null);
   const [carregando, setCarregando] = useState(false);
+  // Separado de `preview` de propósito: `preview` é limpo pelo efeito de
+  // render toda vez que `latex`/`display` mudam (abaixo), então se o erro de
+  // carregamento morasse lá ele sumiria assim que o professor digitasse
+  // qualquer coisa — com o renderer ainda ausente e o motivo do "Carregando…"
+  // eterno escondido de novo.
+  const [erroCarregando, setErroCarregando] = useState<string | null>(null);
 
   useEffect(() => {
     if (!formulaRequest || rendererRef.current) return;
     setCarregando(true);
+    setErroCarregando(null);
     // Import DINÂMICO: mantém o mathjax-full fora do bundle principal.
-    void import("@sofereditor/math").then((m) => {
-      rendererRef.current = m.renderLatexToSvg;
-      setCarregando(false);
-    });
+    void import("@sofereditor/math")
+      .then((m) => {
+        rendererRef.current = m.renderLatexToSvg;
+        setCarregando(false);
+      })
+      .catch(() => {
+        // Chunk falhou ao carregar — o caso comum é um deploy que trocou o
+        // hash dos assets enquanto a prova estava aberta na aba. Sem isto,
+        // `carregando` ficava travado em `true` para sempre: modal aberto,
+        // "Carregando o renderizador…" eterno, botão Inserir desabilitado
+        // sem nenhuma explicação e sem saída a não ser Cancelar.
+        setCarregando(false);
+        setErroCarregando(
+          "Não foi possível carregar o editor de fórmulas. Recarregue a página e tente de novo.",
+        );
+      });
   }, [formulaRequest]);
 
   // Sem debounce: o render é síncrono e leva menos de um milissegundo para as
@@ -127,6 +146,10 @@ export function FormulaDialog(): JSX.Element | null {
         <div className="ed-formula-preview" aria-live="polite">
           {carregando ? (
             <span className="ed-formula-vazio">Carregando o renderizador…</span>
+          ) : erroCarregando ? (
+            <span className="ed-formula-erro" role="alert">
+              {erroCarregando}
+            </span>
           ) : preview == null ? (
             <span className="ed-formula-vazio">O preview aparece aqui.</span>
           ) : preview.ok ? (
