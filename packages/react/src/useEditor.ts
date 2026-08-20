@@ -240,6 +240,15 @@ export interface UseEditorResult {
   getSelectedEmbed: () =>
     | { blockIndex: number; offset: number; cellIndex?: number; embed: ImageEmbed }
     | null;
+  /**
+   * Passthrough of `UseEditorOptions.uploadImage` — `undefined` when not
+   * configured. Exposed so callers with the editor instance but not the
+   * original options (the `<Editor>` component's paste handler, notably) can
+   * upload an image without going through `insertImageFromFile` (which also
+   * inserts it — not always what's wanted, e.g. resolving `data:` embeds
+   * already inside a pasted slice before `insertSlice`).
+   */
+  uploadImage?: (file: File) => Promise<string>;
 }
 
 /** Max display width when inserting an image. Larger sources are scaled keeping aspect ratio. */
@@ -853,6 +862,7 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     imageCaptionRequest,
     requestImageCaption,
     resolveImageCaptionRequest,
+    uploadImage: opts.uploadImage,
   };
 }
 

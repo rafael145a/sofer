@@ -28,6 +28,7 @@ import {
 } from "@sofereditor/core";
 import { applyDomSelection, isTableRectSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { planPaste } from "./pastePlan";
+import { resolvePastedImageUploads, sliceHasDataImageEmbeds } from "./resolvePastedImages";
 import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
 import { LinkHoverTooltip } from "./LinkHoverTooltip";
 import { EditorProvider } from "./EditorContext";
@@ -675,9 +676,39 @@ export function Editor({
       e.preventDefault();
       switch (plan.kind) {
         case "sofer":
-        case "html":
           insertSlice(ctx, plan.slice);
           return;
+        case "html": {
+          const insertAvulsas = async () => {
+            // Imagens do Word que vieram soltas (o HTML não tinha onde
+            // ancorá-las — ver `pastePlan.ts`): anexa no final do trecho
+            // colado, depois do slice, pro professor arrastar até o lugar.
+            const avulsas = plan.imagensAvulsas;
+            if (!avulsas || avulsas.length === 0) return;
+            for (const f of avulsas) await editorRef.current.insertImageFromFile(f);
+          };
+          if (!sliceHasDataImageEmbeds(plan.slice)) {
+            insertSlice(ctx, plan.slice);
+            void insertAvulsas();
+            return;
+          }
+          // Slice tem embed(s) `data:` (Google Docs) — sobe pro storage
+          // configurado (`uploadImage`) ANTES de inserir, pra não gravar
+          // ~300KB de base64 direto no Y.Doc. `htmlToSlice` continua pura: só
+          // emite o `data:`, a subida é feita aqui (ver `resolvePastedImages.ts`).
+          const capturedSelection = ctx.getSelection();
+          void (async () => {
+            const resolved = await resolvePastedImageUploads(plan.slice, editorRef.current.uploadImage);
+            // A subida é assíncrona — o caret pode ter se movido nesse meio
+            // tempo. Restaura a posição capturada NO MOMENTO da colagem antes
+            // de inserir, senão o slice cai onde o caret está agora, não onde
+            // o professor colou.
+            ctxRef.current.setSelection(capturedSelection);
+            insertSlice(ctxRef.current, resolved);
+            await insertAvulsas();
+          })();
+          return;
+        }
         case "images":
           void (async () => {
             for (const f of plan.files) await editorRef.current.insertImageFromFile(f);
