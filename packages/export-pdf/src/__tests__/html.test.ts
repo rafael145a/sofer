@@ -490,3 +490,27 @@ describe("print-color-adjust", () => {
     expect(html).toContain("-webkit-print-color-adjust: exact");
   });
 });
+
+describe("reset de margem do <figure>", () => {
+  it("o stylesheet zera a margem do .ed-figure", () => {
+    // Toda imagem é emitida dentro de <figure> (paridade com renderInline, que
+    // sempre envolve — render estrutura-estável do bug #11). Sem este reset o
+    // <figure> cai no default do UA (margin: 1em 40px), o que empurra
+    // wrap-left/right para longe do texto e desloca behind/front, porque a
+    // margem soma ao left/top. O CSS do editor já zera
+    // (apps/playground/src/styles.css e sofer-editor.css dos consumidores);
+    // sem esta regra o export diverge do editor.
+    const html = documentToHtml([
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [{ insert: { type: "image", src: "data:image/png;base64,AAA", width: 10, height: 10 } }],
+      },
+    ]);
+    expect(html).toContain("<figure");
+    // A regra tem que existir E zerar a margem — `toContain(".ed-figure")`
+    // sozinho passaria com `.ed-figure { padding: 0 }`, que não conserta nada.
+    expect(html).toMatch(/\.ed-figure\s*\{[^}]*margin:\s*0/);
+  });
+});
