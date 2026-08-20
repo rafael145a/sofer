@@ -892,6 +892,93 @@ describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
   });
 });
 
+describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)", () => {
+  it("dimensões via atributos width/height (forma medida do Google Docs)", () => {
+    const html =
+      `<p>antes <img src="data:image/png;base64,xyz" width="568" height="355"> depois</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    expect(slice!.blocks).toHaveLength(1);
+    const delta = slice!.blocks[0].delta;
+    expect(delta.map((op) => (typeof op.insert === "string" ? op.insert : op.insert.type))).toEqual([
+      "antes ",
+      "image",
+      " depois",
+    ]);
+    const embed = delta[1].insert as { type: "image"; src: string; width: number; height: number };
+    expect(embed).toEqual({
+      type: "image",
+      src: "data:image/png;base64,xyz",
+      width: 568,
+      height: 355,
+    });
+  });
+
+  it("dimensões via style quando não há atributos width/height", () => {
+    const html = `<p><img src="data:image/png;base64,xyz" style="width:300px;height:150px;"></p>`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
+    expect(embed).toEqual(expect.objectContaining({ width: 300, height: 150 }));
+  });
+
+  it("style em unidade não-px (pt) converte pra px", () => {
+    const html = `<p><img src="data:image/png;base64,xyz" style="width:150pt;height:75pt;"></p>`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
+    expect(embed.width).toBe(Math.round(150 * (96 / 72)));
+    expect(embed.height).toBe(Math.round(75 * (96 / 72)));
+  });
+
+  it("sem NENHUMA dimensão (nem atributo nem style) o <img> continua ignorado", () => {
+    const html = `<p>antes <img src="data:image/png;base64,xyz"> depois</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("antes depois");
+    expect(slice!.blocks[0].delta.some((op) => typeof op.insert !== "string")).toBe(false);
+  });
+
+  it("src http(s): nunca vira embed, mesmo com dimensões (sem download cross-origin)", () => {
+    const html = `<p><img src="https://exemplo.com/foto.png" width="100" height="50"></p>`;
+    const slice = htmlToSlice(html);
+    // Sem texto e sem embed aproveitável — HTML só tinha a imagem remota.
+    expect(slice).toBeNull();
+  });
+
+  it("src file: nunca vira embed (inalcançável)", () => {
+    const html = `<p><img src="file:///C:/imgs/foto.png" width="100" height="50"></p>`;
+    const slice = htmlToSlice(html);
+    expect(slice).toBeNull();
+  });
+
+  it("imagem sozinha (sem texto ao redor) com dimensões: slice NÃO é null — bloco tem embed", () => {
+    const html = `<img src="data:image/png;base64,xyz" width="568" height="355">`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+    expect(slice!.blocks).toHaveLength(1);
+    expect(slice!.blocks[0].text).toBe("");
+    const insert = slice!.blocks[0].delta[0].insert;
+    expect(typeof insert).not.toBe("string");
+  });
+
+  it("duas imagens no mesmo parágrafo (forma medida: <img> count 2) — as duas viram embed", () => {
+    const html =
+      `<p><img src="data:image/png;base64,AAA" width="100" height="50">` +
+      `<img src="data:image/jpeg;base64,BBB" width="200" height="80"></p>`;
+    const slice = htmlToSlice(html);
+    const embeds = slice!.blocks[0].delta.filter((op) => typeof op.insert !== "string");
+    expect(embeds).toHaveLength(2);
+  });
+
+  it("não-regressão: imagem sozinha do Word (HTML sem <img> nenhum) continua devolvendo null e caindo em arquivos", () => {
+    // Forma real medida: Word para Mac não escreve <img> no HTML de jeito
+    // nenhum (nem VML, nem data:) — só o parágrafo vazio sobra.
+    const html =
+      `<html xmlns:o="urn:schemas-microsoft-com:office:office"><body>` +
+      `<p class=MsoNormal><o:p>&nbsp;</o:p></p></body></html>`;
+    const slice = htmlToSlice(html);
+    expect(slice).toBeNull();
+  });
+});
+
 describe("htmlToSlice — M7: HTML patológico degrada para null em vez de lançar", () => {
   it("aninhamento extremo de <span> (~8000 níveis) devolve null em vez de estourar a pilha", () => {
     const NIVEIS = 8000;
@@ -926,5 +1013,28 @@ describe("htmlToSlice — openStart/openEnd", () => {
     const slice = htmlToSlice("<p>qualquer coisa</p>");
     expect(slice!.openStart).toBe(false);
     expect(slice!.openEnd).toBe(false);
+  });
+});
+
+describe("htmlToSlice — integração com insertSlice: embed sobrevive à inserção real no doc", () => {
+  it("colar texto+imagem do Google Docs no meio de um parágrafo existente preserva o embed", () => {
+    const html =
+      `<p>antes <img src="data:image/png;base64,xyz" width="568" height="355"> depois</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice).not.toBeNull();
+
+    const h = harness();
+    insertText(h.ctx, "XY");
+    h.ctx.setSelection(collapsedSelection({ blockIndex: 0, offset: 1 }));
+    insertSlice(h.ctx, slice!);
+
+    const out = h.doc.toJSON();
+    // "X" + "antes " + embed + " depois" + "Y", tudo num único parágrafo
+    // (blockLevel é false pra um único parágrafo — ver comentário em
+    // htmlToSlice — então cai no ramo de splice inline).
+    expect(out.blocks).toHaveLength(1);
+    const delta = out.blocks[0].delta;
+    const kinds = delta.map((op) => (typeof op.insert === "string" ? op.insert : op.insert.type));
+    expect(kinds).toEqual(["Xantes ", "image", " depoisY"]);
   });
 });
