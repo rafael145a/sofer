@@ -104,6 +104,17 @@ export function Editor({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  // B4: cobre a colagem de HTML com imagem `data:` pendente de upload (ver
+  // `onPaste`, ramo "html"). `true` do instante em que o upload começa até a
+  // colagem terminar de ser inserida. Sem isso, uma segunda colagem disparada
+  // DURANTE a janela do upload (comum: rede escolar lenta + "não aconteceu
+  // nada visualmente" faz o professor colar de novo) capturaria a MESMA
+  // posição que a primeira, e ao resolver empurraria a primeira colagem —
+  // sem nenhum indicador de carregamento pra explicar por que. Descarta a
+  // segunda em vez de enfileirar: mais simples, e uma colagem perdida com
+  // aviso no console é melhor que duas colagens se atropelando na mesma
+  // posição do documento.
+  const pasteInFlightRef = useRef(false);
   // The `behind` image the pointer is currently hovering (by geometry), so we
   // can show a click affordance to select it through the text on top of it.
   const [hoveredBehind, setHoveredBehind] = useState<{
@@ -684,27 +695,45 @@ export function Editor({
             insertSlice(ctx, plan.slice);
             return;
           }
+          // B4: upload de imagem já em andamento. Sem NENHUM indicador de
+          // carregamento na UI, "não aconteceu nada visualmente" (rede
+          // escolar lenta) é exatamente o gatilho que leva o professor a
+          // colar de novo — e a segunda colagem capturaria a MESMA posição
+          // abaixo, empurrando a primeira ao resolver. Descarta com aviso em
+          // vez de enfileirar: enfileirar só adiaria a pergunta de cima de
+          // QUAL posição (já potencialmente obsoleta) encadear a próxima.
+          if (pasteInFlightRef.current) {
+            console.warn(
+              "[sofereditor] colagem com imagem ainda subindo — descartando esta colagem concorrente para não corromper a posição de inserção",
+            );
+            return;
+          }
+          pasteInFlightRef.current = true;
           // Slice tem embed(s) `data:` (Google Docs) — sobe pro storage
           // configurado (`uploadImage`) ANTES de inserir, pra não gravar
           // ~300KB de base64 direto no Y.Doc. `htmlToSlice` continua pura: só
           // emite o `data:`, a subida é feita aqui (ver `resolvePastedImages.ts`).
           const capturedSelection = ctx.getSelection();
           void (async () => {
-            const resolved = await resolvePastedImageUploads(plan.slice, editorRef.current.uploadImage);
-            // A subida é assíncrona — o caret pode ter se movido nesse meio
-            // tempo. Restaura a posição capturada NO MOMENTO da colagem antes
-            // de inserir, senão o slice cai onde o caret está agora, não onde
-            // o professor colou.
-            //
-            // Limitação conhecida: é uma posição ABSOLUTA ({blockIndex,
-            // offset}), não uma `Y.RelativePosition`. Cobre o caso comum (o
-            // professor clica em outro lugar enquanto espera o upload) mas
-            // não o caso raro de ele continuar DIGITANDO nessa mesma posição
-            // durante a espera — os offsets teriam avançado e a restauração
-            // cairia num ponto levemente errado. Migrar pra RelativePosition
-            // fecharia isso; fora de escopo aqui.
-            ctxRef.current.setSelection(capturedSelection);
-            insertSlice(ctxRef.current, resolved);
+            try {
+              const resolved = await resolvePastedImageUploads(plan.slice, editorRef.current.uploadImage);
+              // A subida é assíncrona — o caret pode ter se movido nesse meio
+              // tempo. Restaura a posição capturada NO MOMENTO da colagem antes
+              // de inserir, senão o slice cai onde o caret está agora, não onde
+              // o professor colou.
+              //
+              // Limitação conhecida: é uma posição ABSOLUTA ({blockIndex,
+              // offset}), não uma `Y.RelativePosition`. Cobre o caso comum (o
+              // professor clica em outro lugar enquanto espera o upload) mas
+              // não o caso raro de ele continuar DIGITANDO nessa mesma posição
+              // durante a espera — os offsets teriam avançado e a restauração
+              // cairia num ponto levemente errado. Migrar pra RelativePosition
+              // fecharia isso; fora de escopo aqui.
+              ctxRef.current.setSelection(capturedSelection);
+              insertSlice(ctxRef.current, resolved);
+            } finally {
+              pasteInFlightRef.current = false;
+            }
           })();
           return;
         }
