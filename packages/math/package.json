@@ -1,6 +1,26 @@
 {
   "name": "@sofereditor/math",
   "version": "0.0.0",
+  "description": "@sofereditor/math — renders LaTeX formulas as self-contained SVG using MathJax. Pure, DOM-free engine for the Sofer editor's math formula feature.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Rafael Marreca",
+  "homepage": "https://github.com/rafael145a/sofer/tree/main/packages/math#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafael145a/sofer.git",
+    "directory": "packages/math"
+  },
+  "bugs": {
+    "url": "https://github.com/rafael145a/sofer/issues"
+  },
+  "keywords": [
+    "editor",
+    "math",
+    "latex",
+    "mathjax",
+    "svg",
+    "sofer"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -10,6 +30,18 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "require": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
     }
   },
   "files": ["dist"],

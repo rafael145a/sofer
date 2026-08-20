@@ -19,9 +19,16 @@ describe("renderLatexToSvg", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.svg).toContain("<defs>");
-    // Nenhum <use> apontando para fora do próprio SVG.
-    const usesExternos = /<use[^>]*(?:xlink:)?href="#(?!MJX-)/.test(r.svg);
-    expect(usesExternos).toBe(false);
+    // Todo <use> tem que apontar para um id presente no MESMO svg. É a
+    // definição de auto-contido, e não depende do esquema de nomes do MathJax
+    // — o prefixo dos ids muda entre `local` e `global` e entre versões, então
+    // testar o prefixo daria um teste que passa nos dois modos (era o caso da
+    // asserção anterior, que nunca disparava).
+    const alvos = [...r.svg.matchAll(/<use[^>]*?(?:xlink:)?href="#([^"]+)"/g)].map((m) => m[1]);
+    expect(alvos.length).toBeGreaterThan(0); // senão o teste passaria por vacuidade
+    for (const id of alvos) {
+      expect(r.svg, `<use> aponta para #${id}, que não está no próprio svg`).toContain(`id="${id}"`);
+    }
   });
 
   it("fórmula inline devolve vAlignEx negativo (desce abaixo da base)", () => {
