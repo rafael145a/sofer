@@ -183,9 +183,19 @@ leitura de `getTableLocation()` — a ordem dos hooks não muda
 (`useEditorContext` e `useRef` vêm antes).
 
 É o comportamento do Word e do Docs: selecionou a figura, aparecem as
-ferramentas de figura. Nada fica inacessível — as ações de tabela continuam
-todas no menu ▦ da `CustomToolbar`, e clicar no texto da célula desmarca a
-imagem e traz a barra da tabela de volta no mesmo instante.
+ferramentas de figura. Mas `Mesclar` e `Dividir` só existem nesta barra — não
+estão no menu ▦ da `CustomToolbar`, conferido por grep. `Mesclar` fica fora de
+alcance por construção, não por acidente: exige seleção retangular
+multi-célula, e `getSelectedEmbed()` só devolve truthy para um range de
+largura exatamente 1 sobre um embed de imagem (`useEditor.ts`) — os dois
+estados são mutuamente exclusivos, então o guard nunca esconde um `Mesclar`
+que estivesse ao alcance. Já `Dividir` com uma imagem selecionada dentro de
+uma célula mesclada é intenção real, e fica temporariamente fora de alcance.
+A saída é imediata: qualquer seta do teclado ou um clique no texto da célula
+colapsa a seleção do embed (`Editor.tsx` não tem handler de setas — elas caem
+no comportamento nativo, e o `selectionchange` reescreve o modelo),
+`getSelectedEmbed()` volta a `null` e a barra reaparece na hora, mesmo quando
+a imagem ocupa a célula inteira.
 
 **Descartado:** empilhar as duas barras (a de tabela sobe acima da de imagem).
 Resolve a colisão vertical, mas as duas continuam competindo em largura, e
