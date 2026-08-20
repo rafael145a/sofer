@@ -1,5 +1,5 @@
 import type { ClipboardSlice } from "@sofereditor/core";
-import { isImageEmbed, SOFER_MIME } from "@sofereditor/core";
+import { SOFER_MIME } from "@sofereditor/core";
 import { htmlToSlice } from "./htmlToSlice";
 
 /**
@@ -11,14 +11,8 @@ import { htmlToSlice } from "./htmlToSlice";
 export type PastePlan =
   /** Slice do próprio editor (cópia interna). */
   | { kind: "sofer"; slice: ClipboardSlice }
-  /**
-   * HTML externo (Word, Google Docs, navegador) com conteúdo aproveitável.
-   * `imagensAvulsas`, quando presente, são arquivos de imagem que vieram
-   * junto no clipboard mas que o HTML não referenciava (ver o comentário
-   * acima de `hasWordEmbeddedPicture`) — o handler insere o slice e depois
-   * anexa essas imagens no final, para o professor arrastar até o lugar.
-   */
-  | { kind: "html"; slice: ClipboardSlice; imagensAvulsas?: File[] }
+  /** HTML externo (Word, Google Docs, navegador) com conteúdo aproveitável. */
+  | { kind: "html"; slice: ClipboardSlice }
   /** Arquivos de imagem do sistema operacional. */
   | { kind: "images"; files: File[] }
   /** Texto puro; `text` nunca é vazio. */
@@ -57,34 +51,27 @@ export function planPaste(cd: DataTransfer): PastePlan {
   const html = cd.getData("text/html");
   if (html) {
     const slice = htmlToSlice(html);
-    if (slice) {
-      // Word para Mac (medido 2026-08-20): copiar texto+imagem NÃO escreve a
-      // imagem no HTML de jeito nenhum (nem VML, nem `data:`) — só existe o
-      // arquivo solto em `cd.files`, sem marca de onde ela estava no texto.
-      // Perder essa imagem em silêncio é pior que anexá-la fora do lugar
-      // (decisão do usuário): quando o slice não tem embed nenhum (ver item
-      // 1 — o Google Docs ESCREVE `<img data:>`, então esse caso não passa
-      // por aqui) e há arquivo de imagem no clipboard, ela é anexada ao
-      // final do trecho colado.
-      //
-      // Mas ISSO SÓ PODE disparar quando o Word realmente embutiu uma
-      // figura: como documentado no comentário de `planPaste` acima, Word
-      // também anexa um PNG "screenshot" do trecho copiado em toda colagem
-      // de TEXTO PURO (sem imagem nenhuma) — o caso medido que motivou HTML
-      // vir antes de arquivos. Sem um segundo sinal, TODA colagem de texto
-      // formatado do Word ganharia uma imagem fantasma no final. O sinal:
-      // `text/rtf` — Word codifica imagem embutida como grupo `\pict` no
-      // RTF (parte do formato, não comportamento específico de versão); um
-      // PNG que é só o rendering da seleção não deixa esse rastro no RTF.
-      const files = Array.from(cd.files ?? []).filter((f) => f.type.startsWith("image/"));
-      if (files.length > 0 && !sliceHasImageEmbed(slice) && hasWordEmbeddedPicture(cd.getData("text/rtf"))) {
-        return { kind: "html", slice, imagensAvulsas: files };
-      }
-      return { kind: "html", slice };
-    }
+    if (slice) return { kind: "html", slice };
   }
 
   // 3) Arquivos de imagem.
+  //
+  // Tentativa abandonada (2026-08-20): tentamos anexar, no final do trecho
+  // colado, o arquivo de imagem solto que o Word deixa em `cd.files` quando
+  // o HTML não referencia nenhuma figura (nem `<img>`, nem VML, nem `data:`).
+  // A ideia era usar o grupo `\pict` do RTF como sinal de que uma figura de
+  // verdade tinha sido copiada, distinguindo isso do PNG "screenshot" que o
+  // Word também anexa em TODA colagem de texto (ver o comentário acima).
+  //
+  // Verificado com clipboard real do Word para Mac — o discriminador não
+  // existe. Duas colagens medidas no navegador:
+  //   colagem 1 (SÓ TEXTO, sem figura):    \pict: 0  \shppict: false  PNG: 55.814 bytes  <img>: 0
+  //   colagem 2 (TEXTO + FIGURA de verdade): \pict: 0  \shppict: false  PNG: 24.902 bytes  <img>: 0
+  // Nenhuma das duas tem `\pict` no RTF, nenhuma tem `<img>` no HTML, as duas
+  // trazem um PNG — e o tamanho não separa (a colagem só-texto rendeu um
+  // arquivo MAIOR que a com figura). O PNG que o Word anexa é sempre uma
+  // renderização da seleção, nunca a figura em si — não há sinal nenhum no
+  // clipboard que distinga os dois casos.
   const files = Array.from(cd.files ?? []).filter((f) => f.type.startsWith("image/"));
   if (files.length > 0) return { kind: "images", files };
 
@@ -93,28 +80,4 @@ export function planPaste(cd: DataTransfer): PastePlan {
   if (text.length > 0) return { kind: "text", text };
 
   return { kind: "none" };
-}
-
-/** Algum bloco do slice já carrega um embed de imagem (ex.: `<img data:>` do
- *  Google Docs, tratado em `htmlToSlice`). Usado para não duplicar a imagem
- *  quando o clipboard também trouxer um arquivo solto para o mesmo conteúdo. */
-function sliceHasImageEmbed(slice: ClipboardSlice): boolean {
-  return slice.blocks.some((b) => b.delta.some((op) => isImageEmbed(op.insert)));
-}
-
-/**
- * `true` quando o RTF do clipboard contém um grupo `\pict` — a forma padrão
- * (RTF 1.x, não específica de versão do Word) de embutir uma imagem inline no
- * texto. Distingue "o professor copiou uma figura de verdade" de "o Word
- * também anexou um PNG-screenshot do trecho copiado", que NÃO deixa esse
- * rastro no RTF — é só uma representação de conveniência pra apps que só
- * entendem imagem (colar texto do Word no Preview.app, por exemplo).
- *
- * Sem `text/rtf` no clipboard (navegador, Google Docs, Finder) devolve
- * `false` — sem esse sinal positivo, o padrão é NÃO anexar (perder uma
- * imagem de fora do Word é um caso já coberto por outro caminho; inventar uma
- * imagem fantasma em toda colagem de texto formatado do Word seria pior).
- */
-function hasWordEmbeddedPicture(rtf: string): boolean {
-  return /\\pict\b/.test(rtf);
 }

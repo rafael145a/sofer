@@ -680,17 +680,8 @@ export function Editor({
           insertSlice(ctx, plan.slice);
           return;
         case "html": {
-          const insertAvulsas = async () => {
-            // Imagens do Word que vieram soltas (o HTML não tinha onde
-            // ancorá-las — ver `pastePlan.ts`): anexa no final do trecho
-            // colado, depois do slice, pro professor arrastar até o lugar.
-            const avulsas = plan.imagensAvulsas;
-            if (!avulsas || avulsas.length === 0) return;
-            for (const f of avulsas) await editorRef.current.insertImageFromFile(f);
-          };
           if (!sliceHasDataImageEmbeds(plan.slice)) {
             insertSlice(ctx, plan.slice);
-            void insertAvulsas();
             return;
           }
           // Slice tem embed(s) `data:` (Google Docs) — sobe pro storage
@@ -714,7 +705,6 @@ export function Editor({
             // fecharia isso; fora de escopo aqui.
             ctxRef.current.setSelection(capturedSelection);
             insertSlice(ctxRef.current, resolved);
-            await insertAvulsas();
           })();
           return;
         }
