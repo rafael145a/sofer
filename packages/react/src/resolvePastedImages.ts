@@ -42,7 +42,7 @@ export async function resolvePastedImageUploads(
         block.delta.map(async (op): Promise<DeltaOp> => {
           if (!isImageEmbed(op.insert) || !op.insert.src.startsWith("data:image/")) return op;
           try {
-            const file = dataUrlToFile(op.insert.src);
+            const file = await dataUrlToFile(op.insert.src);
             const newSrc = await upload(file);
             changed = true;
             return { ...op, insert: { ...op.insert, src: newSrc } };
@@ -61,17 +61,30 @@ export async function resolvePastedImageUploads(
   return { ...slice, blocks };
 }
 
-/** `data:<mime>;base64,<...>` → `File`, com nome/extensão derivados do MIME
- *  (não `.png` fixo — um jpeg do Google Docs enviado como `.png` é uma falha
- *  de upload plausível em APIs que validam extensão x content-type). */
-export function dataUrlToFile(dataUrl: string): File {
-  const match = /^data:([^;,]+)(?:;charset=[^;,]+)?;base64,([\s\S]*)$/.exec(dataUrl);
-  const mime = match?.[1]?.trim() || "image/png";
-  const base64 = match?.[2] ?? "";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new File([bytes], `imagem-colada-${Date.now()}.${extensionForMime(mime)}`, { type: mime });
+/** `data:<mime>[;base64],<...>` → `File`, com nome/extensão derivados do MIME.
+ *
+ *  Decodifica via `fetch(dataUrl).then(r => r.blob())` em vez de um regex +
+ *  `atob` manual. Dois motivos, o segundo é o que importa:
+ *
+ *  - `fetch` é nativo e trata as DUAS formas de `data:` URL — base64 (o caso
+ *    comum de imagem grande, tipo Google Docs) e URL-encoded/percent-encoded
+ *    (`data:image/svg+xml,%3Csvg...`, o padrão dominante de ícone inline em
+ *    sites). O regex anterior só reconhecia `;base64,`; contra uma forma
+ *    URL-encoded ele simplesmente não casava, e o MIME caía num default
+ *    inventado (`image/png`) com um `File` de 0 bytes — silencioso, sem
+ *    lançar, sem proteção do try/catch do chamador. Ver bug B1.
+ *  - o MIME do `File` sai do `Blob` que o próprio `fetch` decodificou, nunca
+ *    de um valor chutado — um jpeg do Google Docs enviado como `.png` (ou
+ *    pior, um SVG rotulado `image/png`) é uma falha de upload plausível em
+ *    APIs que validam extensão x content-type no servidor.
+ *
+ *  Um `data:` malformado (ou que o `fetch` não consiga decodificar) REJEITA a
+ *  promise — não inventa um `File` vazio. O chamador (`resolvePastedImageUploads`)
+ *  já captura isso e preserva o `data:` original na colagem em vez de subir lixo. */
+export async function dataUrlToFile(dataUrl: string): Promise<File> {
+  const blob = await fetch(dataUrl).then((r) => r.blob());
+  const mime = blob.type;
+  return new File([blob], `imagem-colada-${Date.now()}.${extensionForMime(mime)}`, { type: mime });
 }
 
 const MIME_EXTENSIONS: Record<string, string> = {

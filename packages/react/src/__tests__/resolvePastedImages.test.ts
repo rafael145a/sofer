@@ -109,6 +109,22 @@ describe("resolvePastedImageUploads", () => {
     errSpy.mockRestore();
   });
 
+  // B1: dataUrlToFile agora pode rejeitar (data: malformado) ANTES de chamar
+  // `upload` — o catch de resolvePastedImageUploads precisa cobrir essa
+  // rejeição também, preservando o data: original em vez de subir um File
+  // de 0 bytes com MIME inventado.
+  it("data: malformado no slice preserva o src original e não chama upload", async () => {
+    const slice = sliceWithImage("data:image/png;base64,!!!nao-e-base64!!!");
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const upload = vi.fn(async () => "https://blob.exemplo.com/nao-deveria-chegar-aqui.png");
+    const out = await resolvePastedImageUploads(slice, upload);
+    const embed = out.blocks[0].delta[1].insert as ImageEmbed;
+    expect(embed.src).toBe("data:image/png;base64,!!!nao-e-base64!!!");
+    expect(upload).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
   it("ops que não são embed data: passam intocados", async () => {
     const slice = sliceWithImage(PNG_1PX);
     const upload = vi.fn(async () => "https://blob.exemplo.com/x.png");
@@ -119,22 +135,40 @@ describe("resolvePastedImageUploads", () => {
 });
 
 describe("dataUrlToFile", () => {
-  it("deriva a extensão do MIME (png)", () => {
-    const file = dataUrlToFile(PNG_1PX);
+  it("deriva a extensão do MIME (png)", async () => {
+    const file = await dataUrlToFile(PNG_1PX);
     expect(file.type).toBe("image/png");
     expect(file.name.endsWith(".png")).toBe(true);
   });
 
-  it("deriva a extensão do MIME (jpeg -> .jpg)", () => {
+  it("deriva a extensão do MIME (jpeg -> .jpg)", async () => {
     const jpeg = PNG_1PX.replace("image/png", "image/jpeg");
-    const file = dataUrlToFile(jpeg);
+    const file = await dataUrlToFile(jpeg);
     expect(file.type).toBe("image/jpeg");
     expect(file.name.endsWith(".jpg")).toBe(true);
   });
 
   it("o conteúdo do File corresponde ao base64 decodificado", async () => {
-    const file = dataUrlToFile(PNG_1PX);
+    const file = await dataUrlToFile(PNG_1PX);
     const buf = await file.arrayBuffer();
     expect(buf.byteLength).toBeGreaterThan(0);
+  });
+
+  // B1: data: URL-encoded (não-base64) — regex antigo só reconhecia
+  // `;base64,`; contra esta forma o MIME caía no default inventado
+  // "image/png" e o arquivo saía com 0 bytes, sem lançar. `fetch` trata as
+  // duas formas nativamente.
+  it("data: URL-encoded (sem ;base64,) não vira arquivo de 0 bytes com MIME inventado", async () => {
+    const svgUrlEncoded = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%2F%3E%3C%2Fsvg%3E";
+    const file = await dataUrlToFile(svgUrlEncoded);
+    expect(file.type).toBe("image/svg+xml");
+    expect(file.size).toBeGreaterThan(0);
+  });
+
+  // B1: data: malformado deve REJEITAR a promise (o chamador,
+  // resolvePastedImageUploads, já preserva o data: original nesse caso) —
+  // nunca devolver um File vazio silenciosamente.
+  it("data: malformado rejeita em vez de devolver um File vazio", async () => {
+    await expect(dataUrlToFile("data:image/png;base64,!!!nao-e-base64!!!")).rejects.toBeTruthy();
   });
 });
