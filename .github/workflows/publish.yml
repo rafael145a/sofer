@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           unset NODE_AUTH_TOKEN || true
           : > /tmp/sofer-published-tags
-          PKGS="core react collab import-docx export-docx export-pdf"
+          PKGS="core math react collab import-docx export-docx export-pdf"
           for pkg in $PKGS; do
             cd "packages/$pkg"
             NAME=$(node -p "require('./package.json').name")

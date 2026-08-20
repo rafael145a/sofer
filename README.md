@@ -40,8 +40,9 @@ All packages are published under `@sofereditor/*` on npm.
 | [`@sofereditor/import-docx`](./packages/import-docx) | Parse `.docx` (OOXML) in the browser or Node into a `SerializedDocument`. |
 | [`@sofereditor/export-docx`](./packages/export-docx) | Emit `.docx` from a `SerializedDocument`. |
 | [`@sofereditor/export-pdf`](./packages/export-pdf) | Serialize the paginated DOM to HTML; consumers run Puppeteer for PDF. |
+| [`@sofereditor/math`](./packages/math) | Render LaTeX formulas as self-contained SVG using MathJax. |
 
-Placeholder packages reserved for future modules: `@sofereditor/pagination`, `@sofereditor/tables`, `@sofereditor/math`, `@sofereditor/layout-images`, `@sofereditor/server-hocuspocus`.
+Placeholder packages reserved for future modules: `@sofereditor/pagination`, `@sofereditor/tables`, `@sofereditor/layout-images`, `@sofereditor/server-hocuspocus`.
 
 ---
 

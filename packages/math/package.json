@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/math",
-  "version": "0.0.0",
+  "version": "0.7.0",
   "description": "@sofereditor/math — renders LaTeX formulas as self-contained SVG using MathJax. Pure, DOM-free engine for the Sofer editor's math formula feature.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
