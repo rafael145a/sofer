@@ -122,4 +122,26 @@ describe("Editor onKeyDown — Backspace/Delete apagam a imagem selecionada", ()
     // que importa é que ESTE handler não chamou preventDefault.
     expect(ev.defaultPrevented).toBe(false);
   });
+
+  // B3: caret logo depois de uma imagem, acento morto (`´`) dispara
+  // `compositionstart` (layout ABC-Extended) e o professor aperta Backspace
+  // pra corrigir a composição. Sem a guarda, o predicado decide pelo MODELO
+  // (que ainda não recebeu o texto em composição), enxerga o embed adjacente
+  // e apaga a imagem em vez de deixar o IME continuar.
+  it("composição ativa: Backspace com embed adjacente NÃO intercepta (não apaga a imagem, não trava o IME)", () => {
+    const { api, rootEl } = mount();
+    act(() => {
+      api.insertImage(SAMPLE);
+    });
+    expect(hasEmbed(api)).toBe(true);
+    expect(api.getSelection().focus.offset).toBe(1);
+
+    act(() => {
+      rootEl.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    });
+
+    const ev = fireBackspace(rootEl);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(hasEmbed(api)).toBe(true);
+  });
 });

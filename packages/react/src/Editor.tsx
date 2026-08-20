@@ -790,6 +790,15 @@ export function Editor({
     // sem `preventDefault`, deixando `beforeinput` cuidar disso como sempre
     // (ver o teste "não intercepta" em `Editor.keydown.test.ts`).
     if (!mod && (e.key === "Backspace" || e.key === "Delete")) {
+      // Composição ativa (ex.: acento morto `´` no layout ABC-Extended dispara
+      // `compositionstart`) — o modelo ainda não recebeu o texto em
+      // composição, só o DOM sabe. Decidir por `getSelectedEmbed`/
+      // `isEmbedAdjacentToCaret` aqui enxergaria o embed adjacente do MODELO
+      // (que não avançou) e apagaria a imagem em vez de deixar o Backspace
+      // corrigir a composição — e ainda travaria a composição no meio, porque
+      // `preventDefault` interrompe o IME. Mesma guarda que as linhas 173,
+      // 205 e 520 já usam pros outros caminhos de input.
+      if (isComposingRef.current) return;
       const direction = e.key === "Backspace" ? "backward" : "forward";
       const shouldIntercept =
         ed.getSelectedEmbed() != null || isEmbedAdjacentToCaret(ctxRef.current, direction);
