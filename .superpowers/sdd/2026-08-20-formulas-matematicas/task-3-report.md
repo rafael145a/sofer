@@ -341,3 +341,155 @@ O reset `.ed-figure { margin: 0; padding: 0; }` também conserta um defeito que 
 ## Conclusão
 
 A mudança de sempre emitir `<figure>` (Task 3) estava **correta** — é a forma de manter estrutura-estável rendering no editor e paridade nos dois caminhos de render. O que faltou foi **levar o CSS junto**: o `baseStylesheet()` não tinha a regra de reset. Agora tem, e os testes cobrem os layouts que ninguém testava antes.
+
+---
+
+# Fix Round 2/5
+
+## Achado: Teste de Paridade Não Pega a Regressão da Linha 536
+
+A revisão identificou que os cinco testes de layout adicionados no `parity.test.tsx` não conseguem falhar quando a regra `.ed-figure { margin: 0; padding: 0; }` (linha 536 de `html.ts`) é removida.
+
+**Por quê:** Estrutural, não de descuido. O `decls()` do parity.test.tsx extrai atributos `style="..."` inline via regex. A regra `.ed-figure` vive no **stylesheet CSS**, não inline. O `serverHtml()` do teste chama `documentToHtmlFragment()`, que não injeta o `baseStylesheet()` — só `documentToHtml()` injeta (linha 79-86). Logo, o HTML que os testes comparam nunca contém a regra. É impossível para eles falharem quando ela some.
+
+## Solução: Teste de Mutação no `html.test.ts`
+
+Adicionado ao `packages/export-pdf/src/__tests__/html.test.ts` um novo describe "reset de margem do <figure>" com um teste que:
+
+1. Chama `documentToHtml()` (que injeta o stylesheet completo)
+2. Cria uma imagem sem legenda e sem positioning especial
+3. Verifica que o HTML **contém** `<figure>`
+4. Valida com regex que a regra `.ed-figure { ... margin: 0 ... }` está presente
+
+```ts
+describe("reset de margem do <figure>", () => {
+  it("o stylesheet zera a margem do .ed-figure", () => {
+    // Toda imagem é emitida dentro de <figure> (paridade com renderInline, que
+    // sempre envolve — render estrutura-estável do bug #11). Sem este reset o
+    // <figure> cai no default do UA (margin: 1em 40px), o que empurra
+    // wrap-left/right para longe do texto e desloca behind/front, porque a
+    // margem soma ao left/top. O CSS do editor já zera
+    // (apps/playground/src/styles.css e sofer-editor.css dos consumidores);
+    // sem esta regra o export diverge do editor.
+    const html = documentToHtml([
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [{ insert: { type: "image", src: "data:image/png;base64,AAA", width: 10, height: 10 } }],
+      },
+    ]);
+    expect(html).toContain("<figure");
+    // A regra tem que existir E zerar a margem — `toContain(".ed-figure")`
+    // sozinho passaria com `.ed-figure { padding: 0 }`, que não conserta nada.
+    expect(html).toMatch(/\.ed-figure\s*\{[^}]*margin:\s*0/);
+  });
+});
+```
+
+## Teste de Mutação — Falha Quando a Regra Desaparece
+
+**Passo 1: Remover linha 536 de `html.ts`**
+
+A linha:
+```css
+.ed-figure { margin: 0; padding: 0; }
+```
+
+foi removida temporariamente.
+
+**Passo 2: Rodar o teste — FALHA**
+
+```
+× reset de margem do <figure> > o stylesheet zera a margem do .ed-figure 4ms
+   → expected '<!doctype html><html lang="pt-BR"><he…' to match /\.ed-figure\s*\{[^}]*margin:\s*0/
+
+ FAIL  src/__tests__/html.test.ts > reset de margem do <figure> > o stylesheet zera a margem do .ed-figure
+AssertionError: expected '<!doctype html><html lang="pt-BR"><he…' to match /\.ed-figure\s*\{[^}]*margin:\s*0/
+
+- Expected: 
+/\.ed-figure\s*\{[^}]*margin:\s*0/
+
++ Received: 
+"<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\"><title>Documento</title><style>
+@page {
+  size: 210mm 297mm;
+  margin: 25mm 25mm 25mm 25mm;
+}
+... [CSS sem a regra .ed-figure] ...
+"
+```
+
+✓ **Teste falha como esperado.** A regex não encontra `.ed-figure { ... margin: 0 ... }`.
+
+**Passo 3: Restaurar linha 536**
+
+A linha foi restaurada:
+```css
+.ed-figure { margin: 0; padding: 0; }
+```
+
+**Confirmação:** `git diff --stat packages/export-pdf/src/html.ts` retorna vazio.
+
+## Resultados dos Testes Após Fix Round 2
+
+**packages/export-pdf:**
+```
+Test Files  2 passed (2)
+Tests  41 passed (41)  ← +1 novo teste de mutação
+Duration  380ms
+```
+
+**packages/react:**
+```
+Test Files  18 passed (18)
+Tests  315 passed (315)
+Duration  10.70s
+```
+
+Incluindo `printSnapshot.test.ts` que valida fidelidade PDF sem regressão.
+
+## Commit Fix Round 2
+
+```
+Hash: 393e2e9
+Message: test(pdf): add regression test for .ed-figure margin reset in stylesheet
+```
+
+## Verificação Obrigatória — 3 Itens
+
+**1. Saída do teste **falhando** com a linha 536 removida:**
+```
+× reset de margem do <figure> > o stylesheet zera a margem do .ed-figure 4ms
+  → expected '<!doctype html><html lang="pt-BR"><he…' to match /\.ed-figure\s*\{[^}]*margin:\s*0/
+
+FAIL  src/__tests__/html.test.ts > reset de margem do <figure> > o stylesheet zera a margem do .ed-figure
+AssertionError: expected... to match /\.ed-figure\s*\{[^}]*margin:\s*0/
+```
+
+✓ Teste falhou.
+✓ Linha 536 restaurada.
+✓ `git diff --stat` limpo em `html.ts`.
+
+**2. `cd packages/export-pdf && npx vitest run && npx tsc --noEmit`:**
+```
+✓ src/__tests__/caption.test.ts (5 tests) 2ms
+✓ src/__tests__/html.test.ts (36 tests) 6ms
+ Test Files  2 passed (2)
+ Tests  41 passed (41)
+Duration  380ms
+
+(TypeScript: no errors)
+```
+
+**3. `cd ../react && npx vitest run` — confirmação que nada quebrou:**
+```
+✓ Test Files  18 passed (18)
+✓ Tests  315 passed (315)
+✓ printSnapshot.test.ts (4 tests) — fidelidade PDF verde
+Duration  10.70s
+```
+
+## Conclusão Fix Round 2
+
+O teste de mutação discrimina: remove-se a linha 536 → teste falha. Restaura-se → teste passa. O guardrail agora é **obrigatório**: qualquer pessoa que remova ou altere a regra `.ed-figure` no stylesheet sem atualizar o teste, verá a falha na suíte do export-pdf.
