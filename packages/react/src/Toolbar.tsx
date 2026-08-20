@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useEditorContext } from "./EditorContext";
 import { ANSWER_LINE_MAX, TABLE_BORDER_COLOR } from "@sofereditor/core";
+import { TableBorderPanel, BORDER_MENU_GLYPH } from "./TableBorderPanel";
 import type {
   AlignValue,
   AnswerLineSpacing,
@@ -17,7 +18,6 @@ import type {
   DirValue,
   ImageLayout,
   MarkName,
-  TableBorderPreset,
 } from "@sofereditor/core";
 
 // School standard: Arial only. The dropdown is kept (instead of removed) so
@@ -629,6 +629,7 @@ function TableMenu(): JSX.Element {
   const editor = useEditorContext();
   const inTable = editor.isInTable();
   const [open, setOpen] = useState(false);
+  const [bordersOpen, setBordersOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -640,6 +641,11 @@ function TableMenu(): JSX.Element {
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Fechar o menu ▦ recolhe o painel: reabrir sempre começa do estado neutro.
+  useEffect(() => {
+    if (!open) setBordersOpen(false);
   }, [open]);
 
   return (
@@ -730,42 +736,29 @@ function TableMenu(): JSX.Element {
                 Remover cor de fundo
               </button>
               <hr />
-              <label className="ed-toolbar-label">
-                Bordas
-                <select
-                  value={editor.getTableBorderPreset()}
-                  onChange={(e) =>
-                    editor.setTableBorderPreset(e.target.value as TableBorderPreset)
-                  }
-                  aria-label="Bordas da tabela"
-                >
-                  <option value="all">Todas</option>
-                  <option value="outer">Só externas</option>
-                  <option value="horizontal">Só horizontais</option>
-                  <option value="vertical">Só verticais</option>
-                  <option value="none">Nenhuma</option>
-                </select>
-              </label>
-              <label className="ed-toolbar-label ed-table-bgcolor">
-                <span
-                  className="ed-toolbar-swatch"
-                  aria-hidden
-                  style={{ background: editor.getTableBorderColor() ?? TABLE_BORDER_COLOR }}
-                />
-                Cor da borda
-                <input
-                  type="color"
-                  value={editor.getTableBorderColor() ?? TABLE_BORDER_COLOR}
-                  onChange={(e) => editor.setTableBorderColor(e.target.value)}
-                  aria-label="Cor da borda"
-                />
-              </label>
               <button
                 type="button"
-                onClick={() => { setOpen(false); editor.setTableBorderColor(null); }}
+                className="ed-border-toggle"
+                aria-pressed={bordersOpen}
+                aria-expanded={bordersOpen}
+                title="Bordas da tabela"
+                aria-label="Bordas da tabela"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setBordersOpen((v) => !v);
+                }}
               >
-                Restaurar cor padrão
+                {BORDER_MENU_GLYPH}
               </button>
+              {bordersOpen && (
+                <TableBorderPanel
+                  preset={editor.getTableBorderPreset()}
+                  color={editor.getTableBorderColor() ?? TABLE_BORDER_COLOR}
+                  onPreset={(p) => editor.setTableBorderPreset(p)}
+                  onColor={(c) => editor.setTableBorderColor(c)}
+                  onResetColor={() => editor.setTableBorderColor(null)}
+                />
+              )}
               <hr />
               <button
                 type="button"
