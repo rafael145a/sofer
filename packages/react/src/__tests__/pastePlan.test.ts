@@ -37,6 +37,50 @@ describe("planPaste — ordem dos ramos", () => {
     );
     const plano = planPaste(cd);
     expect(plano.kind).toBe("html");
+    // Esse PNG é só o "screenshot" que o Word sempre anexa ao copiar texto —
+    // não uma figura de verdade (o RTF não tem grupo \pict). Sem essa
+    // checagem, TODA colagem de texto formatado do Word ganharia uma imagem
+    // fantasma no final.
+    if (plano.kind === "html") expect(plano.imagensAvulsas ?? []).toHaveLength(0);
+  });
+
+  it("Word (texto + imagem de verdade): anexa o arquivo solto no final do slice", () => {
+    // Forma medida copiando texto+imagem do Word para Mac (2026-08-20): o
+    // HTML não tem <img>/VML/data: nenhum — só o arquivo solto em `files` e,
+    // desta vez, um grupo \pict no RTF (é isso que diferencia do PNG-
+    // screenshot do teste acima).
+    const cd = clipboard(
+      {
+        "text/plain": "Observe a figura abaixo.",
+        "text/html":
+          `<html><body><p class=MsoNormal>Observe a figura abaixo.<o:p></o:p></p></body></html>`,
+        "text/rtf": "{\\rtf1 ...{\\pict\\pngblip ...}...}",
+      },
+      [arquivoPng("image.png", 25796)],
+    );
+    const plano = planPaste(cd);
+    expect(plano.kind).toBe("html");
+    if (plano.kind === "html") {
+      expect(plano.imagensAvulsas).toHaveLength(1);
+      expect(plano.imagensAvulsas![0].name).toBe("image.png");
+    }
+  });
+
+  it("Google Docs (texto + imagem via <img data:> + arquivo solto): NÃO duplica — sem imagensAvulsas", () => {
+    // O Google Docs escreve a imagem no HTML (item 1) — se ele também
+    // mandasse um arquivo solto pro mesmo conteúdo, anexar de novo
+    // duplicaria a imagem.
+    const cd = clipboard(
+      {
+        "text/plain": "texto com imagem",
+        "text/html":
+          `<p>texto <img src="data:image/png;base64,xyz" width="10" height="10"> com imagem</p>`,
+      },
+      [arquivoPng("image.png", 1000)],
+    );
+    const plano = planPaste(cd);
+    expect(plano.kind).toBe("html");
+    if (plano.kind === "html") expect(plano.imagensAvulsas ?? []).toHaveLength(0);
   });
 
   it("imagem de verdade (HTML só com <img>) ainda cai no ramo de arquivos", () => {
