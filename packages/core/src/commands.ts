@@ -231,6 +231,43 @@ export function deleteForward(ctx: CommandContext): void {
   });
 }
 
+/**
+ * `true` quando o caractere imediatamente ANTES (`"backward"`) ou DEPOIS
+ * (`"forward"`) da posição atual do caret é um embed de imagem. Só considera
+ * seleção COLAPSADA — o caso de um embed inteiro SELECIONADO (range de 1
+ * caractere) é responsabilidade de `getSelectedEmbed` no chamador.
+ *
+ * Existe para `Editor.tsx` decidir se Backspace/Delete precisam ser tratados
+ * no `onKeyDown` em vez de esperar `beforeinput`: o `<figure>` de um embed é
+ * `contenteditable=false`, e quando a seleção do DOM pousa nele (o que
+ * acontece depois de inserir ou clicar numa imagem) o navegador NUNCA
+ * dispara `beforeinput` — o caminho normal de delete fica mudo. Resolvido
+ * consultando o MODELO em vez de inspecionar a seleção do DOM (que pode
+ * pousar de formas diferentes por navegador): determinístico e testável sem
+ * montar um editor real.
+ */
+export function isEmbedAdjacentToCaret(
+  ctx: CommandContext,
+  direction: "backward" | "forward",
+): boolean {
+  const sel = ctx.getSelection();
+  if (!isCollapsed(sel)) return false;
+  const pos = sel.focus;
+  const yText = ctx.doc.textAt(pos.blockIndex, pos.cellIndex);
+  if (!yText) return false;
+  const delta = yText.toDelta() as DeltaOp[];
+  let cursor = 0;
+  for (const op of delta) {
+    const len = typeof op.insert === "string" ? op.insert.length : 1;
+    const opStart = cursor;
+    const opEnd = cursor + len;
+    cursor = opEnd;
+    const matches = direction === "backward" ? opEnd === pos.offset : opStart === pos.offset;
+    if (matches) return isImageEmbed(op.insert);
+  }
+  return false;
+}
+
 // ---------- Marks ----------
 
 const booleanMarks: Set<MarkName> = new Set(["bold", "italic", "underline", "strike"]);

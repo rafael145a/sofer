@@ -18,6 +18,7 @@ import {
   insertParagraph,
   insertSlice,
   insertText,
+  isEmbedAdjacentToCaret,
   serializeSelection,
   sliceToText,
   SOFER_MIME,
@@ -772,6 +773,32 @@ export function Editor({
         sm.call(sel, alter, direction, "lineboundary");
         const modelSel = readDomSelection(root);
         if (modelSel) ctxRef.current.setSelection(modelSel);
+      }
+      return;
+    }
+
+    // Backspace/Delete quando um embed (imagem) está selecionado ou
+    // adjacente ao caret colapsado. O `<figure>` do embed é
+    // `contenteditable=false`; quando a seleção do DOM pousa nele — o que
+    // acontece depois de inserir ou clicar numa imagem — o navegador NUNCA
+    // dispara `beforeinput`, então o caminho normal de delete (tratado em
+    // `beforeinput`, no outro useEffect) fica mudo pra esse caso. Decidido
+    // pelo MODELO (`getSelectedEmbed`/`isEmbedAdjacentToCaret`), não pela
+    // seleção do DOM — determinístico e não depende de onde cada navegador
+    // decide pousar o caret ao redor de um elemento não-editável.
+    //
+    // Não intercepta o caso normal (cursor em texto, sem embed adjacente):
+    // aí as duas funções devolvem false/null e o handler cai no `return`
+    // sem `preventDefault`, deixando `beforeinput` cuidar disso como sempre
+    // (ver o teste "não intercepta" em `Editor.keydown.test.ts`).
+    if (!mod && (e.key === "Backspace" || e.key === "Delete")) {
+      const direction = e.key === "Backspace" ? "backward" : "forward";
+      const shouldIntercept =
+        ed.getSelectedEmbed() != null || isEmbedAdjacentToCaret(ctxRef.current, direction);
+      if (shouldIntercept) {
+        e.preventDefault();
+        if (direction === "backward") deleteBackward(ctxRef.current);
+        else deleteForward(ctxRef.current);
       }
       return;
     }
