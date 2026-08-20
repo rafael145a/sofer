@@ -3,7 +3,13 @@
 ## Problema
 
 Dois defeitos na barra flutuante que cola no topo da tabela
-(`TableFloatingToolbar.tsx`). Ambos foram reproduzidos e localizados no código.
+(`TableFloatingToolbar.tsx`).
+
+Grau de evidência, para não confundir o que foi visto com o que foi deduzido:
+o defeito 1 está lido direto no código (os controles não têm rótulo, ponto). O
+defeito 2 é **derivado do código de posicionamento**, não reproduzido — o
+playground do monorepo não tem barras flutuantes, e o app não foi levantado
+nesta sessão. A confirmação visual fica para a implementação.
 
 ### 1. Os controles de borda e de cor não se identificam
 
@@ -33,9 +39,12 @@ está afetada.
 
 Com uma imagem numa célula da primeira linha:
 
-- a barra da imagem ancora acima da **imagem**;
-- a barra da tabela ancora acima da **tabela**;
-- as duas caem no mesmo `y`.
+- a barra da imagem ancora acima da **imagem**
+  (`top = imgTop − TOOLBAR_HEIGHT − TOOLBAR_OFFSET`);
+- a barra da tabela ancora acima da **tabela**, mas pela borda inferior
+  (`top = tableTop − TOOLBAR_OFFSET` com `translateY(-100%)`);
+- com a imagem na primeira linha, `imgTop ≈ tableTop + padding da célula`, e as
+  duas caem a poucos pixels uma da outra.
 
 Empate de `z-index` é resolvido pela ordem do DOM: a da tabela pinta por cima.
 E ela é larga (`w-max flex-nowrap`, centrada na tabela), então engole a barra da
@@ -165,6 +174,18 @@ Nenhum pacote do `editor-monorepo` muda. `setTableBorderPreset`,
 `setTableBorderColor`, `getTableBorderPreset`, `getTableBorderColor` e
 `getSelectedEmbed` já existem em `useEditor.ts`.
 
+Dependências conferidas nos dois consumidores (não é a mesma lockfile):
+
+| | portal2-next | frequencia-ocorrencia |
+| --- | --- | --- |
+| `react-icons` | 5.5.0 | 5.5.0 |
+| `@heroui/react` | 2.7.2 | 2.7.6 |
+| `TbBorder{All,Outer,Horizontal,Vertical,None}` | presentes | presentes |
+| `TbBucketDroplet` | presente | presente |
+
+Nada a instalar. Só `Button`/`ButtonGroup` do HeroUI são usados, API estável
+entre 2.7.2 e 2.7.6.
+
 ## Fora de escopo
 
 - `CustomToolbar.tsx` e `packages/react/src/Toolbar.tsx`: os mesmos controles
@@ -183,6 +204,14 @@ Nenhum pacote do `editor-monorepo` muda. `setTableBorderPreset`,
   o painel não ser portal. Verificar no clique de verdade (abrir o painel,
   clicar em cada preset, mexer na cor) — disparar `change` por script pula
   justamente o caminho que quebra.
+- **Troca de não-controlado para controlado.** O arquivo hoje é uncontrolled:
+  `key={\`bp:${blockIndex}\`} defaultValue={borderPreset}` — o `<select>` só
+  reflete o modelo quando remonta. Os botões-ícone são controlados
+  (`variant = borderPreset === p.key ? 'solid' : 'flat'`), então dependem de
+  `getTableBorderPreset()` já refletir a escrita no render seguinte. No mesmo
+  clique de verificação, conferir **duas** coisas: o painel continua aberto
+  **e** o destaque pulou para o preset novo. Se o destaque não mover, o botão
+  está mentindo o estado — falha que o `defaultValue` antigo escondia.
 - **`getSelectedEmbed()` a cada render.** É chamado no corpo do
   `TableFloatingToolbar`, que já lê `getTableLocation()`, `getCellBackground()`
   e mais três no mesmo lugar. Uma leitura a mais não muda o custo, e o
