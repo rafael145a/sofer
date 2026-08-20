@@ -968,6 +968,46 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
     expect(embeds).toHaveLength(2);
   });
 
+  it("largura maior que MAX_INSERT_WIDTH (600) é limitada, preservando a proporção", () => {
+    // Mesmo teto que insertImageFromFile/drag-drop já aplicam (área de
+    // conteúdo de uma página A4) — sem isso, uma imagem colada com a largura
+    // original (antes de o autor redimensionar no documento de origem)
+    // estouraria a margem da página, e a mesma imagem inserida via
+    // picker/drag ficaria menor que a colada.
+    const html = `<img src="data:image/png;base64,xyz" width="900" height="450">`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
+    expect(embed.width).toBe(600);
+    expect(embed.height).toBe(300); // 450 * (600/900), proporção 2:1 preservada
+  });
+
+  it("largura dentro do limite não é alterada", () => {
+    const html = `<img src="data:image/png;base64,xyz" width="568" height="355">`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
+    expect(embed.width).toBe(568);
+    expect(embed.height).toBe(355);
+  });
+
+  it("width=\"100%\" no atributo não é lido como 100px — sem style equivalente, a imagem é ignorada", () => {
+    // width="100%" é HTML válido; Number.parseFloat("100%") daria 100, um
+    // valor em PX completamente errado (a imagem sairia minúscula em vez de
+    // ocupar a largura do container).
+    const html = `<p>antes <img src="data:image/png;base64,xyz" width="100%" height="50"> depois</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("antes depois");
+    expect(slice!.blocks[0].delta.some((op) => typeof op.insert !== "string")).toBe(false);
+  });
+
+  it("width=\"100%\" no atributo cai pro style quando o style resolve a dimensão", () => {
+    const html =
+      `<img src="data:image/png;base64,xyz" width="100%" height="100%" style="width:300px;height:150px;">`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
+    expect(embed.width).toBe(300);
+    expect(embed.height).toBe(150);
+  });
+
   it("não-regressão: imagem sozinha do Word (HTML sem <img> nenhum) continua devolvendo null e caindo em arquivos", () => {
     // Forma real medida: Word para Mac não escreve <img> no HTML de jeito
     // nenhum (nem VML, nem data:) — só o parágrafo vazio sobra.

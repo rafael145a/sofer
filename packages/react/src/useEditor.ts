@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MAX_INSERT_WIDTH } from "./imageConstraints";
 import { usePageSettings } from "./usePageSettings";
 import {
   EditorDocument,
@@ -250,9 +251,6 @@ export interface UseEditorResult {
    */
   uploadImage?: (file: File) => Promise<string>;
 }
-
-/** Max display width when inserting an image. Larger sources are scaled keeping aspect ratio. */
-const MAX_INSERT_WIDTH = 600;
 
 export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   const doc = useMemo(() => opts.document ?? new EditorDocument(), [opts.document]);

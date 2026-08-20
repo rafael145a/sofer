@@ -704,6 +704,14 @@ export function Editor({
             // tempo. Restaura a posição capturada NO MOMENTO da colagem antes
             // de inserir, senão o slice cai onde o caret está agora, não onde
             // o professor colou.
+            //
+            // Limitação conhecida: é uma posição ABSOLUTA ({blockIndex,
+            // offset}), não uma `Y.RelativePosition`. Cobre o caso comum (o
+            // professor clica em outro lugar enquanto espera o upload) mas
+            // não o caso raro de ele continuar DIGITANDO nessa mesma posição
+            // durante a espera — os offsets teriam avançado e a restauração
+            // cairia num ponto levemente errado. Migrar pra RelativePosition
+            // fecharia isso; fora de escopo aqui.
             ctxRef.current.setSelection(capturedSelection);
             insertSlice(ctxRef.current, resolved);
             await insertAvulsas();

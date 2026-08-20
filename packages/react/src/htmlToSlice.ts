@@ -9,6 +9,7 @@ import type {
   SerializedBlock,
 } from "@sofereditor/core";
 import { isImageEmbed, MAX_LIST_LEVEL } from "@sofereditor/core";
+import { MAX_INSERT_WIDTH } from "./imageConstraints";
 
 /**
  * Converte o HTML do clipboard (Word / Google Docs / navegador) num
@@ -611,19 +612,35 @@ function imageEmbedFromElement(el: Element): DeltaOp | null {
   const width = readImageDimension(el, "width", style);
   const height = readImageDimension(el, "height", style);
   if (width == null || height == null) return null;
-  return { insert: { type: "image", src, width: Math.round(width), height: Math.round(height) } };
+  // Mesmo teto de largura que insertImageFromFile/drag-drop já aplicam (área
+  // de conteúdo de uma página A4) — sem isso, uma imagem colada que
+  // declarasse largura maior estouraria a margem, e a mesma imagem inserida
+  // via picker/drag ficaria menor que a colada (assimetria visível entre
+  // dois caminhos que deveriam se comportar igual).
+  let w = width;
+  let h = height;
+  if (w > MAX_INSERT_WIDTH) {
+    h = (h * MAX_INSERT_WIDTH) / w;
+    w = MAX_INSERT_WIDTH;
+  }
+  return { insert: { type: "image", src, width: Math.round(w), height: Math.round(h) } };
 }
 
-/** Lê uma dimensão do `<img>`: primeiro o atributo (`width`/`height`, número
- *  cru em px — a forma que o Google Docs manda), senão a propriedade `style`
- *  equivalente (convertida pra px via `cssLengthToPx`). */
+/** Lê uma dimensão do `<img>`: primeiro o atributo (`width`/`height`), senão
+ *  a propriedade `style` equivalente (convertida pra px via `cssLengthToPx`).
+ *
+ *  O atributo só é aceito quando é um número cru (`"568"`, a forma que o
+ *  Google Docs manda) — NÃO quando tem sufixo, sobretudo `%`: `width="100%"`
+ *  é HTML válido, e `Number.parseFloat` aceitaria `"100%"` como `100`, um
+ *  valor em PX completamente errado. Um atributo com sufixo cai pro `style`
+ *  em vez de ser mal-interpretado. */
 function readImageDimension(
   el: Element,
   attr: "width" | "height",
   style: Record<string, string>,
 ): number | undefined {
   const raw = el.getAttribute(attr);
-  if (raw) {
+  if (raw && /^\d+(\.\d+)?$/.test(raw.trim())) {
     const n = Number.parseFloat(raw);
     if (Number.isFinite(n) && n > 0) return n;
   }
