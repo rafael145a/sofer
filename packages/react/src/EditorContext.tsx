@@ -2,6 +2,7 @@ import { createContext, useContext, type JSX, type ReactNode } from "react";
 import { LinkDialog } from "./LinkDialog";
 import { PageConfigDialog } from "./PageConfigDialog";
 import { ImageCaptionDialog } from "./ImageCaptionDialog";
+import { FormulaDialog } from "./FormulaDialog";
 import type { UseEditorResult } from "./useEditor";
 
 const EditorContext = createContext<UseEditorResult | null>(null);
@@ -18,6 +19,7 @@ export function EditorProvider({ editor, children }: EditorProviderProps): JSX.E
       <LinkDialog />
       <PageConfigDialog />
       <ImageCaptionDialog />
+      <FormulaDialog />
     </EditorContext.Provider>
   );
 }

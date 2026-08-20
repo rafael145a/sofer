@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "@sofereditor/core": "workspace:*",
+    "@sofereditor/math": "workspace:*",
     "yjs": "^13.6.20"
   },
   "devDependencies": {

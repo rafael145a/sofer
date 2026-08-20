@@ -102,6 +102,18 @@ export interface ImageCaptionRequest {
   resolve: (result: ImageCaptionResult | null) => void;
 }
 
+export interface FormulaResult {
+  latex: string;
+  display: boolean;
+}
+
+export interface FormulaRequest {
+  initialLatex: string;
+  initialDisplay: boolean;
+  /** Resolve com a fórmula, ou null no cancelamento. */
+  resolve: (result: FormulaResult | null) => void;
+}
+
 export interface UseEditorResult {
   doc: EditorDocument;
   history: EditorHistory;
@@ -183,6 +195,16 @@ export interface UseEditorResult {
   ) => Promise<ImageCaptionResult | null>;
   /** Resolver called by `<ImageCaptionDialog>` on apply/cancel. */
   resolveImageCaptionRequest: (result: ImageCaptionResult | null) => void;
+
+  // ---- Fórmula matemática ----
+  formulaRequest: FormulaRequest | null;
+  requestFormula: (
+    initialLatex?: string,
+    initialDisplay?: boolean,
+  ) => Promise<FormulaResult | null>;
+  resolveFormulaRequest: (result: FormulaResult | null) => void;
+  /** Renderiza o LaTeX, gera SVG + PNG e insere como embed na seleção. */
+  insertFormula: (latex: string, display: boolean) => Promise<void>;
 
   // ---- Tables (Phase 4) ----
   /** True iff the focus position lies inside a table cell. */
@@ -793,6 +815,68 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     });
   }, []);
 
+  // ---- Fórmula ----
+  const [formulaRequest, setFormulaRequest] = useState<FormulaRequest | null>(null);
+  const requestFormula = useCallback(
+    (initialLatex = "", initialDisplay = false): Promise<FormulaResult | null> => {
+      return new Promise((resolve) => {
+        setFormulaRequest({ initialLatex, initialDisplay, resolve });
+      });
+    },
+    [],
+  );
+  const resolveFormulaRequest = useCallback((result: FormulaResult | null) => {
+    setFormulaRequest((prev) => {
+      if (prev) prev.resolve(result);
+      return null;
+    });
+  }, []);
+
+  const insertFormula = useCallback(
+    async (latex: string, display: boolean): Promise<void> => {
+      // Import DINÂMICO, pelo mesmo motivo do modal: manter o mathjax-full
+      // fora do bundle principal. Como esta função já é async, não custa nada.
+      const { renderLatexToSvg, measureExInPx, svgToDataUrl, svgToPngDataUrl } =
+        await import("@sofereditor/math");
+      const r = renderLatexToSvg(latex, display);
+      if (!r.ok) return; // o modal já barra isto; aqui é cinto de segurança
+      // `useEditor` não tem ref do elemento raiz — conferido. `.ed-root` é o
+      // mesmo seletor que TableFloatingToolbar usa para achar a raiz do editor.
+      // Medir no <body> daria o font-size do documento HTML, não o do editor.
+      const root = document.querySelector<HTMLElement>(".ed-root");
+      const exPx = root ? measureExInPx(root) : 8;
+      let w = Math.round(r.widthEx * exPx);
+      let h = Math.round(r.heightEx * exPx);
+      if (w > MAX_INSERT_WIDTH) {
+        h = Math.round((h * MAX_INSERT_WIDTH) / w);
+        w = MAX_INSERT_WIDTH;
+      }
+      const src = svgToDataUrl(r.svg);
+      let svgFallback: string | undefined;
+      try {
+        svgFallback = await svgToPngDataUrl(r.svg, w, h);
+      } catch {
+        // Sem PNG a fórmula ainda entra no documento e sai no PDF; só o DOCX
+        // vai pular esse embed, contando em `skipped`. Melhor que não inserir.
+        svgFallback = undefined;
+      }
+      cmdInsertImage(ctxRef.current, {
+        type: "image",
+        src,
+        width: w,
+        height: h,
+        ...(display ? { align: "center" as const } : {}),
+        formula: {
+          latex,
+          display,
+          ...(display ? {} : { vAlign: `${r.vAlignEx}ex` }),
+        },
+        ...(svgFallback ? { svgFallback } : {}),
+      });
+    },
+    [],
+  );
+
   return {
     doc,
     history,
@@ -860,6 +944,10 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     imageCaptionRequest,
     requestImageCaption,
     resolveImageCaptionRequest,
+    formulaRequest,
+    requestFormula,
+    resolveFormulaRequest,
+    insertFormula,
     uploadImage: opts.uploadImage,
   };
 }

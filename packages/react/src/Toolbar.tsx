@@ -471,6 +471,20 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
           hidden
           onChange={onImageInputChange}
         />
+        <button
+          type="button"
+          className="ed-toolbar-btn"
+          title="Inserir fórmula"
+          onMouseDown={stop}
+          onClick={(e) => {
+            e.preventDefault();
+            void editor.requestFormula().then((r) => {
+              if (r) void editor.insertFormula(r.latex, r.display);
+            });
+          }}
+        >
+          √x
+        </button>
       </Group>
 
       {selectedEmbed && (
