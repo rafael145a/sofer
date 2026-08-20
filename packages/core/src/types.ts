@@ -231,6 +231,34 @@ export interface ImageEmbed {
    * caption using the paragraph's own alignment.
    */
   captionAlign?: "left" | "center" | "right";
+  /**
+   * Presente ⇒ este embed é uma fórmula. A imagem (`src`) é o RENDER; isto é
+   * a fonte. Reabrir o editor de fórmula relê `latex` daqui.
+   */
+  formula?: {
+    /** Fonte da verdade. O que o professor escreveu. */
+    latex: string;
+    /**
+     * Bloco (`\displaystyle`, centrado) em vez de inline. Guardado explícito
+     * em vez de derivado de `align === "center"`: derivar acoplaria o modo da
+     * fórmula a um campo de layout que o usuário mexe pelos botões de
+     * alinhamento da toolbar, e reabrir o modal cairia no modo errado.
+     */
+    display: boolean;
+    /**
+     * Alinhamento de base para fórmula inline, no formato que o MathJax
+     * devolve (ex.: "-0.781ex"). Aplicado como `vertical-align` no WRAPPER
+     * (<figure>) para a fórmula sentar na linha do texto. Ausente quando
+     * `display` é true.
+     */
+    vAlign?: string;
+  };
+  /**
+   * PNG data URL. Só o `export-docx` consome: o `ImageRun` de `type: "svg"`
+   * exige um `fallback` raster. Vale para qualquer embed cujo `src` seja SVG —
+   * não é exclusivo de fórmula.
+   */
+  svgFallback?: string;
 }
 
 export type InsertContent = string | ImageEmbed;
@@ -242,6 +270,18 @@ export function isImageEmbed(v: unknown): v is ImageEmbed {
     (v as { type?: unknown }).type === "image" &&
     typeof (v as { src?: unknown }).src === "string"
   );
+}
+
+/**
+ * Um embed de fórmula é um embed de IMAGEM que carrega seu LaTeX. Só dois
+ * lugares precisam distinguir: a toolbar (trocar "Legenda" por "Editar
+ * fórmula") e o duplo clique que reabre o modal. Todo o resto trata como
+ * imagem, de propósito.
+ */
+export function isFormulaEmbed(
+  v: unknown,
+): v is ImageEmbed & { formula: NonNullable<ImageEmbed["formula"]> } {
+  return isImageEmbed(v) && (v as ImageEmbed).formula != null;
 }
 
 export interface DeltaOp {
