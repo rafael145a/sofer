@@ -13,6 +13,14 @@ import {
 } from "@sofereditor/core";
 import { htmlToSlice } from "../htmlToSlice";
 
+// B2: `imageEmbedFromElement` agora descarta embeds `data:image/` com carga
+// decodificada menor que ~1 KB (placeholder de lazy-load, tipicamente um
+// GIF/PNG 1×1 de algumas dezenas de bytes — ver o comentário na função e o
+// teste dedicado mais abaixo). As fixtures de imagem "de verdade" deste
+// arquivo por isso não podem mais usar payloads minúsculos como "xyz"/"AAA":
+// usam este payload grande o bastante (>1 KB decodificado) no lugar.
+const BIG_B64 = "A".repeat(1400) + "==";
+
 function harness() {
   const doc = new EditorDocument();
   let selection: Selection = collapsedSelection({ blockIndex: 0, offset: 0 });
@@ -845,7 +853,7 @@ describe("htmlToSlice — I3: <br> vira espaço, nunca \\n literal no texto do b
 
 describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
   it("<img> é ignorado sem quebrar o texto ao redor", () => {
-    const html = `<p>antes <img src="data:image/png;base64,xyz"> depois</p>`;
+    const html = `<p>antes <img src="data:image/png;base64,${BIG_B64}"> depois</p>`;
     const slice = htmlToSlice(html);
     expect(slice!.blocks[0].text).toBe("antes depois");
   });
@@ -895,7 +903,7 @@ describe("htmlToSlice — <img>, <style>/<script>/<o:p>, &nbsp;", () => {
 describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)", () => {
   it("dimensões via atributos width/height (forma medida do Google Docs)", () => {
     const html =
-      `<p>antes <img src="data:image/png;base64,xyz" width="568" height="355"> depois</p>`;
+      `<p>antes <img src="data:image/png;base64,${BIG_B64}" width="568" height="355"> depois</p>`;
     const slice = htmlToSlice(html);
     expect(slice).not.toBeNull();
     expect(slice!.blocks).toHaveLength(1);
@@ -908,21 +916,21 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
     const embed = delta[1].insert as { type: "image"; src: string; width: number; height: number };
     expect(embed).toEqual({
       type: "image",
-      src: "data:image/png;base64,xyz",
+      src: `data:image/png;base64,${BIG_B64}`,
       width: 568,
       height: 355,
     });
   });
 
   it("dimensões via style quando não há atributos width/height", () => {
-    const html = `<p><img src="data:image/png;base64,xyz" style="width:300px;height:150px;"></p>`;
+    const html = `<p><img src="data:image/png;base64,${BIG_B64}" style="width:300px;height:150px;"></p>`;
     const slice = htmlToSlice(html);
     const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
     expect(embed).toEqual(expect.objectContaining({ width: 300, height: 150 }));
   });
 
   it("style em unidade não-px (pt) converte pra px", () => {
-    const html = `<p><img src="data:image/png;base64,xyz" style="width:150pt;height:75pt;"></p>`;
+    const html = `<p><img src="data:image/png;base64,${BIG_B64}" style="width:150pt;height:75pt;"></p>`;
     const slice = htmlToSlice(html);
     const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
     expect(embed.width).toBe(Math.round(150 * (96 / 72)));
@@ -930,7 +938,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
   });
 
   it("sem NENHUMA dimensão (nem atributo nem style) o <img> continua ignorado", () => {
-    const html = `<p>antes <img src="data:image/png;base64,xyz"> depois</p>`;
+    const html = `<p>antes <img src="data:image/png;base64,${BIG_B64}"> depois</p>`;
     const slice = htmlToSlice(html);
     expect(slice!.blocks[0].text).toBe("antes depois");
     expect(slice!.blocks[0].delta.some((op) => typeof op.insert !== "string")).toBe(false);
@@ -950,7 +958,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
   });
 
   it("imagem sozinha (sem texto ao redor) com dimensões: slice NÃO é null — bloco tem embed", () => {
-    const html = `<img src="data:image/png;base64,xyz" width="568" height="355">`;
+    const html = `<img src="data:image/png;base64,${BIG_B64}" width="568" height="355">`;
     const slice = htmlToSlice(html);
     expect(slice).not.toBeNull();
     expect(slice!.blocks).toHaveLength(1);
@@ -961,8 +969,8 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
 
   it("duas imagens no mesmo parágrafo (forma medida: <img> count 2) — as duas viram embed", () => {
     const html =
-      `<p><img src="data:image/png;base64,AAA" width="100" height="50">` +
-      `<img src="data:image/jpeg;base64,BBB" width="200" height="80"></p>`;
+      `<p><img src="data:image/png;base64,${BIG_B64}" width="100" height="50">` +
+      `<img src="data:image/jpeg;base64,${BIG_B64}" width="200" height="80"></p>`;
     const slice = htmlToSlice(html);
     const embeds = slice!.blocks[0].delta.filter((op) => typeof op.insert !== "string");
     expect(embeds).toHaveLength(2);
@@ -974,7 +982,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
     // original (antes de o autor redimensionar no documento de origem)
     // estouraria a margem da página, e a mesma imagem inserida via
     // picker/drag ficaria menor que a colada.
-    const html = `<img src="data:image/png;base64,xyz" width="900" height="450">`;
+    const html = `<img src="data:image/png;base64,${BIG_B64}" width="900" height="450">`;
     const slice = htmlToSlice(html);
     const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
     expect(embed.width).toBe(600);
@@ -982,7 +990,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
   });
 
   it("largura dentro do limite não é alterada", () => {
-    const html = `<img src="data:image/png;base64,xyz" width="568" height="355">`;
+    const html = `<img src="data:image/png;base64,${BIG_B64}" width="568" height="355">`;
     const slice = htmlToSlice(html);
     const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
     expect(embed.width).toBe(568);
@@ -993,7 +1001,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
     // width="100%" é HTML válido; Number.parseFloat("100%") daria 100, um
     // valor em PX completamente errado (a imagem sairia minúscula em vez de
     // ocupar a largura do container).
-    const html = `<p>antes <img src="data:image/png;base64,xyz" width="100%" height="50"> depois</p>`;
+    const html = `<p>antes <img src="data:image/png;base64,${BIG_B64}" width="100%" height="50"> depois</p>`;
     const slice = htmlToSlice(html);
     expect(slice!.blocks[0].text).toBe("antes depois");
     expect(slice!.blocks[0].delta.some((op) => typeof op.insert !== "string")).toBe(false);
@@ -1001,7 +1009,7 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
 
   it("width=\"100%\" no atributo cai pro style quando o style resolve a dimensão", () => {
     const html =
-      `<img src="data:image/png;base64,xyz" width="100%" height="100%" style="width:300px;height:150px;">`;
+      `<img src="data:image/png;base64,${BIG_B64}" width="100%" height="100%" style="width:300px;height:150px;">`;
     const slice = htmlToSlice(html);
     const embed = slice!.blocks[0].delta[0].insert as { width: number; height: number };
     expect(embed.width).toBe(300);
@@ -1016,6 +1024,40 @@ describe("htmlToSlice — <img> com data: e dimensões vira embed (Google Docs)"
       `<p class=MsoNormal><o:p>&nbsp;</o:p></p></body></html>`;
     const slice = htmlToSlice(html);
     expect(slice).toBeNull();
+  });
+});
+
+describe("htmlToSlice — B2: placeholder de lazy-load (data: minúsculo) é descartado", () => {
+  // GIF 1×1 transparente clássico — o placeholder de lazy-load mais comum da
+  // web (`<img src="data:image/gif;base64,..." data-src="real.jpg"
+  // width="800" height="400">`). Tem 34 bytes decodificados, bem abaixo do
+  // piso de 1 KB. Sem o piso, isto virava uma caixa em branco esticada pro
+  // tamanho declarado (800×400) — regressão, já que antes desta função
+  // existir todo <img> era ignorado.
+  const GIF_1PX = "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+  it("GIF 1×1 base64 com width=800 height=400 é descartado, mesmo com dimensões grandes", () => {
+    const html = `<p><img src="data:image/gif;base64,${GIF_1PX}" data-src="https://noticia.exemplo.com/real.jpg" width="800" height="400"></p>`;
+    const slice = htmlToSlice(html);
+    // Sem texto ao redor e sem embed aproveitável — mesmo `null` de antes de
+    // `imageEmbedFromElement` existir.
+    expect(slice).toBeNull();
+  });
+
+  it("GIF 1×1 com texto ao redor: texto sobrevive, embed não entra", () => {
+    const html = `<p>antes <img src="data:image/gif;base64,${GIF_1PX}" width="800" height="400"> depois</p>`;
+    const slice = htmlToSlice(html);
+    expect(slice!.blocks[0].text).toBe("antes depois");
+    expect(slice!.blocks[0].delta.some((op) => typeof op.insert !== "string")).toBe(false);
+  });
+
+  it("imagem pequena porém legítima (>= 1 KB decodificado) passa normalmente", () => {
+    const html = `<p><img src="data:image/png;base64,${BIG_B64}" width="50" height="50"></p>`;
+    const slice = htmlToSlice(html);
+    const embed = slice!.blocks[0].delta[0].insert as { type: string; width: number; height: number };
+    expect(embed.type).toBe("image");
+    expect(embed.width).toBe(50);
+    expect(embed.height).toBe(50);
   });
 });
 
@@ -1043,7 +1085,7 @@ describe("htmlToSlice — vazio / sem conteúdo aproveitável", () => {
   });
 
   it("HTML com apenas uma imagem solta (sem texto) retorna null", () => {
-    const html = `<img src="data:image/png;base64,xyz">`;
+    const html = `<img src="data:image/png;base64,${BIG_B64}">`;
     expect(htmlToSlice(html)).toBeNull();
   });
 });
@@ -1059,7 +1101,7 @@ describe("htmlToSlice — openStart/openEnd", () => {
 describe("htmlToSlice — integração com insertSlice: embed sobrevive à inserção real no doc", () => {
   it("colar texto+imagem do Google Docs no meio de um parágrafo existente preserva o embed", () => {
     const html =
-      `<p>antes <img src="data:image/png;base64,xyz" width="568" height="355"> depois</p>`;
+      `<p>antes <img src="data:image/png;base64,${BIG_B64}" width="568" height="355"> depois</p>`;
     const slice = htmlToSlice(html);
     expect(slice).not.toBeNull();
 
@@ -1086,10 +1128,16 @@ describe("htmlToSlice — imagem EM LINHA do Word (caso real medido)", () => {
   // `data:` no HTML. Forma exata capturada do clipboard dele:
   //  - atributos SEM aspas (`width=172`), quebra de linha antes do `src`
   //  - rótulo `data:image/png` com carga que na verdade é JPEG (`/9j/` = FFD8FF)
+  //
+  // O prefixo `/9j/4AAQSkZJRgABAQAASABIAAD/2wBDAAg=` é a carga real medida no
+  // clipboard, mas sozinha ela tem só ~33 bytes decodificados — abaixo do
+  // piso de 1 KB do bug B2 (que existe pra descartar placeholder de lazy-load
+  // 1×1, não imagem real). Preenchida com `BIG_B64` pra passar do piso, do
+  // jeito que uma foto de verdade do Word passaria.
   const wordInline =
     `<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">` +
     `<body><p class=MsoNormal>Pela manha, 429 pessoas <img width=172 height=103\r\n` +
-    `     src="data:image/png;base64,/9j/4AAQSkZJRgABAQAASABIAAD/2wBDAAg="> passaram.<o:p></o:p></p></body></html>`;
+    `     src="data:image/png;base64,/9j/4AAQSkZJRgABAQAASABIAAD/2wBDAAg=${BIG_B64}"> passaram.<o:p></o:p></p></body></html>`;
 
   it("emite o embed com as dimensoes declaradas, apesar dos atributos sem aspas", () => {
     const slice = htmlToSlice(wordInline);

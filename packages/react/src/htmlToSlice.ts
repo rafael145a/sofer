@@ -605,9 +605,50 @@ function walkInlineNode(node: ChildNode, marks: MarkAttrs, ops: DeltaOp[]): void
  * comentário em `htmlToSlice`), então esta função só tem efeito prático para
  * fontes que de fato emitem `<img>` com `data:` (Google Docs é o caso medido).
  */
+/** Piso de bytes decodificados abaixo do qual um embed `data:image/` é
+ *  descartado — ver o comentário em `imageEmbedFromElement` (bug B2). */
+const MIN_EMBED_BYTES = 1024;
+
+/** Tamanho aproximado, em bytes, do payload decodificado de uma `data:` URL —
+ *  sem decodificar de fato (nem `atob`, nem `decodeURIComponent` do payload
+ *  inteiro seria necessário para só medir tamanho), só o cálculo de tamanho a
+ *  partir do comprimento do texto. Cobre as duas formas de `data:` URL:
+ *  base64 (`;base64,`, o caso comum de imagem grande) e URL-encoded/percent-
+ *  encoded (`data:image/svg+xml,%3Csvg...`, comum em ícone inline). Payload
+ *  ausente ou URL sem vírgula → 0. */
+function decodedDataUrlByteLength(dataUrl: string): number {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex === -1) return 0;
+  const meta = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  if (/;base64$/i.test(meta)) {
+    const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+  }
+  // Forma URL-encoded: cada byte real ou é um caractere literal (1 byte) ou
+  // um "%XX" (3 caracteres pra 1 byte) — decodeURIComponent dá o comprimento
+  // certo em unidades UTF-16, aproximação suficiente pra um piso de tamanho.
+  try {
+    return decodeURIComponent(payload).length;
+  } catch {
+    return payload.length;
+  }
+}
+
 function imageEmbedFromElement(el: Element): DeltaOp | null {
   const src = el.getAttribute("src");
   if (!src || !src.startsWith("data:image/")) return null;
+  // Piso de bytes: o padrão de lazy-load mais comum da web é
+  // `<img src="data:image/gif;base64,R0lGOD…" data-src="real.jpg" width="800"
+  // height="400">` — um GIF 1×1 transparente usado só como placeholder
+  // enquanto o `src` de verdade (`http`, ignorado por esta função) carrega.
+  // Sem este piso, o 1×1 passa pelas duas checagens (é `data:image/`, tem
+  // dimensões resolvíveis via atributo) e vira uma caixa em branco esticada
+  // pro tamanho do placeholder — regressão: antes desta função existir,
+  // TODO `<img>` era ignorado e nada aparecia. Um GIF/PNG 1×1 real tem
+  // algumas dezenas de bytes; nenhuma figura de verdade de prova fica abaixo
+  // de 1 KB decodificado.
+  if (decodedDataUrlByteLength(src) < MIN_EMBED_BYTES) return null;
   const style = parseStyle(el.getAttribute("style"));
   const width = readImageDimension(el, "width", style);
   const height = readImageDimension(el, "height", style);
