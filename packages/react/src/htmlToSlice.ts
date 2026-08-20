@@ -8,7 +8,8 @@ import type {
   MarkAttrs,
   SerializedBlock,
 } from "@sofereditor/core";
-import { MAX_LIST_LEVEL } from "@sofereditor/core";
+import { isImageEmbed, MAX_LIST_LEVEL } from "@sofereditor/core";
+import { MAX_INSERT_WIDTH } from "./imageConstraints";
 
 /**
  * Converte o HTML do clipboard (Word / Google Docs / navegador) num
@@ -77,18 +78,27 @@ export function htmlToSlice(html: string): ClipboardSlice | null {
   // listItem para que o primeiro item sempre comece em 0.
   normalizeListLevels(blocks);
 
-  // Nada aproveitável = TODO bloco sem texto. Acontece quando o HTML só
-  // carregava imagem, que este conversor ignora por escopo: o Word manda uma
-  // imagem como `<p class=MsoNormal><img ...><o:p></o:p></p>`, o que produziria
-  // um parágrafo vazio. Devolver esse parágrafo faria `planPaste` escolher o
+  // Nada aproveitável = TODO bloco sem texto E sem embed de imagem. O Word
+  // nunca escreve `<img>` no HTML do clipboard (nem VML, nem `data:` — ver o
+  // comentário em `imageEmbedFromElement`), então uma imagem do Word sempre
+  // produz um parágrafo vazio aqui: `<p class=MsoNormal><img ...><o:p></o:p></p>`
+  // sem `<img>` nenhum sobrevivendo ao parser do navegador com atributos
+  // aproveitáveis. Devolver esse parágrafo vazio faria `planPaste` escolher o
   // ramo de HTML e a imagem seria DESCARTADA — colar imagem do Word passaria a
   // inserir uma linha em branco. Devolvendo null, a colagem segue para o ramo
-  // de arquivos, que insere a imagem.
+  // de arquivos, que insere a imagem (ver `pastePlan.ts`).
+  //
+  // O Google Docs, ao contrário, ESCREVE `<img src="data:image/...">` no HTML
+  // — por isso um bloco pode ter embed e nenhum texto (colar só a imagem, sem
+  // nenhuma palavra ao redor). Esse caso agora conta como aproveitável.
   //
   // Parágrafo vazio NO MEIO de conteúdo real é linha em branco de propósito e
-  // continua preservado — a regra só descarta quando não sobrou texto nenhum.
-  const temTexto = blocks.some((b) => b.text.trim().length > 0);
-  if (!temTexto) return null;
+  // continua preservado — a regra só descarta quando não sobrou texto NEM
+  // embed nenhum.
+  const temConteudo = blocks.some(
+    (b) => b.text.trim().length > 0 || b.delta.some((op) => isImageEmbed(op.insert)),
+  );
+  if (!temConteudo) return null;
 
   // `blockLevel: true` diz a `insertSlice` para ADOTAR o type/attrs do bloco
   // colado em vez de fazer splice inline (ver o comentário em `insertSlice`).
@@ -244,8 +254,12 @@ function walkBlockLevel(container: Element, marks: MarkAttrs, blocks: Serialized
         break;
       }
       case "img":
-        // Imagens são ignoradas neste caminho — colar imagem sozinha já
-        // funciona pelo ramo de arquivos do clipboard.
+        // <img> como filho direto do container (sem <p> ao redor) — trata
+        // como conteúdo solto, igual a <br>, pra juntar com texto vizinho no
+        // mesmo parágrafo em vez de sempre virar um bloco próprio. A emissão
+        // de fato (checagem de `src`/dimensões) acontece em `walkInlineNode`,
+        // que processa `loose` no flush.
+        loose.push(node);
         break;
       case "br":
         loose.push(node);
@@ -540,7 +554,11 @@ function walkInlineNode(node: ChildNode, marks: MarkAttrs, ops: DeltaOp[]): void
   const tag = el.tagName.toLowerCase();
 
   if (IGNORED_TAGS.has(tag) || isNamespacedTag(tag)) return;
-  if (tag === "img") return; // imagens ignoradas neste caminho.
+  if (tag === "img") {
+    const op = imageEmbedFromElement(el);
+    if (op) ops.push(op);
+    return;
+  }
   if (tag === "br") {
     // "\n" literal só é legítimo dentro de célula de tabela (ver
     // `core/src/commands.ts`, com `white-space: pre-wrap` no CSS da célula).
@@ -565,6 +583,141 @@ function walkInlineNode(node: ChildNode, marks: MarkAttrs, ops: DeltaOp[]): void
   }
 
   for (const child of Array.from(el.childNodes)) walkInlineNode(child, nextMarks, ops);
+}
+
+/**
+ * `<img>` → `DeltaOp` de embed de imagem, ou `null` quando não dá pra
+ * aproveitar. Duas condições, as duas obrigatórias:
+ *
+ *  - `src` começando com `data:image/`. `http(s):` exigiria download
+ *    cross-origin (CORS, latência, falha silenciosa) e `file:` (Word no
+ *    Windows referencia a imagem por caminho local do disco do autor) é
+ *    inalcançável daqui — nos dois casos a imagem continua sendo ignorada,
+ *    como sempre foi.
+ *  - Dimensões resolvíveis: atributo `width`/`height` (número em px, é o que
+ *    o Google Docs manda), senão `style="width:...;height:..."`. Sem
+ *    dimensão o layout quebra (o embed não tem tamanho intrínseco confiável
+ *    pra render), então sem NENHUMA das duas fontes a imagem é ignorada —
+ *    mesmo comportamento de antes desta mudança.
+ *
+ * O Word nunca chega aqui: ele não escreve `<img>` no HTML do clipboard de
+ * jeito nenhum (nem VML, nem condicional `<![if !vml]>`, nem `data:` — ver o
+ * comentário em `htmlToSlice`), então esta função só tem efeito prático para
+ * fontes que de fato emitem `<img>` com `data:` (Google Docs é o caso medido).
+ */
+/** Piso de bytes decodificados abaixo do qual um embed `data:image/` é
+ *  descartado — ver o comentário em `imageEmbedFromElement` (bug B2). */
+const MIN_EMBED_BYTES = 1024;
+
+/** Tamanho aproximado, em bytes, do payload decodificado de uma `data:` URL —
+ *  sem decodificar de fato (nem `atob`, nem `decodeURIComponent` do payload
+ *  inteiro seria necessário para só medir tamanho), só o cálculo de tamanho a
+ *  partir do comprimento do texto. Cobre as duas formas de `data:` URL:
+ *  base64 (`;base64,`, o caso comum de imagem grande) e URL-encoded/percent-
+ *  encoded (`data:image/svg+xml,%3Csvg...`, comum em ícone inline). Payload
+ *  ausente ou URL sem vírgula → 0. */
+function decodedDataUrlByteLength(dataUrl: string): number {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex === -1) return 0;
+  const meta = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  if (/;base64$/i.test(meta)) {
+    const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+    return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+  }
+  // Forma URL-encoded: cada byte real ou é um caractere literal (1 byte) ou
+  // um "%XX" (3 caracteres pra 1 byte) — decodeURIComponent dá o comprimento
+  // certo em unidades UTF-16, aproximação suficiente pra um piso de tamanho.
+  try {
+    return decodeURIComponent(payload).length;
+  } catch {
+    return payload.length;
+  }
+}
+
+function imageEmbedFromElement(el: Element): DeltaOp | null {
+  const src = el.getAttribute("src");
+  if (!src || !src.startsWith("data:image/")) return null;
+  // Piso de bytes: o padrão de lazy-load mais comum da web é
+  // `<img src="data:image/gif;base64,R0lGOD…" data-src="real.jpg" width="800"
+  // height="400">` — um GIF 1×1 transparente usado só como placeholder
+  // enquanto o `src` de verdade (`http`, ignorado por esta função) carrega.
+  // Sem este piso, o 1×1 passa pelas duas checagens (é `data:image/`, tem
+  // dimensões resolvíveis via atributo) e vira uma caixa em branco esticada
+  // pro tamanho do placeholder — regressão: antes desta função existir,
+  // TODO `<img>` era ignorado e nada aparecia. Um GIF/PNG 1×1 real tem
+  // algumas dezenas de bytes; nenhuma figura de verdade de prova fica abaixo
+  // de 1 KB decodificado.
+  if (decodedDataUrlByteLength(src) < MIN_EMBED_BYTES) return null;
+  const style = parseStyle(el.getAttribute("style"));
+  const width = readImageDimension(el, "width", style);
+  const height = readImageDimension(el, "height", style);
+  if (width == null || height == null) return null;
+  // Mesmo teto de largura que insertImageFromFile/drag-drop já aplicam (área
+  // de conteúdo de uma página A4) — sem isso, uma imagem colada que
+  // declarasse largura maior estouraria a margem, e a mesma imagem inserida
+  // via picker/drag ficaria menor que a colada (assimetria visível entre
+  // dois caminhos que deveriam se comportar igual).
+  let w = width;
+  let h = height;
+  if (w > MAX_INSERT_WIDTH) {
+    h = (h * MAX_INSERT_WIDTH) / w;
+    w = MAX_INSERT_WIDTH;
+  }
+  return { insert: { type: "image", src, width: Math.round(w), height: Math.round(h) } };
+}
+
+/** Lê uma dimensão do `<img>`: primeiro o atributo (`width`/`height`), senão
+ *  a propriedade `style` equivalente (convertida pra px via `cssLengthToPx`).
+ *
+ *  O atributo só é aceito quando é um número cru (`"568"`, a forma que o
+ *  Google Docs manda) — NÃO quando tem sufixo, sobretudo `%`: `width="100%"`
+ *  é HTML válido, e `Number.parseFloat` aceitaria `"100%"` como `100`, um
+ *  valor em PX completamente errado. Um atributo com sufixo cai pro `style`
+ *  em vez de ser mal-interpretado. */
+function readImageDimension(
+  el: Element,
+  attr: "width" | "height",
+  style: Record<string, string>,
+): number | undefined {
+  const raw = el.getAttribute(attr);
+  if (raw && /^\d+(\.\d+)?$/.test(raw.trim())) {
+    const n = Number.parseFloat(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const fromStyle = style[attr];
+  if (fromStyle) {
+    const n = cssLengthToPx(fromStyle);
+    if (n != null) return n;
+  }
+  return undefined;
+}
+
+/** CSS length → px. Aceita `px` (padrão quando a unidade falta), `pt`, `in`,
+ *  `cm`, `mm`. Unidades relativas ao contexto do documento de origem
+ *  (`%`/`em`/`rem`) não são resolvíveis aqui e devolvem `undefined` — mesma
+ *  filosofia de `parseFontSizePt`. */
+function cssLengthToPx(raw: string): number | undefined {
+  const v = raw.trim();
+  const m = /^(-?[\d.]+)\s*(px|pt|in|cm|mm)?$/i.exec(v);
+  if (!m) return undefined;
+  const num = Number.parseFloat(m[1]);
+  if (!Number.isFinite(num) || num <= 0) return undefined;
+  const unit = (m[2] ?? "px").toLowerCase();
+  switch (unit) {
+    case "px":
+      return num;
+    case "pt":
+      return num * (96 / 72);
+    case "in":
+      return num * 96;
+    case "cm":
+      return num * (96 / 2.54);
+    case "mm":
+      return num * (96 / 25.4);
+    default:
+      return undefined;
+  }
 }
 
 /** Negrito/itálico/sublinhado/tachado por NOME da tag. `style` explícito

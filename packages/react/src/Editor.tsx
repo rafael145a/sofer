@@ -11,6 +11,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  collapsedSelection,
   deleteBackward,
   deleteForward,
   deleteSelection,
@@ -18,6 +19,7 @@ import {
   insertParagraph,
   insertSlice,
   insertText,
+  isEmbedAdjacentToCaret,
   serializeSelection,
   sliceToText,
   SOFER_MIME,
@@ -28,6 +30,7 @@ import {
 } from "@sofereditor/core";
 import { applyDomSelection, isTableRectSelection, readDomSelection, selectionsEqual } from "./dom-bridge";
 import { planPaste } from "./pastePlan";
+import { resolvePastedImageUploads, sliceHasDataImageEmbeds } from "./resolvePastedImages";
 import { BehindImageSelectAffordance } from "./BehindImageSelectAffordance";
 import { LinkHoverTooltip } from "./LinkHoverTooltip";
 import { EditorProvider } from "./EditorContext";
@@ -102,6 +105,17 @@ export function Editor({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  // B4: cobre a colagem de HTML com imagem `data:` pendente de upload (ver
+  // `onPaste`, ramo "html"). `true` do instante em que o upload começa até a
+  // colagem terminar de ser inserida. Sem isso, uma segunda colagem disparada
+  // DURANTE a janela do upload (comum: rede escolar lenta + "não aconteceu
+  // nada visualmente" faz o professor colar de novo) capturaria a MESMA
+  // posição que a primeira, e ao resolver empurraria a primeira colagem —
+  // sem nenhum indicador de carregamento pra explicar por que. Descarta a
+  // segunda em vez de enfileirar: mais simples, e uma colagem perdida com
+  // aviso no console é melhor que duas colagens se atropelando na mesma
+  // posição do documento.
+  const pasteInFlightRef = useRef(false);
   // The `behind` image the pointer is currently hovering (by geometry), so we
   // can show a click affordance to select it through the text on top of it.
   const [hoveredBehind, setHoveredBehind] = useState<{
@@ -675,9 +689,91 @@ export function Editor({
       e.preventDefault();
       switch (plan.kind) {
         case "sofer":
-        case "html":
           insertSlice(ctx, plan.slice);
           return;
+        case "html": {
+          if (!sliceHasDataImageEmbeds(plan.slice)) {
+            insertSlice(ctx, plan.slice);
+            return;
+          }
+          // B4: upload de imagem já em andamento. Sem NENHUM indicador de
+          // carregamento na UI, "não aconteceu nada visualmente" (rede
+          // escolar lenta) é exatamente o gatilho que leva o professor a
+          // colar de novo — e a segunda colagem capturaria a MESMA posição
+          // abaixo, empurrando a primeira ao resolver. Descarta com aviso em
+          // vez de enfileirar: enfileirar só adiaria a pergunta de cima de
+          // QUAL posição (já potencialmente obsoleta) encadear a próxima.
+          if (pasteInFlightRef.current) {
+            console.warn(
+              "[sofereditor] colagem com imagem ainda subindo — descartando esta colagem concorrente para não corromper a posição de inserção",
+            );
+            return;
+          }
+          pasteInFlightRef.current = true;
+          // Slice tem embed(s) `data:` (Google Docs) — sobe pro storage
+          // configurado (`uploadImage`) ANTES de inserir, pra não gravar
+          // ~300KB de base64 direto no Y.Doc. `htmlToSlice` continua pura: só
+          // emite o `data:`, a subida é feita aqui (ver `resolvePastedImages.ts`).
+          const capturedSelection = ctx.getSelection();
+          void (async () => {
+            try {
+              const resolved = await resolvePastedImageUploads(plan.slice, editorRef.current.uploadImage);
+              // A subida é assíncrona — o mundo pode ter mudado nesse meio
+              // tempo. O editor é colaborativo: quem deslocou tudo pode ter
+              // sido o próprio professor OU um par remoto via Hocuspocus
+              // editando acima, não só digitação local. Dois riscos (B5),
+              // tratados separadamente:
+              //
+              // (a) o bloco capturado pode ter sumido (Ctrl+A+Backspace local,
+              // ou uma edição remota que apagou/moveu blocos). `insertSlice`
+              // faz um `return` silencioso quando o bloco alvo não existe mais
+              // — a colagem desapareceria sem erro, sem log, e o `data:`
+              // original já foi descartado junto. Em vez de deixar sumir
+              // calado: loga e insere no fim do documento como último
+              // recurso.
+              //
+              // (b) restaurar `capturedSelection` INCONDICIONALMENTE depois de
+              // inserir é o dano em si: se o professor se moveu enquanto
+              // esperava (clicou em outro lugar, ou está digitando — local ou
+              // remotamente), arrancar o caret de volta pro ponto da colagem
+              // no meio da digitação dele é pior que o problema original. Por
+              // isso a seleção viva é lida ANTES de mexer em qualquer coisa, e
+              // só é restaurada quando de fato mudou da capturada; do
+              // contrário `insertSlice` já deixa o caret logo depois do
+              // conteúdo colado — o comportamento esperado do caso comum (o
+              // professor esperou o upload terminar sem se mover).
+              //
+              // Limitação conhecida (mesma classe da anterior): a seleção
+              // restaurada é uma posição ABSOLUTA, não uma `Y.RelativePosition`
+              // — se a inserção deslocou blocos ANTES da posição do usuário, o
+              // índice restaurado pode ficar levemente errado. Migrar pra
+              // RelativePosition fecharia isso; fora de escopo aqui.
+              const liveSelection = ctxRef.current.getSelection();
+              const userMovedAway = !selectionsEqual(liveSelection, capturedSelection);
+
+              const { blockIndex, cellIndex } = capturedSelection.focus;
+              const targetText = ctxRef.current.doc.textAt(blockIndex, cellIndex);
+              let insertAt = capturedSelection;
+              if (!targetText) {
+                console.error(
+                  "[sofereditor] bloco de destino da colagem sumiu durante o upload da imagem — inserindo no fim do documento em vez de descartar a colagem",
+                );
+                const lastIndex = Math.max(0, ctxRef.current.doc.blockCount() - 1);
+                const lastText = ctxRef.current.doc.getBlockText(lastIndex);
+                insertAt = collapsedSelection({ blockIndex: lastIndex, offset: lastText ? lastText.length : 0 });
+              }
+
+              ctxRef.current.setSelection(insertAt);
+              insertSlice(ctxRef.current, resolved);
+              if (userMovedAway) {
+                ctxRef.current.setSelection(liveSelection);
+              }
+            } finally {
+              pasteInFlightRef.current = false;
+            }
+          })();
+          return;
+        }
         case "images":
           void (async () => {
             for (const f of plan.files) await editorRef.current.insertImageFromFile(f);
@@ -741,6 +837,41 @@ export function Editor({
         sm.call(sel, alter, direction, "lineboundary");
         const modelSel = readDomSelection(root);
         if (modelSel) ctxRef.current.setSelection(modelSel);
+      }
+      return;
+    }
+
+    // Backspace/Delete quando um embed (imagem) está selecionado ou
+    // adjacente ao caret colapsado. O `<figure>` do embed é
+    // `contenteditable=false`; quando a seleção do DOM pousa nele — o que
+    // acontece depois de inserir ou clicar numa imagem — o navegador NUNCA
+    // dispara `beforeinput`, então o caminho normal de delete (tratado em
+    // `beforeinput`, no outro useEffect) fica mudo pra esse caso. Decidido
+    // pelo MODELO (`getSelectedEmbed`/`isEmbedAdjacentToCaret`), não pela
+    // seleção do DOM — determinístico e não depende de onde cada navegador
+    // decide pousar o caret ao redor de um elemento não-editável.
+    //
+    // Não intercepta o caso normal (cursor em texto, sem embed adjacente):
+    // aí as duas funções devolvem false/null e o handler cai no `return`
+    // sem `preventDefault`, deixando `beforeinput` cuidar disso como sempre
+    // (ver o teste "não intercepta" em `Editor.keydown.test.ts`).
+    if (!mod && (e.key === "Backspace" || e.key === "Delete")) {
+      // Composição ativa (ex.: acento morto `´` no layout ABC-Extended dispara
+      // `compositionstart`) — o modelo ainda não recebeu o texto em
+      // composição, só o DOM sabe. Decidir por `getSelectedEmbed`/
+      // `isEmbedAdjacentToCaret` aqui enxergaria o embed adjacente do MODELO
+      // (que não avançou) e apagaria a imagem em vez de deixar o Backspace
+      // corrigir a composição — e ainda travaria a composição no meio, porque
+      // `preventDefault` interrompe o IME. Mesma guarda que as linhas 173,
+      // 205 e 520 já usam pros outros caminhos de input.
+      if (isComposingRef.current) return;
+      const direction = e.key === "Backspace" ? "backward" : "forward";
+      const shouldIntercept =
+        ed.getSelectedEmbed() != null || isEmbedAdjacentToCaret(ctxRef.current, direction);
+      if (shouldIntercept) {
+        e.preventDefault();
+        if (direction === "backward") deleteBackward(ctxRef.current);
+        else deleteForward(ctxRef.current);
       }
       return;
     }
