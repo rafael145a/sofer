@@ -1078,3 +1078,38 @@ describe("htmlToSlice — integração com insertSlice: embed sobrevive à inser
     expect(kinds).toEqual(["Xantes ", "image", " depoisY"]);
   });
 });
+
+describe("htmlToSlice — imagem EM LINHA do Word (caso real medido)", () => {
+  // Descoberta do usuário em 2026-08-20: o Word para Mac NÃO exporta imagem
+  // FLUTUANTE (com quebra de texto) — nem em HTML, nem em RTF, e o Google Docs
+  // também a perde. Mas com a imagem "alinhada com o texto" ele exporta como
+  // `data:` no HTML. Forma exata capturada do clipboard dele:
+  //  - atributos SEM aspas (`width=172`), quebra de linha antes do `src`
+  //  - rótulo `data:image/png` com carga que na verdade é JPEG (`/9j/` = FFD8FF)
+  const wordInline =
+    `<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">` +
+    `<body><p class=MsoNormal>Pela manha, 429 pessoas <img width=172 height=103\r\n` +
+    `     src="data:image/png;base64,/9j/4AAQSkZJRgABAQAASABIAAD/2wBDAAg="> passaram.<o:p></o:p></p></body></html>`;
+
+  it("emite o embed com as dimensoes declaradas, apesar dos atributos sem aspas", () => {
+    const slice = htmlToSlice(wordInline);
+    expect(slice).not.toBeNull();
+    const embeds = slice!.blocks[0].delta.filter((o) => typeof o.insert !== "string");
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].insert).toMatchObject({ type: "image", width: 172, height: 103 });
+  });
+
+  it("nao descarta a imagem por o rotulo dizer png e a carga ser jpeg", () => {
+    // Se algum dia alguem validar a assinatura contra o rotulo, este teste quebra
+    // — e tem que quebrar: o Word rotula errado e a imagem tem que entrar mesmo assim.
+    const slice = htmlToSlice(wordInline);
+    const embed = slice!.blocks[0].delta.find((o) => typeof o.insert !== "string");
+    expect(String((embed!.insert as { src: string }).src)).toContain("/9j/");
+  });
+
+  it("o texto em volta da imagem sobrevive inteiro", () => {
+    const slice = htmlToSlice(wordInline);
+    expect(slice!.blocks[0].text).toContain("Pela manha, 429 pessoas");
+    expect(slice!.blocks[0].text).toContain("passaram.");
+  });
+});
