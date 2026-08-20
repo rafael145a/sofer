@@ -371,8 +371,8 @@ function renderImg(embed: ImageEmbed): string {
     case "front":
       wrapperStyles.push(
         "position:absolute",
-        `left:${ox}px`,
-        `top:${oy}px`,
+        `left:${ox === 0 ? "0" : `${ox}px`}`,
+        `top:${oy === 0 ? "0" : `${oy}px`}`,
         `width:${embed.width}px`,
         `z-index:${layout === "behind" ? -1 : 2}`,
       );
@@ -397,9 +397,11 @@ function renderImg(embed: ImageEmbed): string {
       break;
   }
 
-  const imgStyles: string[] = hasCaption
-    ? [`width:${embed.width}px`, `height:${embed.height}px`, "display:block"]
-    : [`width:${embed.width}px`, `height:${embed.height}px`, "display:block"];
+  const imgStyles: string[] = [
+    `width:${embed.width}px`,
+    `height:${embed.height}px`,
+    "display:block",
+  ];
 
   const imgHtml = `<img src="${escapeAttr(embed.src)}" width="${embed.width}" height="${embed.height}" alt="${escapeAttr(embed.caption ?? "")}" data-embed="image" data-embed-layout="${layout}"${
     align ? ` data-embed-align="${escapeAttr(align)}"` : ""
@@ -531,6 +533,7 @@ body {
   vertical-align: top; word-break: break-word; white-space: pre-wrap;
 }
 img[data-embed="image"] { max-width: 100%; }
+.ed-figure { margin: 0; padding: 0; }
 .ed-block { position: relative; isolation: isolate; }
 a { color: #2563eb; }
 `;

@@ -176,4 +176,45 @@ describe("fórmula inline", () => {
     expect(editorHtml(imagem)).toContain("text-bottom");
     expect(decls(editorHtml(imagem))).toEqual(decls(serverHtml(imagem)));
   });
+
+  it("behind emite as mesmas declarações", () => {
+    const behind: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 20, height: 12, layout: "behind" } },
+    ];
+    expect(decls(editorHtml(behind))).toEqual(decls(serverHtml(behind)));
+  });
+
+  it("front emite as mesmas declarações", () => {
+    const front: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 20, height: 12, layout: "front" } },
+    ];
+    expect(decls(editorHtml(front))).toEqual(decls(serverHtml(front)));
+  });
+
+  it("inline com align emite as mesmas declarações", () => {
+    const inlineAlign: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 20, height: 12, align: "center" } },
+    ];
+    expect(decls(editorHtml(inlineAlign))).toEqual(decls(serverHtml(inlineAlign)));
+  });
+
+  it("wrap-left emite flutuação corretamente no servidor", () => {
+    const wrapLeft: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 50, height: 40, layout: "wrap-left" } },
+    ];
+    const server = serverHtml(wrapLeft);
+    // Verifica que o servidor emite float:left com as margens corretas
+    expect(server).toContain("float:left");
+    expect(server).toContain("margin-right:");
+  });
+
+  it("wrap-right emite flutuação corretamente no servidor", () => {
+    const wrapRight: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 50, height: 40, layout: "wrap-right" } },
+    ];
+    const server = serverHtml(wrapRight);
+    // Verifica que o servidor emite float:right com as margens corretas
+    expect(server).toContain("float:right");
+    expect(server).toContain("margin-left:");
+  });
 });
