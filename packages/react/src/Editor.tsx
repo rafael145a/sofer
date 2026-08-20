@@ -11,6 +11,7 @@ import {
   type RefObject,
 } from "react";
 import {
+  collapsedSelection,
   deleteBackward,
   deleteForward,
   deleteSelection,
@@ -717,20 +718,56 @@ export function Editor({
           void (async () => {
             try {
               const resolved = await resolvePastedImageUploads(plan.slice, editorRef.current.uploadImage);
-              // A subida é assíncrona — o caret pode ter se movido nesse meio
-              // tempo. Restaura a posição capturada NO MOMENTO da colagem antes
-              // de inserir, senão o slice cai onde o caret está agora, não onde
-              // o professor colou.
+              // A subida é assíncrona — o mundo pode ter mudado nesse meio
+              // tempo. O editor é colaborativo: quem deslocou tudo pode ter
+              // sido o próprio professor OU um par remoto via Hocuspocus
+              // editando acima, não só digitação local. Dois riscos (B5),
+              // tratados separadamente:
               //
-              // Limitação conhecida: é uma posição ABSOLUTA ({blockIndex,
-              // offset}), não uma `Y.RelativePosition`. Cobre o caso comum (o
-              // professor clica em outro lugar enquanto espera o upload) mas
-              // não o caso raro de ele continuar DIGITANDO nessa mesma posição
-              // durante a espera — os offsets teriam avançado e a restauração
-              // cairia num ponto levemente errado. Migrar pra RelativePosition
-              // fecharia isso; fora de escopo aqui.
-              ctxRef.current.setSelection(capturedSelection);
+              // (a) o bloco capturado pode ter sumido (Ctrl+A+Backspace local,
+              // ou uma edição remota que apagou/moveu blocos). `insertSlice`
+              // faz um `return` silencioso quando o bloco alvo não existe mais
+              // — a colagem desapareceria sem erro, sem log, e o `data:`
+              // original já foi descartado junto. Em vez de deixar sumir
+              // calado: loga e insere no fim do documento como último
+              // recurso.
+              //
+              // (b) restaurar `capturedSelection` INCONDICIONALMENTE depois de
+              // inserir é o dano em si: se o professor se moveu enquanto
+              // esperava (clicou em outro lugar, ou está digitando — local ou
+              // remotamente), arrancar o caret de volta pro ponto da colagem
+              // no meio da digitação dele é pior que o problema original. Por
+              // isso a seleção viva é lida ANTES de mexer em qualquer coisa, e
+              // só é restaurada quando de fato mudou da capturada; do
+              // contrário `insertSlice` já deixa o caret logo depois do
+              // conteúdo colado — o comportamento esperado do caso comum (o
+              // professor esperou o upload terminar sem se mover).
+              //
+              // Limitação conhecida (mesma classe da anterior): a seleção
+              // restaurada é uma posição ABSOLUTA, não uma `Y.RelativePosition`
+              // — se a inserção deslocou blocos ANTES da posição do usuário, o
+              // índice restaurado pode ficar levemente errado. Migrar pra
+              // RelativePosition fecharia isso; fora de escopo aqui.
+              const liveSelection = ctxRef.current.getSelection();
+              const userMovedAway = !selectionsEqual(liveSelection, capturedSelection);
+
+              const { blockIndex, cellIndex } = capturedSelection.focus;
+              const targetText = ctxRef.current.doc.textAt(blockIndex, cellIndex);
+              let insertAt = capturedSelection;
+              if (!targetText) {
+                console.error(
+                  "[sofereditor] bloco de destino da colagem sumiu durante o upload da imagem — inserindo no fim do documento em vez de descartar a colagem",
+                );
+                const lastIndex = Math.max(0, ctxRef.current.doc.blockCount() - 1);
+                const lastText = ctxRef.current.doc.getBlockText(lastIndex);
+                insertAt = collapsedSelection({ blockIndex: lastIndex, offset: lastText ? lastText.length : 0 });
+              }
+
+              ctxRef.current.setSelection(insertAt);
               insertSlice(ctxRef.current, resolved);
+              if (userMovedAway) {
+                ctxRef.current.setSelection(liveSelection);
+              }
             } finally {
               pasteInFlightRef.current = false;
             }

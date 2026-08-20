@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Reprodução de um bug do ramo assíncrono de colagem com imagem `data:`
+ * Reprodução de dois bugs do ramo assíncrono de colagem com imagem `data:`
  * (Google Docs) em `Editor.tsx` — `onPaste`, caso "html" com embed pendente
  * de upload (ver `resolvePastedImages.ts`):
  *
@@ -8,6 +8,12 @@
  * carregamento nenhum na UI, uma rede lenta faz o professor colar de novo
  * enquanto o primeiro upload ainda está em voo; a segunda captura a MESMA
  * posição e empurra a primeira ao resolver.
+ *
+ * B5 — (a) a colagem some em silêncio quando o bloco capturado desaparece
+ * durante o `await` (Ctrl+A+Backspace local, ou edição remota via
+ * Hocuspocus); (b) restaurar `capturedSelection` incondicionalmente depois
+ * de inserir arranca o caret de onde o professor está AGORA se ele se moveu
+ * enquanto esperava — o dano que o comentário original afirmava evitar.
  *
  * Monta o `<Editor>` de verdade e dispara um `paste` real (sem
  * `@testing-library`, que não é dependência deste pacote — mesmo padrão de
@@ -17,7 +23,14 @@
 import { createRoot, type Root } from "react-dom/client";
 import { act, createElement, type MutableRefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isImageEmbed } from "@sofereditor/core";
+import {
+  collapsedSelection,
+  insertParagraph,
+  insertText,
+  isImageEmbed,
+  type CommandContext,
+  type Selection,
+} from "@sofereditor/core";
 import { Editor } from "../Editor";
 import { useEditor, type UseEditorResult } from "../useEditor";
 
@@ -90,6 +103,10 @@ function mount(uploadImage?: (file: File) => Promise<string>): { api: UseEditorR
   return { api, rootEl: rootEl as HTMLElement };
 }
 
+function ctxOf(api: UseEditorResult): CommandContext {
+  return { doc: api.doc, getSelection: api.getSelection, setSelection: api.setSelection };
+}
+
 function makeClipboardData(html: string): DataTransfer {
   return {
     getData: (type: string) => (type === "text/html" ? html : ""),
@@ -136,5 +153,81 @@ describe("Editor onPaste (html + imagem data:) — B4: colagens concorrentes", (
     expect(embedCount(api)).toBe(1);
 
     warnSpy.mockRestore();
+  });
+});
+
+describe("Editor onPaste (html + imagem data:) — B5: bloco sumiu / seleção do usuário", () => {
+  it("bloco capturado removido durante o upload não engole a colagem em silêncio", async () => {
+    const d1 = deferred<string>();
+    const upload = vi.fn(async () => d1.promise);
+    const { api, rootEl } = mount(upload);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ctx = ctxOf(api);
+    act(() => {
+      insertText(ctx, "primeiro bloco");
+      insertParagraph(ctx);
+      // Segundo bloco fica vazio — é onde a colagem vai acontecer.
+      api.setSelection(collapsedSelection({ blockIndex: 1, offset: 0 }));
+    });
+    expect(api.doc.blockCount()).toBe(2);
+
+    firePaste(rootEl, imageHtml());
+    await flushAsync();
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    // O bloco alvo (índice 1) desaparece durante o await — cenário real:
+    // Ctrl+A+Backspace local, ou um par remoto via Hocuspocus apagando
+    // conteúdo acima. Simulado diretamente no Y.Doc, que é o que qualquer
+    // uma das duas causas produz.
+    act(() => {
+      api.doc.ydoc.transact(() => {
+        api.doc.blocks.delete(1, 1);
+      });
+    });
+    expect(api.doc.blockCount()).toBe(1);
+
+    d1.resolve("https://blob.exemplo.com/foto.png");
+    await flushAsync();
+
+    // A colagem NÃO sumiu calada: foi logada...
+    expect(errSpy).toHaveBeenCalled();
+    // ...e o conteúdo entrou em algum lugar do documento (fim, como último
+    // recurso), não foi descartado.
+    expect(embedCount(api)).toBe(1);
+
+    errSpy.mockRestore();
+  });
+
+  it("seleção do usuário depois da colagem assíncrona não é sobrescrita pela posição antiga da colagem", async () => {
+    const d1 = deferred<string>();
+    const upload = vi.fn(async () => d1.promise);
+    const { api, rootEl } = mount(upload);
+
+    const ctx = ctxOf(api);
+    act(() => {
+      insertText(ctx, "texto base para colar no meio");
+      api.setSelection(collapsedSelection({ blockIndex: 0, offset: 5 }));
+    });
+
+    firePaste(rootEl, imageHtml());
+    await flushAsync();
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    // O professor clica em outro lugar (ou continua digitando alhures)
+    // enquanto o upload ainda está em voo.
+    const movedAwaySelection: Selection = collapsedSelection({ blockIndex: 0, offset: 0 });
+    act(() => {
+      api.setSelection(movedAwaySelection);
+    });
+
+    d1.resolve("https://blob.exemplo.com/foto.png");
+    await flushAsync();
+
+    // A imagem foi inserida na posição capturada (colagem não se perdeu)...
+    expect(embedCount(api)).toBe(1);
+    // ...mas a seleção final é a do professor AGORA, não a posição antiga da
+    // colagem (que o `insertSlice` deixaria logo depois do embed inserido).
+    expect(api.getSelection()).toEqual(movedAwaySelection);
   });
 });
