@@ -72,13 +72,25 @@ Expandido, tudo que é borda aparece logo abaixo dele:
 └──────────────────────────────────┘
 ```
 
-Presets como botões-ícone rotulados, o ativo destacado. Ganhos sobre o
-`<select>`: o preset ativo fica visível sem abrir nada, e o ícone diz o que
-cada opção faz sem depender da leitura do rótulo.
+Presets como botões-ícone rotulados, o ativo destacado. O ganho sobre o
+`<select>` é que as cinco opções ficam visíveis de uma vez, cada uma com um
+desenho que mostra o que faz — em vez de uma lista fechada que só abre a um
+clique e depende da leitura do rótulo.
+
+O gatilho é fixo e **não** reflete o preset ativo: o ícone é sempre o quadrado
+dividido em quatro. Quem quer saber o preset atual abre o painel, onde ele está
+destacado. (O Word troca o ícone do botão pelo último preset usado; aqui não —
+seria um ícone instável no lugar de um marco visual estável.)
 
 **O painel permanece aberto ao escolher um preset.** Trocar entre `all` →
 `outer` → `none` vendo o resultado é o uso real, e a cor da linha costuma ser
 ajustada logo em seguida.
+
+Nos menus ▦ isso é uma **exceção à regra do menu**: hoje toda ação ali chama
+`setOpen(false)` e fecha o popover inteiro — inclusive o "Restaurar cor da
+borda". Nada dentro do painel de bordas fecha coisa alguma: nem os presets, nem
+o input de cor, nem o "Padrão". As ações de fora do painel (inserir linha,
+mesclar, excluir tabela) seguem fechando como hoje.
 
 **Cor da linha** com botão **Padrão** ao lado (`setTableBorderColor(null)` →
 `TABLE_BORDER_COLOR`). Na barra flutuante esse botão **hoje não existe** — quem
