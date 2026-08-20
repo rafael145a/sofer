@@ -11,6 +11,7 @@ export type {
 export { LinkDialog } from "./LinkDialog";
 export { PageConfigDialog } from "./PageConfigDialog";
 export { ImageCaptionDialog } from "./ImageCaptionDialog";
+export { FormulaDialog } from "./FormulaDialog";
 export { usePageSettings } from "./usePageSettings";
 export type {
   CaptionAlign,
