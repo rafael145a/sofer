@@ -1,2 +1,1 @@
-// @sofereditor/math — placeholder. Implementation pending.
-export const PACKAGE_NAME = "@sofereditor/math";
+export { renderLatexToSvg, type FormulaRender } from "./render";
