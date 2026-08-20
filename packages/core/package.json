@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "@sofereditor/core — Y.js-backed document model: blocks, marks, commands, history. Framework-agnostic foundation of the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",

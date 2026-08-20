@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/import-docx",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "@sofereditor/import-docx — Parse .docx (OOXML) in browser or Node into a SerializedDocument loadable by the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
