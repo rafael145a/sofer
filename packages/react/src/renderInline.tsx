@@ -200,7 +200,9 @@ function ImageEmbedViewImpl({
           }
         : {
             display: "inline-block",
-            verticalAlign: "text-bottom",
+            // Fórmula inline traz o deslocamento de base que o MathJax mediu;
+            // sem ele a fórmula flutua no topo da linha em vez de sentar nela.
+            verticalAlign: embed.formula?.vAlign ?? "text-bottom",
             width: embed.width,
           };
       break;

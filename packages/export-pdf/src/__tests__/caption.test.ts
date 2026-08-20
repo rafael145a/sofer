@@ -34,7 +34,7 @@ describe("image caption in HTML export", () => {
     expect(html).toContain('data-embed="image"');
   });
 
-  it("emits bare <img/> when caption is absent", () => {
+  it("emits <figure><img/> without figcaption when caption is absent", () => {
     const doc: LegacySerializedDocument = [
       {
         type: "paragraph",
@@ -46,8 +46,10 @@ describe("image caption in HTML export", () => {
       },
     ];
     const html = documentToHtmlFragment(doc);
-    expect(html).not.toContain("<figure");
+    // Agora emite <figure> mesmo sem legenda para manter paridade com o editor.
+    expect(html).toContain("<figure");
     expect(html).not.toContain("<figcaption");
+    expect(html).not.toContain('data-embed-figure="true"');
     expect(html).toContain('data-embed="image"');
   });
 

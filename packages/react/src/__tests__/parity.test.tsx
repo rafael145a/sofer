@@ -144,3 +144,36 @@ describe("paridade de tabela: cor da borda", () => {
     }
   });
 });
+
+describe("fórmula inline", () => {
+  const formulaOp: DeltaOp[] = [
+    {
+      insert: {
+        type: "image",
+        src: "data:image/svg+xml;base64,AAA",
+        width: 20,
+        height: 12,
+        formula: { latex: "\\frac{1}{2}", display: false, vAlign: "-0.781ex" },
+      },
+    },
+  ];
+
+  it("aplica o vertical-align da fórmula no lugar do text-bottom", () => {
+    const editor = editorHtml(formulaOp);
+    expect(editor).toContain("vertical-align:-0.781ex");
+    expect(editor).not.toContain("text-bottom");
+  });
+
+  it("editor e HTML de servidor emitem as MESMAS declarações", () => {
+    // Sem isto, a fórmula sentaria na base na tela e flutuaria no topo no PDF.
+    expect(decls(editorHtml(formulaOp))).toEqual(decls(serverHtml(formulaOp)));
+  });
+
+  it("imagem comum continua com text-bottom", () => {
+    const imagem: DeltaOp[] = [
+      { insert: { type: "image", src: "data:image/png;base64,AAA", width: 20, height: 12 } },
+    ];
+    expect(editorHtml(imagem)).toContain("text-bottom");
+    expect(decls(editorHtml(imagem))).toEqual(decls(serverHtml(imagem)));
+  });
+});

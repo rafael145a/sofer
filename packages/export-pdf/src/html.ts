@@ -389,7 +389,8 @@ function renderImg(embed: ImageEmbed): string {
       } else {
         wrapperStyles.push(
           "display:inline-block",
-          "vertical-align:text-bottom",
+          // Espelha renderInline.tsx — parity.test.tsx trava a igualdade.
+          `vertical-align:${embed.formula?.vAlign ?? "text-bottom"}`,
           `width:${embed.width}px`,
         );
       }
@@ -398,21 +399,16 @@ function renderImg(embed: ImageEmbed): string {
 
   const imgStyles: string[] = hasCaption
     ? [`width:${embed.width}px`, `height:${embed.height}px`, "display:block"]
-    : wrapperStyles.concat(
-        // Preserve old height when emitting bare <img>.
-        `height:${embed.height}px`,
-      );
+    : [`width:${embed.width}px`, `height:${embed.height}px`, "display:block"];
 
   const imgHtml = `<img src="${escapeAttr(embed.src)}" width="${embed.width}" height="${embed.height}" alt="${escapeAttr(embed.caption ?? "")}" data-embed="image" data-embed-layout="${layout}"${
     align ? ` data-embed-align="${escapeAttr(align)}"` : ""
   } style="${imgStyles.join(";")}">`;
 
-  if (!hasCaption) return imgHtml;
-
   const captionAlign = embed.captionAlign ?? "center";
-  return `<figure class="ed-figure" data-embed-figure="true" data-embed-layout="${layout}" style="${wrapperStyles.join(";")}">${imgHtml}<figcaption class="ed-figcaption" data-caption-align="${captionAlign}" style="text-align:${captionAlign}">${escapeHtml(
+  return `<figure class="ed-figure"${hasCaption ? ' data-embed-figure="true"' : ""} data-embed-layout="${layout}" style="${wrapperStyles.join(";")}">${imgHtml}${hasCaption ? `<figcaption class="ed-figcaption" data-caption-align="${captionAlign}" style="text-align:${captionAlign}">${escapeHtml(
     embed.caption!,
-  )}</figcaption></figure>`;
+  )}</figcaption>` : ""}</figure>`;
 }
 
 // ---------- helpers ----------
