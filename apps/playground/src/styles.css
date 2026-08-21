@@ -551,6 +551,93 @@ main {
   background: #fef2f2;
 }
 
+/* Painel de bordas — disclosure dentro do menu ▦.
+   Tudo escopado em .ed-table-actions porque a regra genérica
+   `.ed-table-actions button` (especificidade 0,1,1) ganharia de classes
+   soltas e deixaria os presets como linhas full-width. */
+.ed-table-actions .ed-border-toggle {
+  width: max-content;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ed-table-actions .ed-border-toggle:hover {
+  background: #eef0f3;
+}
+.ed-table-actions .ed-border-toggle[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ed-table-actions .ed-border-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fafbfc;
+}
+.ed-table-actions .ed-border-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.ed-table-actions .ed-border-preset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ed-table-actions .ed-border-preset:hover {
+  background: #eef0f3;
+}
+.ed-table-actions .ed-border-preset[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ed-table-actions .ed-border-glyph {
+  font-size: 14px;
+  line-height: 1;
+}
+.ed-table-actions .ed-border-panel hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 6px;
+}
+.ed-table-actions .ed-border-color {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.ed-table-actions .ed-border-reset {
+  width: max-content;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ed-table-actions .ed-border-reset:hover {
+  background: #eef0f3;
+}
+
 aside {
   background: var(--paper);
   border: 1px solid var(--border);
