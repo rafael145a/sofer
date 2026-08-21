@@ -48,3 +48,30 @@ export function sectPrToPageSettings(
   settings.preset = detectPreset(settings.width, settings.height);
   return settings;
 }
+
+/**
+ * Largura útil da página em twips, direto do `w:sectPr` — `pgSz.w` menos as
+ * margens esquerda/direita, tudo em twips, sem passar por px/mm no meio.
+ *
+ * Usada para reconstruir `tableWidth` (percentual) a partir de `w:tblW`, que
+ * também está em twips: dividir twip-contra-twip evita compor DUAS conversões
+ * com arredondamento próprio (px→mm→twip na leitura da página E na leitura
+ * da tabela) — a mesma fonte de erro documentada acima em `twipsToPx`.
+ *
+ * `undefined` quando o documento não declara `pgSz` — sem largura de página
+ * não há largura útil para calcular `tableWidth` contra, então o import
+ * deixa o atributo ausente (default 100) em vez de arriscar uma conta contra
+ * um denominador inventado.
+ */
+export function larguraUtilTwipsDe(sectPr: OoxmlNode | undefined): number | undefined {
+  if (!sectPr) return undefined;
+  const pgSz = findChild(sectPr, "w:pgSz");
+  if (!pgSz) return undefined;
+  const width = parseIntAttr(attr(pgSz, "w:w"), 0);
+  if (width <= 0) return undefined;
+  const pgMar = findChild(sectPr, "w:pgMar");
+  const left = pgMar ? parseIntAttr(attr(pgMar, "w:left"), 0) : 0;
+  const right = pgMar ? parseIntAttr(attr(pgMar, "w:right"), 0) : 0;
+  const util = width - left - right;
+  return util > 0 ? util : undefined;
+}

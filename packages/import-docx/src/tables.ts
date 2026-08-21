@@ -6,6 +6,7 @@ import type {
   SerializedCell,
   TableBorderPreset,
 } from "@sofereditor/core";
+import { MIN_LINHA_PX, mmToPx, normalizarLarguras } from "@sofereditor/core";
 import {
   attr,
   borderSideOn,
@@ -16,15 +17,25 @@ import {
   type OoxmlNode,
 } from "./parse-xml";
 import { paragraphChildrenToDelta, type RunContext } from "./runs";
-import { docxHexToCssColor, parseIntAttr } from "./units";
+import { docxHexToCssColor, parseIntAttr, twipToMillimeters } from "./units";
 
 /**
  * Map a `<w:tbl>` element to a SerializedBlock(table). The output `cells` array
  * is row-major with `rows * cols` entries — covered slots are filled with
  * `{attrs: {covered: true}}` placeholders so it matches the invariant required
  * by `@sofereditor/core`'s `EditorDocument`.
+ *
+ * `larguraUtilTwips` (largura útil da PÁGINA, de `w:sectPr`, lida uma vez em
+ * `docxBlobToDocument`) é o que permite reconstruir `tableWidth` a partir de
+ * `w:tblW` — sem ela, uma tabela exportada com 50% de largura reimportaria
+ * como 100%, porque `normalizarLarguras` só recupera a proporção ENTRE
+ * colunas, nunca a largura total da tabela contra a página.
  */
-export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
+export function tableToBlock(
+  tbl: OoxmlNode,
+  ctx: RunContext,
+  larguraUtilTwips?: number,
+): SerializedBlock {
   const tblGrid = findChild(tbl, "w:tblGrid");
   const gridCols = tblGrid ? findChildren(tblGrid, "w:gridCol") : [];
   const trs = findChildren(tbl, "w:tr");
@@ -119,7 +130,70 @@ export function tableToBlock(tbl: OoxmlNode, ctx: RunContext): SerializedBlock {
   if (preset) attrs.borderPreset = preset;
   const borderColor = readBorderColor(tbl);
   if (borderColor) attrs.borderColor = borderColor;
+  // `w:gridCol` chega em twips absolutos; `normalizarLarguras` converte para
+  // proporção somando 100 — a mesma conta usada para normalizar documentos
+  // antigos em px, então não duplicamos a lógica aqui. Quando faltam gridCols
+  // (ou o número não bate com `cols`), o próprio helper cai no split igual, o
+  // que é idêntico a omitir o atributo — gravá-lo de qualquer forma é
+  // inofensivo.
+  const twips = gridCols.map((g) => Number(attr(g, "w:w") ?? 0));
+  attrs.colWidths = normalizarLarguras(twips, cols);
+  const rowHeights = readRowHeights(trs);
+  if (rowHeights) attrs.rowHeights = rowHeights;
+  const tableWidth = readTableWidth(tbl, larguraUtilTwips);
+  if (tableWidth !== undefined) attrs.tableWidth = tableWidth;
   return { type: "table", text: "", delta: [], attrs, cells };
+}
+
+/**
+ * `w:tblW` → percentual da largura útil da página (`tableWidth`).
+ *
+ * Dois tipos possíveis: `dxa` (twips absolutos — divide contra
+ * `larguraUtilTwips`, a MESMA conta que `export-docx` fez ao contrário) e
+ * `pct` (já percentual, só que em quinquagésimos — `5000` = 100%). Qualquer
+ * outra coisa (ausente, `auto`, `larguraUtilTwips` desconhecida) devolve
+ * `undefined` e o bloco fica sem `tableWidth` — que é exatamente o default
+ * (100%) do modelo, então omitir é seguro.
+ */
+function readTableWidth(tbl: OoxmlNode, larguraUtilTwips: number | undefined): number | undefined {
+  const tblPr = findChild(tbl, "w:tblPr");
+  const tblW = tblPr ? findChild(tblPr, "w:tblW") : undefined;
+  if (!tblW) return undefined;
+  const w = Number(attr(tblW, "w:w") ?? Number.NaN);
+  if (!Number.isFinite(w) || w <= 0) return undefined;
+  const type = attr(tblW, "w:type");
+  if (type === "pct") return arredondaPct(w / 50);
+  if (type === "dxa" || type === undefined) {
+    if (larguraUtilTwips === undefined || larguraUtilTwips <= 0) return undefined;
+    return arredondaPct((w / larguraUtilTwips) * 100);
+  }
+  return undefined;
+}
+
+function arredondaPct(pct: number): number {
+  return Math.round(pct * 100) / 100;
+}
+
+/**
+ * `w:trHeight` por linha, convertido de twips para px (o editor guarda
+ * altura em px). Devolve `undefined` quando NENHUMA linha declara altura —
+ * gravar um array cheio de `undefined`/0 faria uma tabela importada sem
+ * altura nascer "congelada" no mínimo, quando ela deveria crescer livremente
+ * com o conteúdo (mesmo comportamento de hoje, sem `rowHeights`).
+ */
+function readRowHeights(trs: OoxmlNode[]): number[] | undefined {
+  const heights = trs.map((tr) => {
+    const trPr = findChild(tr, "w:trPr");
+    const trHeight = trPr ? findChild(trPr, "w:trHeight") : undefined;
+    const val = trHeight ? Number(attr(trHeight, "w:val") ?? "") : NaN;
+    return Number.isFinite(val) && val > 0 ? mmToPx(twipToMillimeters(val)) : undefined;
+  });
+  if (heights.every((h) => h === undefined)) return undefined;
+  // Ao menos uma linha declarou altura — as que não declararam ficam no
+  // mínimo do modelo (MIN_LINHA_PX), não em 0: é o mesmo "sem restrição
+  // real" que a linha já tem hoje sem `rowHeights`, só que representável
+  // dentro do array sem inventar um valor arbitrário.
+  return heights.map((h) => h ?? MIN_LINHA_PX);
 }
 
 /**

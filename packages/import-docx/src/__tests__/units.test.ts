@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { halfPointsToCssPt, docxHexToCssColor, parseAlign, parseIntAttr } from "../units";
+import {
+  halfPointsToCssPt,
+  docxHexToCssColor,
+  parseAlign,
+  parseIntAttr,
+  twipToMillimeters,
+} from "../units";
 
 describe("units", () => {
   it("halfPointsToCssPt: 24 → 12pt", () => {
@@ -35,5 +41,12 @@ describe("units", () => {
     expect(parseIntAttr(7)).toBe(7);
     expect(parseIntAttr("abc", 42)).toBe(42);
     expect(parseIntAttr(undefined, 3)).toBe(3);
+  });
+
+  it("twipToMillimeters is the inverse of convertMillimetersToTwip", () => {
+    // 1440 twip = 1 in = 25.4mm.
+    expect(twipToMillimeters(1440)).toBeCloseTo(25.4, 6);
+    expect(twipToMillimeters(720)).toBeCloseTo(12.7, 6);
+    expect(twipToMillimeters(0)).toBe(0);
   });
 });

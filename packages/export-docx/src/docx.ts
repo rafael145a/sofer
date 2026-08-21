@@ -14,6 +14,7 @@ import {
   DEFAULT_PAGE_SETTINGS,
   isImageEmbed,
   isLegacySerializedDocument,
+  normalizarLarguras,
   pxToMm,
   type PageSettings,
 } from "@sofereditor/core";
@@ -22,6 +23,7 @@ import {
   BorderStyle,
   Document,
   HeadingLevel,
+  HeightRule,
   ImageRun,
   LevelFormat,
   LineRuleType,
@@ -129,8 +131,8 @@ function buildDocument(
   options: DocumentToDocxOptions,
   images: Map<string, ResolvedImage | null>,
 ): Document {
-  const children = blocksToDocxChildren(doc, images);
   const settings = doc.pageSettings ?? DEFAULT_PAGE_SETTINGS;
+  const children = blocksToDocxChildren(doc, images, settings);
   return new Document({
     creator: options.creator,
     title: options.title,
@@ -176,6 +178,7 @@ function sectionPropertiesFor(settings: PageSettings) {
 function blocksToDocxChildren(
   doc: SerializedDocument,
   images: Map<string, ResolvedImage | null>,
+  settings: PageSettings,
 ): Array<Paragraph | Table> {
   const out: Array<Paragraph | Table> = [];
   const blocks = doc.blocks;
@@ -198,7 +201,7 @@ function blocksToDocxChildren(
         out.push(makeListItem(block, images));
         break;
       case "table":
-        out.push(makeTable(block, images));
+        out.push(makeTable(block, images, settings));
         break;
       default:
         out.push(makeParagraph(block, images));
@@ -295,10 +298,15 @@ function makeListItem(
   });
 }
 
-function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | null>): Table {
+function makeTable(
+  block: SerializedBlock,
+  images: Map<string, ResolvedImage | null>,
+  settings: PageSettings,
+): Table {
   const rows = typeof block.attrs.rows === "number" ? block.attrs.rows : 0;
   const cols = typeof block.attrs.cols === "number" ? block.attrs.cols : 0;
   const cells = block.cells ?? [];
+  const alturas = block.attrs.rowHeights;
 
   const rowsOut: TableRow[] = [];
   for (let r = 0; r < rows; r++) {
@@ -312,35 +320,55 @@ function makeTable(block: SerializedBlock, images: Map<string, ResolvedImage | n
       if (cell.attrs?.covered) continue;
       cellsOut.push(makeCell(cell, images));
     }
-    rowsOut.push(new TableRow({ children: cellsOut }));
+    // `atLeast` e NÃO `exact`: é a mesma semântica de mínimo do editor. Com
+    // `exact` o Word cortaria o conteúdo, e texto sumindo da prova é o pior
+    // desfecho possível — pior que uma linha mais alta do que o pedido.
+    // `Math.max(0, h)`: um documento antigo/malformado poderia trazer uma
+    // entrada negativa em `rowHeights`; sem o piso, isso viraria um
+    // `w:val` negativo no XML, que o Word rejeita.
+    const raw = Array.isArray(alturas) && alturas.length === rows ? alturas[r] : undefined;
+    const h = typeof raw === "number" && isFinite(raw) ? Math.max(0, raw) : undefined;
+    rowsOut.push(
+      new TableRow({
+        children: cellsOut,
+        ...(h != null
+          ? { height: { value: convertMillimetersToTwip(pxToMm(h)), rule: HeightRule.ATLEAST } }
+          : {}),
+      }),
+    );
   }
 
-  // Validate the RAW array against `cols` — filtering invalid entries first
-  // (e.g. dropping a negative width) would silently shift the remaining
-  // widths onto the wrong columns while still passing a length check.
-  const rawColWidths = block.attrs.colWidths;
-  const isValidColWidths =
-    Array.isArray(rawColWidths) &&
-    cols > 0 &&
-    rawColWidths.length === cols &&
-    rawColWidths.every((w): w is number => typeof w === "number" && w > 0);
-  const columnWidths = isValidColWidths
-    ? rawColWidths.map((px) => convertMillimetersToTwip(pxToMm(px)))
-    : undefined;
+  // cols<=0 é uma tabela malformada (rows/cols ausentes no bloco) — sem coluna
+  // nenhuma para distribuir largura, cai no fallback percentual histórico em
+  // vez de produzir um `<w:gridCol w:w="0"/>`.
+  if (cols <= 0) {
+    return new Table({
+      rows: rowsOut,
+      borders: docxTableBorders(block.attrs.borderPreset, block.attrs.borderColor),
+      width: { size: 100, type: WidthType.PERCENTAGE },
+    });
+  }
+
+  // Proporção contra a largura útil REAL da página — é isto que faz a tabela
+  // no Word ter a mesma largura do editor. Antes convertia a soma dos px do
+  // modelo (513 px numa tabela que o professor via com 600). `pageSettings`
+  // vem do documento (A4/Carta/Ofício/custom) e nunca de uma constante
+  // cravada, senão qualquer tamanho de página que não A4 quebraria calado.
+  const larguraUtilTwips = convertMillimetersToTwip(
+    pxToMm(settings.width - settings.marginLeft - settings.marginRight),
+  );
+  const tabelaTwips = Math.round(larguraUtilTwips * ((block.attrs.tableWidth ?? 100) / 100));
+  const pct = normalizarLarguras(block.attrs.colWidths, cols);
+  const columnWidths = pct.map((p) => Math.round(tabelaTwips * (p / 100)));
 
   return new Table({
     rows: rowsOut,
     borders: docxTableBorders(block.attrs.borderPreset, block.attrs.borderColor),
-    ...(columnWidths
-      ? {
-          columnWidths,
-          // Fix the layout so Word honors the column widths verbatim instead
-          // of autofitting to content (the OOXML default when `tblLayout` is
-          // absent, which would make `columnWidths` a mere hint).
-          layout: TableLayoutType.FIXED,
-          width: { size: columnWidths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
-        }
-      : { width: { size: 100, type: WidthType.PERCENTAGE } }),
+    columnWidths,
+    // O `layout: FIXED` permanece pelo mesmo motivo de antes: sem ele o Word
+    // autoajusta ao conteúdo e trata `columnWidths` como mero palpite.
+    layout: TableLayoutType.FIXED,
+    width: { size: columnWidths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
   });
 }
 

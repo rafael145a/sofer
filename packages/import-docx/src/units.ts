@@ -3,6 +3,16 @@
  * These are the inverses of the helpers in `@sofereditor/export-docx/src/docx.ts`.
  */
 
+/**
+ * OOXML twip → millimeters. Inverse of `convertMillimetersToTwip` from the
+ * `docx` package (used by `@sofereditor/export-docx`), reimplemented here
+ * because `import-docx` doesn't depend on `docx` — 1 twip = 1/20 pt =
+ * 1/1440 in = 25.4/1440 mm.
+ */
+export function twipToMillimeters(twip: number): number {
+  return (twip * 25.4) / 1440;
+}
+
 /** docx half-points → CSS pt string. 24 (half-pt) → "12pt". */
 export function halfPointsToCssPt(halfPoints: number): string | undefined {
   if (!Number.isFinite(halfPoints) || halfPoints <= 0) return undefined;

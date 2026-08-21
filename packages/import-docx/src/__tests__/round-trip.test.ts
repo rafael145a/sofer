@@ -104,6 +104,77 @@ describe("export → import round-trip", () => {
     expect(out[0].cells?.[1].attrs).toMatchObject({ covered: true });
   });
 
+  it("colWidths desiguais, tableWidth e rowHeights sobrevivem ao round-trip dentro da tolerância de arredondamento", async () => {
+    // Este é o teste que mais importa: pega conversão invertida (o tipo de
+    // erro que passa nos testes de ida e só aparece na volta). colWidths é
+    // proporção somando 100 — [50, 30, 20] —, tableWidth é percentual da
+    // página, e rowHeights é px, mínimo por linha, não largura fixa.
+    //
+    // tableWidth é o caso mais fácil de quebrar calado: `normalizarLarguras`
+    // só recupera a proporção ENTRE colunas, nunca a largura total contra a
+    // página — sem ler `w:tblW` de volta, uma tabela de 60% reimportaria
+    // como 100% (o professor via estreita, o reimport devolve larga).
+    const input: LegacySerializedDocument = [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: {
+          rows: 2,
+          cols: 3,
+          colWidths: [50, 30, 20],
+          tableWidth: 60,
+          rowHeights: [40, 80],
+        },
+        cells: Array.from({ length: 6 }, (_, i) => ({
+          text: String(i),
+          delta: [{ insert: String(i) }],
+          attrs: {},
+        })),
+      },
+    ];
+    const out = await roundTrip(input);
+    const table = out[0];
+    expect(table.type).toBe("table");
+
+    const widths = table.attrs.colWidths;
+    expect(widths).toBeDefined();
+    expect(widths).toHaveLength(3);
+    expect(widths![0]).toBeCloseTo(50, 0);
+    expect(widths![1]).toBeCloseTo(30, 0);
+    expect(widths![2]).toBeCloseTo(20, 0);
+    // Continua somando 100 depois da volta completa — não é só "parecido",
+    // é proporção de verdade.
+    expect(widths!.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 0);
+
+    expect(table.attrs.tableWidth).toBeCloseTo(60, 0);
+
+    const heights = table.attrs.rowHeights;
+    expect(heights).toBeDefined();
+    expect(heights).toHaveLength(2);
+    expect(heights![0]).toBeCloseTo(40, 0);
+    expect(heights![1]).toBeCloseTo(80, 0);
+  });
+
+  it("tabela sem rowHeights não nasce importada com o array preenchido de mínimos", async () => {
+    // Importar um DOCX sem altura declarada não pode congelar linhas que
+    // deveriam crescer com o conteúdo.
+    const input: LegacySerializedDocument = [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 2 },
+        cells: [
+          { text: "A", delta: [{ insert: "A" }], attrs: {} },
+          { text: "B", delta: [{ insert: "B" }], attrs: {} },
+        ],
+      },
+    ];
+    const out = await roundTrip(input);
+    expect(out[0].attrs.rowHeights).toBeUndefined();
+  });
+
   it("paragraph alignment center", async () => {
     const input: LegacySerializedDocument = [
       { type: "paragraph", text: "x", delta: [{ insert: "x" }], attrs: { align: "center" } },

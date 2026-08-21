@@ -316,7 +316,20 @@ describe("células de tabela", () => {
     expect(xml).toMatch(/<w:jc w:val="center"\/>/);
   });
 
-  it("colWidths gera gridCol com larguras em twips", async () => {
+  // Largura útil da A4 default (settings reais, não "210mm" cravado — ver
+  // tableProporcao.test.ts para a explicação de por que a conta parte do
+  // pageSettings em vez de literais mm).
+  async function larguraUtilA4Twips(): Promise<number> {
+    const { convertMillimetersToTwip } = await import("docx");
+    const { DEFAULT_PAGE_SETTINGS, pxToMm } = await import("@sofereditor/core");
+    const s = DEFAULT_PAGE_SETTINGS;
+    return convertMillimetersToTwip(pxToMm(s.width - s.marginLeft - s.marginRight));
+  }
+
+  it("colWidths (proporção) gera gridCol distribuindo a largura útil da página", async () => {
+    // colWidths não é mais px absoluto — é proporção. [260, 130] não soma
+    // 100, então normaliza para 2:1 (66.667/33.333) e distribui contra a
+    // largura útil REAL da página, não a soma dos dois valores.
     const doc: LegacySerializedDocument = [
       {
         type: "table", text: "", delta: [],
@@ -329,13 +342,9 @@ describe("células de tabela", () => {
     ];
     const { buffer } = await documentToDocxBuffer(doc);
     const xml = await documentXml(buffer);
-    // 260px → 68.8mm... conferir o valor exato no primeiro run e fixá-lo:
-    // twips = convertMillimetersToTwip(pxToMm(260)). O teste asserta a presença
-    // de <w:gridCol w:w="..."> com o mesmo número calculado no teste.
-    const { convertMillimetersToTwip } = await import("docx");
-    const { pxToMm } = await import("@sofereditor/core");
-    const w0 = convertMillimetersToTwip(pxToMm(260));
-    const w1 = convertMillimetersToTwip(pxToMm(130));
+    const larguraUtil = await larguraUtilA4Twips();
+    const w0 = Math.round(larguraUtil * (2 / 3));
+    const w1 = Math.round(larguraUtil * (1 / 3));
     expect(xml).toContain(`<w:gridCol w:w="${w0}"/>`);
     expect(xml).toContain(`<w:gridCol w:w="${w1}"/>`);
     // Larguras fixas: sem `tblLayout="fixed"` o Word ignora o grid e faz autofit
@@ -344,7 +353,7 @@ describe("células de tabela", () => {
     expect(xml).toContain(`<w:tblW w:type="dxa" w:w="${w0 + w1}"/>`);
   });
 
-  it("sem colWidths a tabela mantém largura 100% (fallback)", async () => {
+  it("sem colWidths a tabela ocupa a largura útil inteira, dividida em colunas iguais", async () => {
     const doc: LegacySerializedDocument = [
       {
         type: "table", text: "", delta: [], attrs: { rows: 1, cols: 1 },
@@ -353,14 +362,16 @@ describe("células de tabela", () => {
     ];
     const { buffer } = await documentToDocxBuffer(doc);
     const xml = await documentXml(buffer);
-    expect(xml).toContain('w:type="pct"');
-    expect(xml).not.toContain("w:tblLayout");
+    const larguraUtil = await larguraUtilA4Twips();
+    expect(xml).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(xml).toContain(`<w:gridCol w:w="${larguraUtil}"/>`);
+    expect(xml).toContain(`<w:tblW w:type="dxa" w:w="${larguraUtil}"/>`);
   });
 
-  it("colWidths com valor inválido (negativo) cai no fallback percentual, sem deslocar larguras", async () => {
+  it("colWidths com valor inválido (comprimento não bate com cols) cai no split igual, sem deslocar larguras", async () => {
     // Filtrar entradas inválidas ANTES de validar o tamanho contra `cols`
     // deslocaria [260, 130] para as colunas erradas em vez de cair no
-    // fallback — a validação precisa rodar sobre o array bruto.
+    // split igual — `normalizarLarguras` valida o array bruto.
     const doc: LegacySerializedDocument = [
       {
         type: "table", text: "", delta: [],
@@ -373,8 +384,10 @@ describe("células de tabela", () => {
     ];
     const { buffer } = await documentToDocxBuffer(doc);
     const xml = await documentXml(buffer);
-    expect(xml).toContain('w:type="pct"');
-    expect(xml).not.toContain("w:tblLayout");
+    const larguraUtil = await larguraUtilA4Twips();
+    const metade = Math.round(larguraUtil / 2);
+    expect(xml).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(xml).toContain(`<w:gridCol w:w="${metade}"/>`);
   });
 });
 

@@ -3,7 +3,7 @@ import { readDocx, childrenOf, tagOf, findChild, type OoxmlNode } from "./parse-
 import { paragraphToBlock } from "./paragraphs";
 import { tableToBlock } from "./tables";
 import { NumberingResolver } from "./numbering";
-import { sectPrToPageSettings } from "./page-settings";
+import { larguraUtilTwipsDe, sectPrToPageSettings } from "./page-settings";
 import type { RunContext } from "./runs";
 
 /**
@@ -29,15 +29,24 @@ export async function docxBlobToDocument(
   const body = findBody(file.documentXml);
   if (!body) return { blocks: [{ type: "paragraph", text: "", delta: [], attrs: {} }] };
 
+  // Lido ANTES do loop de blocos: `tableToBlock` precisa da largura útil da
+  // página para reconstruir `tableWidth` a partir de `w:tblW` (twips
+  // absolutos só fazem sentido percentualmente contra a largura da página).
+  // `w:sectPr` é sempre um único nó ao final do `body`, então lê-lo cedo não
+  // muda nada do que já era verdade sobre a ordem do documento.
+  const sectPr = findChild(body, "w:sectPr");
+  const pageSettings = sectPrToPageSettings(sectPr);
+  const larguraUtilTwips = larguraUtilTwipsDe(sectPr);
+
   const blocks: SerializedBlock[] = [];
   for (const child of childrenOf(body)) {
     const tag = tagOf(child);
     if (tag === "w:p") {
       blocks.push(paragraphToBlock(child, ctx, numbering));
     } else if (tag === "w:tbl") {
-      blocks.push(tableToBlock(child, ctx));
+      blocks.push(tableToBlock(child, ctx, larguraUtilTwips));
     }
-    // w:sectPr is parsed below (page settings); other body-level metadata ignored.
+    // w:sectPr already read above; other body-level metadata ignored.
   }
 
   if (blocks.length === 0) {
@@ -46,7 +55,6 @@ export async function docxBlobToDocument(
 
   pruneNonLeaderListStarts(blocks);
 
-  const pageSettings = sectPrToPageSettings(findChild(body, "w:sectPr"));
   return pageSettings ? { blocks, pageSettings } : { blocks };
 }
 
