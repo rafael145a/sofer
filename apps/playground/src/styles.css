@@ -742,7 +742,7 @@ img[data-embed="image"][data-embed-layout="front"] {
   /* grid-template-columns vem inline do componente: 4 para Estruturas
      (rótulos em palavra), 6 para as categorias de símbolo. */
   gap: 4px;
-  /* Altura do pior caso (Estruturas: 14 itens em 4 colunas = 4 linhas).
+  /* Altura do pior caso (Estruturas: 15 itens em 4 colunas = 4 linhas).
      Sem isto o modal muda de altura ao trocar de aba e os botões
      Cancelar/Inserir pulam sob o cursor. */
   min-height: 128px;
