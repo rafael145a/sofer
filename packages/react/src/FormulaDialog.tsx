@@ -1,10 +1,26 @@
-import { useEffect, useRef, useState, type FormEvent, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type JSX } from "react";
 import type { FormulaRender } from "@sofereditor/math";
 import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 import { PALETA, paraMathlive, paraMarkup } from "./formulaSnippet";
 import { podeInserir, motivoBloqueio } from "./formulaGuarda";
+
+/**
+ * Caracteres que a tecla morta de circunflexo do teclado ABNT2 (o brasileiro)
+ * produz quando o professor a pressiona e a próxima tecla não aceita acento —
+ * `^` seguido de `2`, por exemplo.
+ *
+ * `U+02C6` é o circunflexo modificador, e `U+0302` o acento combinante. O
+ * MathLive trata os dois como texto literal, então digitar "x", circunflexo,
+ * "2" saía **`xˆ2`** — o acento impresso ao lado do x, e o 2 na linha de
+ * baixo. Era o caminho mais natural do mundo para escrever "x ao quadrado"
+ * numa prova, e o único que não funcionava.
+ *
+ * O `^` ASCII (U+005E) NÃO entra nesta lista: esse o MathLive já trata certo
+ * sozinho. O `²` (U+00B2) também já vira `x^{2}` sem ajuda.
+ */
+const CIRCUNFLEXO_DE_TECLA_MORTA = new Set(["\u02C6", "\u0302"]);
 
 /**
  * Modal de fórmula. Espelha `ImageCaptionDialog` — dirigido por
@@ -105,6 +121,19 @@ export function FormulaDialog({
     setPreview(render(latex, display));
   }, [latex, display, carregando]);
 
+  // Precisa ser capture (`true` no addEventListener) e chegar antes do
+  // "keyboard sink" interno do MathLive — medido: o `beforeinput` chega
+  // cancelável no <math-field> antes de chegar no sink. Um `inlineShortcuts`
+  // com a mesma chave NÃO funciona: o caractere de tecla morta não passa pelo
+  // caminho de atalhos.
+  const onCircunflexoMorto = useCallback((e: Event) => {
+    const ev = e as InputEvent;
+    if (!ev.data || !CIRCUNFLEXO_DE_TECLA_MORTA.has(ev.data)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    fieldRef.current?.insert("^{#?}", { focus: true });
+  }, []);
+
   // Montagem imperativa do <math-field>, não JSX: o elemento não tem tipo em
   // `IntrinsicElements`, o React 18 põe atributo (não propriedade) em custom
   // element, e o construtor só existe depois do import dinâmico resolver —
@@ -118,6 +147,7 @@ export function FormulaDialog({
     mf.className = "ed-formula-field";
     const onInput = () => setLatex(mf.getValue("latex"));
     mf.addEventListener("input", onInput);
+    mf.addEventListener("beforeinput", onCircunflexoMorto, true);
 
     // MONTAR PRIMEIRO, CONFIGURAR DEPOIS — a ordem é o ponto, e custou uma
     // tela branca para descobrir.
@@ -171,6 +201,7 @@ export function FormulaDialog({
 
     return () => {
       mf.removeEventListener("input", onInput);
+      mf.removeEventListener("beforeinput", onCircunflexoMorto, true);
       mf.remove();
       fieldRef.current = null;
     };
