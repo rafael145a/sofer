@@ -155,7 +155,20 @@ export function FormulaDialog(): JSX.Element | null {
           ) : preview.ok ? (
             <span
               className="ed-formula-preview-svg"
-              // O SVG vem do nosso próprio renderer, não de entrada externa.
+              // O LaTeX AQUI É entrada do usuário — quem digita é o professor.
+              // `dangerouslySetInnerHTML` é aceitável mesmo assim por dois
+              // motivos, não porque o SVG "não vem de fora":
+              // 1. Superfície só de autor: quem escreve o LaTeX já pode
+              //    editar o documento inteiro, então não há elevação de
+              //    privilégio em conseguir injetar algo aqui.
+              // 2. A config do TeX usada pelo renderer (`packages: ["base",
+              //    "ams"]`, em @sofereditor/math) exclui a extensão `html`
+              //    do MathJax — é essa extensão que produziria `\href` e
+              //    outras tags perigosas no SVG de saída. Sem ela, o
+              //    renderer não emite HTML/links a partir do LaTeX.
+              // Se algum dia trocar para `AllPackages` (ou incluir `html`),
+              // esta análise deixa de valer e o `dangerouslySetInnerHTML`
+              // precisa ser revisto.
               dangerouslySetInnerHTML={{ __html: preview.svg }}
             />
           ) : (

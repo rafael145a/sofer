@@ -25,6 +25,7 @@ import {
   insertTable as cmdInsertTable,
   insertTableColumn as cmdInsertColumn,
   insertTableRow as cmdInsertRow,
+  isFormulaEmbed,
   isImageEmbed,
   isMarkUniformInRange,
   moveToNextCell as cmdMoveNextCell,
@@ -852,6 +853,14 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
       // seleção ali, no `resolve()`): essa restauração aconteceria ANTES do
       // `await` desta função, não depois — o gap continuaria aberto.
       const selectionAtCall = ctxRef.current.getSelection();
+      // Mesma linha de raciocínio do comentário acima: `getSelectedEmbed()`
+      // também precisa rodar ANTES do primeiro `await`, lendo a seleção AO
+      // VIVO no mesmo instante síncrono de `selectionAtCall` — depois do gap
+      // ela pode ter colapsado (mesmo bug #6) e `getSelectedEmbed()` não
+      // acharia mais nada para herdar. Usado abaixo, perto de
+      // `cmdInsertImage`, só para herdar layout/posição de uma edição —
+      // nunca para decidir ONDE inserir (isso é `selectionAtCall`).
+      const embedAtCall = getSelectedEmbed();
       // Import DINÂMICO, pelo mesmo motivo do modal: manter o mathjax-full
       // fora do bundle principal. Como esta função já é async, não custa nada.
       let mathModule: typeof import("@sofereditor/math");
@@ -876,7 +885,16 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
       const exPx = root ? measureExInPx(root) : 8;
       let w = Math.round(r.widthEx * exPx);
       let h = Math.round(r.heightEx * exPx);
+      // vAlignEx é relativo à ALTURA renderizada (`r.heightEx`, não clampada).
+      // Quando o clamp abaixo encolhe w/h, o `ex` da linha de base tem que
+      // encolher pelo MESMO fator — senão a fórmula clampada senta fora da
+      // linha de base, deslocada proporcionalmente ao quanto foi clampada.
+      // Fator 1 (sem clamp) é o caso comum e não altera nada.
+      let vAlignScale = 1;
       if (w > MAX_INSERT_WIDTH) {
+        vAlignScale = MAX_INSERT_WIDTH / w;
+        // Fórmula de `h` inalterada (mesma ordem de operações de antes do
+        // fix) — só a variável `vAlignScale` é nova.
         h = Math.round((h * MAX_INSERT_WIDTH) / w);
         w = MAX_INSERT_WIDTH;
       }
@@ -895,21 +913,47 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
       // de `insertImage`, `commands.ts`), que pode ter colapsado durante o
       // gap assíncrono.
       ctxRef.current.setSelection(selectionAtCall);
+      // Herda layout/posição do embed que está sendo SUBSTITUÍDO (edição de
+      // uma fórmula existente — duplo clique ou "Editar fórmula" na
+      // toolbar), nunca de uma imagem comum: `embedAtCall` pode ser uma
+      // imagem selecionada quando a fórmula está sendo inserida do zero pela
+      // toolbar, e herdar o layout dela seria pior que não herdar nada.
+      // `align` NÃO entra aqui de propósito — é derivado de `display` logo
+      // abaixo (bloco → "center"); herdá-lo reintroduziria a centralização
+      // depois de o professor desmarcar "Fórmula em bloco". `w`/`h` também
+      // não são preservados: o valor salvo é medida+clamp do LaTeX ANTIGO, a
+      // razão do resize aplicado pelo usuário não é recuperável sem
+      // re-renderizar o LaTeX antigo, e o novo tem tamanho natural diferente
+      // — re-medir é o comportamento pretendido, não um bug a "consertar".
+      const inheritedLayout: Pick<ImageEmbed, "layout" | "offsetX" | "offsetY"> = {};
+      if (isFormulaEmbed(embedAtCall?.embed)) {
+        // Spreads condicionais por campo, não um objeto fixo com chaves
+        // `undefined`: o embed vira um insert de Y.Text (`yText.insert`, em
+        // `commands.ts`) que viaja pela rede — melhor não gravar chaves
+        // `offsetX`/`offsetY` explicitamente `undefined` (ex.: fórmula
+        // antiga em `layout: "inline"`, que não tem offsets) quando dá pra
+        // simplesmente omiti-las.
+        const prev = embedAtCall.embed;
+        if (prev.layout !== undefined) inheritedLayout.layout = prev.layout;
+        if (prev.offsetX !== undefined) inheritedLayout.offsetX = prev.offsetX;
+        if (prev.offsetY !== undefined) inheritedLayout.offsetY = prev.offsetY;
+      }
       cmdInsertImage(ctxRef.current, {
         type: "image",
         src,
         width: w,
         height: h,
+        ...inheritedLayout,
         ...(display ? { align: "center" as const } : {}),
         formula: {
           latex,
           display,
-          ...(display ? {} : { vAlign: `${r.vAlignEx}ex` }),
+          ...(display ? {} : { vAlign: `${r.vAlignEx * vAlignScale}ex` }),
         },
         ...(svgFallback ? { svgFallback } : {}),
       });
     },
-    [],
+    [getSelectedEmbed],
   );
 
   return {

@@ -56,7 +56,7 @@ export interface ResolvedImage {
    * com `svgFallback`, outro sem — compartilham o mesmo `src` e portanto o
    * mesmo SVG; o fallback de qualquer um dos dois serve para ambos.
    */
-  svgFallback?: { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp" | "svg" };
+  svgFallback?: { data: Uint8Array; type: Exclude<ResolvedImage["type"], "svg"> };
 }
 
 export interface DocumentToDocxOptions {
@@ -644,9 +644,16 @@ async function resolveAllImages(
       if (resolved?.type === "svg") {
         const fb = fallbacks.get(src);
         const decodedFb = fb ? decodeDataUrl(fb) : null;
-        resolved = decodedFb
-          ? { ...resolved, svgFallback: { data: decodedFb.bytes, type: decodedFb.kind } }
-          : null;
+        // Um fallback com `kind === "svg"` não é fallback nenhum — é o
+        // mesmo SVG de novo (`ImageRun({ type: "svg", fallback: { type:
+        // "svg" } })` não tem sentido pro docx, que exige um raster aqui).
+        // Na prática `fb` sempre vem de `svgToPngDataUrl` (sempre PNG), mas
+        // `decodeDataUrl` é genérico; tratamos esse caso como "sem
+        // fallback válido" em vez de deixar o tipo mentir.
+        resolved =
+          decodedFb && decodedFb.kind !== "svg"
+            ? { ...resolved, svgFallback: { data: decodedFb.bytes, type: decodedFb.kind } }
+            : null;
       }
       images.set(src, resolved);
     }),

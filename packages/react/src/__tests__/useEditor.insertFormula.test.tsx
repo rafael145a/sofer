@@ -24,7 +24,7 @@
 import { createRoot, type Root } from "react-dom/client";
 import { act, createElement, type MutableRefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collapsedSelection, isFormulaEmbed } from "@sofereditor/core";
+import { collapsedSelection, isFormulaEmbed, isImageEmbed, type ImageEmbed } from "@sofereditor/core";
 import { EditorProvider } from "../EditorContext";
 import { useEditor, type UseEditorResult } from "../useEditor";
 
@@ -59,7 +59,11 @@ vi.mock("@sofereditor/math", () => ({
   renderLatexToSvg: (latex: string, display: boolean) => ({
     ok: true as const,
     svg: `<svg data-latex="${latex}"></svg>`,
-    widthEx: 2,
+    // "wide" é um gancho de teste (Item 2 — clamp escala o vAlign): dispara
+    // widthEx grande o bastante para estourar MAX_INSERT_WIDTH (600px em
+    // packages/react/src/imageConstraints.ts) com exPx=8, sem afetar as
+    // fórmulas normais (\alpha, \beta, …) usadas no resto do arquivo.
+    widthEx: latex.includes("wide") ? 100 : 2,
     heightEx: 1,
     vAlignEx: display ? 0 : -0.5,
   }),
@@ -193,5 +197,182 @@ describe("insertFormula — substituição através do gap assíncrono (fix roun
     // capturado ANTES do `await` é o que `cmdInsertImage` usa — o embed
     // antigo foi apagado e o novo entrou no lugar dele. UMA fórmula, a nova.
     expect(formulaEmbeds(api)).toEqual([{ latex: "\\beta", display: true }]);
+  });
+});
+
+/** Primeiro embed de imagem (fórmula ou não) no documento, com os campos crus. */
+function firstImageEmbed(api: UseEditorResult): ImageEmbed | undefined {
+  for (const b of api.doc.toJSON().blocks) {
+    for (const op of b.delta) {
+      if (isImageEmbed(op.insert)) return op.insert;
+    }
+  }
+  return undefined;
+}
+
+/** Seleciona o embed no offset logo antes de `focus` (mesmo padrão dos testes acima). */
+function selectEmbedBeforeFocus(api: UseEditorResult) {
+  const after = api.getSelection();
+  const embedOffset = after.focus.offset - 1;
+  act(() => {
+    api.setSelection({
+      anchor: { blockIndex: after.focus.blockIndex, cellIndex: after.focus.cellIndex, offset: embedOffset },
+      focus: { blockIndex: after.focus.blockIndex, cellIndex: after.focus.cellIndex, offset: embedOffset + 1 },
+    });
+  });
+}
+
+describe("insertFormula — herda layout/posição na EDIÇÃO, nunca na inserção nova (final-fix Item 1)", () => {
+  it("editar uma fórmula em wrap-left preserva o wrap-left (regressão: editar não pode devolver a fórmula para inline/origem)", async () => {
+    const { api } = mount();
+
+    await act(async () => {
+      await api.insertFormula("\\alpha", false);
+    });
+    selectEmbedBeforeFocus(api);
+    const embedOffset = api.getSelection().anchor.offset;
+
+    // Professor arrasta a fórmula para wrap-left, com um offset específico —
+    // o mesmo `setImageAttrs` que o resize/drag do embed usa de verdade.
+    act(() => {
+      api.setImageAttrs(0, embedOffset, { layout: "wrap-left", offsetX: 12, offsetY: 7 });
+    });
+    const afterLayout = firstImageEmbed(api);
+    expect(afterLayout?.layout).toBe("wrap-left");
+
+    // A seleção do embed sobrevive ao `setImageAttrs` (mesmo offset, sem
+    // `newOffset`) — reseleciona por segurança antes de editar, como o
+    // duplo clique real faz via `getSelectedEmbed()`.
+    selectEmbedBeforeFocus(api);
+
+    await act(async () => {
+      await api.insertFormula("\\beta", false);
+    });
+
+    const afterEdit = firstImageEmbed(api);
+    expect(afterEdit && isFormulaEmbed(afterEdit) ? afterEdit.formula.latex : undefined).toBe(
+      "\\beta",
+    );
+    // O ponto central do Item 1: layout/offset sobrevivem à edição do LaTeX.
+    expect(afterEdit?.layout).toBe("wrap-left");
+    expect(afterEdit?.offsetX).toBe(12);
+    expect(afterEdit?.offsetY).toBe(7);
+  });
+
+  it("wrap-left sobrevive mesmo quando a seleção colapsa DURANTE o gap assíncrono (pin: getSelectedEmbed() tem que rodar ANTES do primeiro await, não depois)", async () => {
+    // Este teste existe para o requisito mais específico do Item 1: não
+    // basta o merge existir, `embedAtCall = getSelectedEmbed()` tem que ser
+    // lido no MESMO instante síncrono que `selectionAtCall` — antes do
+    // `await import("@sofereditor/math")`. Se a leitura acontecesse depois
+    // do gap (ex.: logo antes de `cmdInsertImage`), o teste
+    // "editar preserva wrap-left" acima passaria do mesmo jeito, porque lá
+    // nada perturba a seleção durante o `await`. Aqui, igual ao teste de bug
+    // #6 no topo do arquivo, a seleção É perturbada no meio do gap
+    // (`pngGate`) — só um `embedAtCall` capturado cedo sobrevive a isso.
+    const { api } = mount();
+
+    await act(async () => {
+      await api.insertFormula("\\alpha", false);
+    });
+    selectEmbedBeforeFocus(api);
+    const embedOffset = api.getSelection().anchor.offset;
+    act(() => {
+      api.setImageAttrs(0, embedOffset, { layout: "wrap-left", offsetX: 12, offsetY: 7 });
+    });
+    selectEmbedBeforeFocus(api);
+    const embedSelection = api.getSelection();
+
+    pngGate = deferred<string>();
+
+    await act(async () => {
+      const pending = api.insertFormula("\\beta", false);
+
+      // Deixa `insertFormula` avançar de forma síncrona até o `await
+      // svgToPngDataUrl(...)` — mesma técnica do teste de bug #6 acima.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Colapsa a seleção AO VIVO no meio do gap. Se `embedAtCall` fosse lido
+      // aqui (ou depois), `getSelectedEmbed()` devolveria null — nada para
+      // herdar. O fix lê ANTES do gap, então isto não deveria mudar nada.
+      api.setSelection(collapsedSelection({ blockIndex: 0, offset: 0 }));
+
+      pngGate!.resolve("data:image/png;base64,BBBB");
+      await pending;
+    });
+
+    // Sanidade: a seleção usada por `cmdInsertImage` foi a original (mesmo
+    // efeito do teste de bug #6) — a fórmula editada substituiu a antiga, na
+    // MESMA posição, não na posição colapsada (block 0, offset 0) que o
+    // teste forjou durante o gap.
+    expect(embedSelection.anchor.blockIndex).toBe(api.getSelection().focus.blockIndex);
+
+    const afterEdit = firstImageEmbed(api);
+    expect(afterEdit && isFormulaEmbed(afterEdit) ? afterEdit.formula.latex : undefined).toBe(
+      "\\beta",
+    );
+    expect(afterEdit?.layout).toBe("wrap-left");
+    expect(afterEdit?.offsetX).toBe(12);
+    expect(afterEdit?.offsetY).toBe(7);
+  });
+
+  it("inserir uma fórmula NOVA com uma imagem comum em wrap-left selecionada NÃO herda o layout dela", async () => {
+    const { api } = mount();
+
+    act(() => {
+      api.insertImage({
+        type: "image",
+        src: "data:image/png;base64,AAAA",
+        width: 40,
+        height: 20,
+        layout: "wrap-left",
+        offsetX: 99,
+        offsetY: 88,
+      });
+    });
+    const commonImage = firstImageEmbed(api);
+    expect(commonImage?.layout).toBe("wrap-left");
+    expect(isFormulaEmbed(commonImage)).toBe(false);
+
+    // Seleciona a imagem comum, exatamente como o botão "Inserir fórmula" da
+    // toolbar encontraria a seleção se o professor tivesse clicado nela antes.
+    selectEmbedBeforeFocus(api);
+
+    await act(async () => {
+      await api.insertFormula("\\gamma", false);
+    });
+
+    const embeds = api.doc
+      .toJSON()
+      .blocks.flatMap((b) => b.delta.filter((op) => isImageEmbed(op.insert)).map((op) => op.insert as ImageEmbed));
+    // A imagem comum foi substituída (a seleção sobre ela era um range de 1
+    // char; `cmdInsertImage`/`insertImage` em `commands.ts` apaga a seleção
+    // não-colapsada antes de inserir — o mesmo comportamento de digitar por
+    // cima de um texto selecionado). Isso é esperado e não é o que este teste
+    // verifica: o ponto é que a fórmula nova NÃO carrega o `layout` da imagem
+    // que ali estava.
+    const formulaEmbed = embeds.find((e) => isFormulaEmbed(e));
+    expect(formulaEmbed).toBeDefined();
+    expect(formulaEmbed?.layout).toBeUndefined();
+    expect(formulaEmbed?.offsetX).toBeUndefined();
+    expect(formulaEmbed?.offsetY).toBeUndefined();
+  });
+
+  it("clampa a largura de uma fórmula inline muito larga e escala o vAlign pelo MESMO fator (Item 2)", async () => {
+    const { api } = mount();
+
+    // "wide" dispara widthEx: 100 no mock (ver vi.mock acima) — com
+    // exPx=8 (fallback quando `.ed-root` não existe no DOM do teste) dá
+    // w = 800px, acima de MAX_INSERT_WIDTH (600px). Fator de clamp: 600/800
+    // = 0.75. vAlignEx do mock para display=false é -0.5, então o vAlign
+    // esperado é -0.5 * 0.75 = -0.375.
+    await act(async () => {
+      await api.insertFormula("\\text{wide}", false);
+    });
+
+    const embed = firstImageEmbed(api);
+    expect(embed?.width).toBe(600);
+    expect(isFormulaEmbed(embed) ? embed.formula.vAlign : undefined).toBe("-0.375ex");
   });
 });
