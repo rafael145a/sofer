@@ -24,7 +24,7 @@ existe para evitar.
 
 ## O que a medição mudou no desenho
 
-Antes de desenhar, os 76 snippets propostos foram rodados contra o renderer
+Antes de desenhar, os snippets propostos foram rodados contra o renderer
 real (`packages: ['base','ams']` + o import por efeito colateral do
 `AmsConfiguration`). **Zero falhas.**
 
@@ -40,13 +40,25 @@ parecia exigir extensão: `\mathbb{R}`, `\begin{cases}`, `\binom`,
 `\vec{F} = m\vec{a}` e unidade via `v = 9{,}8\,\text{m/s}^2` renderizam com o
 pacote atual. Ver "Química" abaixo.
 
+**Todo `{}` na tabela abaixo é destino de cursor, não enfeite.** O
+`applySnippet` põe o cursor no **primeiro `{}` vazio** do snippet, e cai no
+fim do inserido quando não há nenhum. Um snippet de estrutura sem `{}` — a
+Matriz nasceu assim — deixa o professor com o cursor depois de
+`\end{pmatrix}`, fora da matriz que ele acabou de pedir. Grupo vazio é
+invisível na renderização (medido: a matriz com e sem os quatro `{}` tem a
+mesma largura, 5.593ex), então o placeholder é de graça. Quem acrescentar
+estrutura nova aqui: ponha o `{}` onde o professor vai digitar primeiro.
+
 ## Desenho
 
-### 1. Conteúdo — 76 itens em 7 categorias
+### 1. Conteúdo — 82 itens em 7 categorias
 
-Todos verificados. A tabela abaixo é a fonte da implementação.
+Todos verificados contra o renderer real. A tabela abaixo é a fonte da
+implementação, e reflete o estado final da branch (inclui a rodada de
+correções `13bdb40` e `b26aa1c`).
 
-**Estruturas** (14) — abre por padrão
+**Estruturas** (15, 4 colunas) — abre por padrão. Rótulo em palavra, sem
+`titulo`: a palavra já é o nome.
 
 | Rótulo | Snippet |
 | --- | --- |
@@ -54,34 +66,143 @@ Todos verificados. A tabela abaixo é a fonte da implementação.
 | Expoente | `^{}` |
 | Índice | `_{}` |
 | Raiz | `\sqrt{}` |
-| Raiz n-ésima | `\sqrt[]{}` |
+| Raiz n-ésima | `\sqrt[{}]{}` |
 | Somatório | `\sum_{}^{}` |
 | Produtório | `\prod_{}^{}` |
 | Integral | `\int_{}^{}` |
-| Limite | `\lim_{ \to }` |
-| Derivada | `\frac{d}{d}` |
-| Matriz 2×2 | `\begin{pmatrix} & \\ & \end{pmatrix}` |
-| Sistema | `\begin{cases}  \\  \end{cases}` |
-| Parênteses | `\left( \right)` |
+| Limite | `\lim_{{} \to {}}` |
+| Derivada | `\frac{d}{d{}}` |
+| Matriz 2×2 | `\begin{pmatrix} {} & {} \\ {} & {} \end{pmatrix}` |
+| Sistema | `\begin{cases} {} \\  \end{cases}` |
+| Parênteses | `\left({}\right)` |
 | Binomial | `\binom{}{}` |
+| Módulo | `\left|{}\right|` |
 
-**Símbolos** (7): `\pm` `\times` `\div` `\cdot` `\infty` `^\circ` `\%`
+Duas escolhas de cursor que não são óbvias: **Raiz n-ésima** usa
+`\sqrt[{}]{}` e não `\sqrt[]{}` — quem clicou em *n-ésima* em vez de *Raiz*
+fez isso por causa do índice, então o cursor vai para o índice. **Matriz**
+leva um `{}` por célula, não só na primeira: as outras três também precisam
+de destino para quem navegar.
 
-**Relações** (8): `\neq` `\approx` `\equiv` `\leq` `\geq` `\propto` `\perp` `\parallel`
+As seis categorias abaixo têm **rótulo em caractere e 6 colunas**, e **todo
+item leva `titulo`** — sem ele o nome acessível do botão é um glifo solto.
 
-**Gregas** (18): `\alpha` `\beta` `\gamma` `\delta` `\varepsilon` `\theta`
-`\lambda` `\mu` `\pi` `\rho` `\sigma` `\varphi` `\omega` `\Delta` `\Sigma`
-`\Pi` `\Omega` `\Phi`
+**Símbolos** (8)
 
-**Conjuntos** (14): `\in` `\notin` `\subset` `\subseteq` `\cup` `\cap`
-`\emptyset` `\mathbb{N}` `\mathbb{Z}` `\mathbb{Q}` `\mathbb{R}` `\mathbb{C}`
-`\forall` `\exists`
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| ± | `\pm` | mais ou menos |
+| × | `\times` | multiplicação |
+| ÷ | `\div` | divisão |
+| · | `\cdot` | multiplicação (ponto) |
+| ∞ | `\infty` | infinito |
+| ° | `^\circ` | grau |
+| % | `\%` | por cento |
+| , | `{,}` | vírgula decimal |
 
-**Funções** (7): `\operatorname{sen}` `\cos` `\operatorname{tg}`
-`\operatorname{cotg}` `\log_{}` `\ln` `\exp`
+**Relações** (10)
 
-**Setas e geometria** (8): `\to` `\leftarrow` `\Rightarrow` `\Leftrightarrow`
-`\rightleftharpoons` `\overrightarrow{}` `\angle` `\triangle`
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| ≠ | `\neq` | diferente de |
+| ≈ | `\approx` | aproximadamente |
+| ≡ | `\equiv` | idêntico a |
+| ≤ | `\leq` | menor ou igual a |
+| ≥ | `\geq` | maior ou igual a |
+| ∝ | `\propto` | proporcional a |
+| ⊥ | `\perp` | perpendicular a |
+| ∥ | `\parallel` | paralelo a |
+| ≅ | `\cong` | congruente a |
+| ∼ | `\sim` | semelhante a |
+
+**Gregas** (18)
+
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| α | `\alpha` | alfa |
+| β | `\beta` | beta |
+| γ | `\gamma` | gama |
+| δ | `\delta` | delta |
+| ε | `\varepsilon` | épsilon |
+| θ | `\theta` | teta |
+| λ | `\lambda` | lambda |
+| μ | `\mu` | mi |
+| π | `\pi` | pi |
+| ρ | `\rho` | rô |
+| σ | `\sigma` | sigma |
+| φ | `\varphi` | fi |
+| ω | `\omega` | ômega |
+| Δ | `\Delta` | delta maiúsculo |
+| Σ | `\Sigma` | sigma maiúsculo — letra grega; para somatório use Estruturas |
+| Π | `\Pi` | pi maiúsculo — letra grega; para produtório use Estruturas |
+| Ω | `\Omega` | ômega maiúsculo |
+| Φ | `\Phi` | fi maiúsculo |
+
+Os `titulo` de `Σ` e `Π` carregam a desambiguação porque a confusão é real e
+cara: `\Sigma` (1.633ex) e `\sum` (2.389ex) são glifos diferentes, e o
+professor caçando somatório encontra o `Σ` grego primeiro, na grade de
+símbolos, com o desenho parecido. Sem o aviso, a letra grega vai para a prova.
+
+**Conjuntos** (15)
+
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| ∈ | `\in` | pertence a |
+| ∉ | `\notin` | não pertence a |
+| ⊂ | `\subset` | contido em |
+| ⊆ | `\subseteq` | contido ou igual a |
+| ∪ | `\cup` | união |
+| ∩ | `\cap` | interseção |
+| ∅ | `\varnothing` | conjunto vazio |
+| ℕ | `\mathbb{N}` | conjunto dos naturais |
+| ℤ | `\mathbb{Z}` | conjunto dos inteiros |
+| ℚ | `\mathbb{Q}` | conjunto dos racionais |
+| ℝ | `\mathbb{R}` | conjunto dos reais |
+| ℂ | `\mathbb{C}` | conjunto dos complexos |
+| ∀ | `\forall` | para todo |
+| ∃ | `\exists` | existe |
+| { } | `\{{}\}` | chaves de conjunto |
+
+`\varnothing` e não `\emptyset`: o rótulo do botão mostra `∅` (U+2205, o
+círculo cortado) e o livro didático brasileiro imprime o círculo, mas
+`\emptyset` renderiza um **zero** cortado, mais estreito (1.131ex contra
+1.760ex). O botão prometia uma coisa e entregava outra.
+
+**Funções** (7)
+
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| sen | `\operatorname{sen}` | seno |
+| cos | `\cos` | cosseno |
+| tg | `\operatorname{tg}` | tangente |
+| cotg | `\operatorname{cotg}` | cotangente |
+| log | `\log_{}` | logaritmo |
+| ln | `\ln` | logaritmo natural |
+| exp | `\exp` | exponencial |
+
+**Setas e geometria** (9)
+
+| Rótulo | Snippet | `titulo` |
+| --- | --- | --- |
+| → | `\to` | tende a / vai para |
+| ← | `\leftarrow` | vem de / sentido inverso |
+| ⇒ | `\Rightarrow` | implica em |
+| ⇔ | `\Leftrightarrow` | se e somente se |
+| ⇌ | `\rightleftharpoons` | equilíbrio químico |
+| vetor AB | `\overrightarrow{}` | vetor entre dois pontos (AB) |
+| vetor | `\vec{}` | vetor (física) |
+| ∠ | `\angle` | ângulo |
+| △ | `\triangle` | triângulo |
+
+Os dois "vetor" são formas diferentes e ambas de escola: `\overrightarrow`
+é a de geometria (dois pontos, AB) e `\vec` a de física (uma letra). Os
+rótulos precisam continuar distintos — o teste trava rótulo repetido dentro
+de uma categoria.
+
+**A vírgula decimal é o item de maior alcance da lista inteira.** Em modo
+matemático a vírgula crua é átomo de pontuação e ganha espaço depois de si:
+`3,14` mede 4.4ex e sai **"3, 14"** impresso; `3{,}14` mede 4.023ex e sai
+certo. Atinge todo decimal de toda prova de matemática, física e química.
 
 ### 2. Notação brasileira — o detalhe que erra fácil
 
@@ -113,7 +234,7 @@ paleta e sai errado no papel.
 **Duas larguras de coluna, uma altura só.** Botão de palavra ("Raiz n-ésima")
 não cabe na largura de um botão de símbolo (π). Então:
 
-- **Estruturas: 4 colunas** (rótulos em palavra) → 14 itens = 4 linhas.
+- **Estruturas: 4 colunas** (rótulos em palavra) → 15 itens = 4 linhas.
 - **As outras seis: 6 colunas** (rótulos em caractere) → no máximo 18 itens
   (Gregas) = 3 linhas.
 
@@ -135,7 +256,7 @@ cabeçalhos fixos (mesmo custo de rolagem, sem o ganho de compactação).
 ### 4. Rótulo dos botões
 
 Símbolo mostra **o próprio caractere** (π, ≤, ∈, ⇒). Palavra não escala para
-76 itens, e o caractere é o que o professor procura com o olho.
+82 itens, e o caractere é o que o professor procura com o olho.
 
 Estruturas mantêm **palavra curta** — não existe caractere Unicode para
 "fração com dois campos vazios".
@@ -176,14 +297,24 @@ export interface CategoriaPaleta {
   nome: string;
   /** 4 para rótulos em palavra, 6 para rótulos em caractere. */
   colunas: 4 | 6;
-  itens: readonly { label: string; snippet: string }[];
+  itens: readonly {
+    label: string;
+    snippet: string;
+    /**
+     * Nome por extenso, usado no `title` do botão. Obrigatório na prática
+     * para rótulo em caractere — sem ele o nome acessível é um glifo solto
+     * e o `title` só repete o que já está visível. Estruturas dispensam:
+     * o rótulo já é palavra.
+     */
+    titulo?: string;
+  }[];
 }
 export const PALETA: readonly CategoriaPaleta[];
 ```
 
 `applySnippet(text, selStart, selEnd, snippet)` fica intacta — a mudança é
 só de organização do dado e de render.
-| `packages/react/src/formulaSnippet.test.ts` | casos das categorias; o teste de cursor continua valendo |
+| `packages/react/src/__tests__/formulaSnippet.test.ts` | casos das categorias; o teste de cursor continua valendo |
 | `packages/react/src/FormulaDialog.tsx` | estado da aba ativa; render das abas e da grade |
 | `apps/playground/src/styles.css` | estilos das abas |
 | `portal2-next/.../sofer-editor.css` | idem |
@@ -203,7 +334,7 @@ divergiu entre as cópias antes.
 - **Símbolo mais usados / recentes.** Exige persistir preferência por usuário,
   o que hoje não existe no editor.
 - **Renderizar o rótulo do botão pelo MathJax** (mostrar a fração desenhada em
-  vez da palavra "Fração"). Elegante, mas são 76 renders a cada abertura do
+  vez da palavra "Fração"). Elegante, mas são 82 renders a cada abertura do
   modal e complica o carregamento sob demanda.
 
 ## Riscos
