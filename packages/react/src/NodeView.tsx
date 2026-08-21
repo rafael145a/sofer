@@ -265,7 +265,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
         </tbody>
       </table>
       {isFirstFragment && (
-        <TableResizeOverlay tableRef={tableRef} blockIndex={index} cols={cols} />
+        <TableResizeOverlay tableRef={tableRef} blockIndex={index} cols={cols} rows={rows} />
       )}
     </div>
   );

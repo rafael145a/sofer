@@ -417,6 +417,30 @@ main {
 .ed-col-resize-handle:active {
   background: rgba(37, 99, 235, 0.5);
 }
+.ed-row-resize-handle {
+  cursor: row-resize;
+  background: transparent;
+  transition: background 0.1s ease-in;
+  touch-action: none;
+}
+.ed-row-resize-handle:hover {
+  background: rgba(37, 99, 235, 0.25);
+}
+.ed-row-resize-handle:active {
+  background: rgba(37, 99, 235, 0.5);
+}
+.ed-table-corner-handle {
+  cursor: nwse-resize;
+  background: transparent;
+  transition: background 0.1s ease-in;
+  touch-action: none;
+}
+.ed-table-corner-handle:hover {
+  background: rgba(37, 99, 235, 0.35);
+}
+.ed-table-corner-handle:active {
+  background: rgba(37, 99, 235, 0.6);
+}
 .ed-table {
   width: 100%;
   border-collapse: collapse;

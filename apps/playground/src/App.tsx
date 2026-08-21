@@ -1,5 +1,5 @@
 import { Editor, EditorProvider, Toolbar, useEditor } from "@sofereditor/react";
-import { useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import {
   documentToHtml,
   documentToJson,
@@ -37,6 +37,14 @@ export function App(): JSX.Element {
   const editor = useEditor();
   const editorRootRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Dev-only: expose the editor handle on `window` so it can be poked from
+  // devtools — e.g. `window.__editor.snapshot` or driving `setRowHeights`
+  // directly to verify pagination with large row heights without wiring up
+  // throwaway UI for it.
+  useEffect(() => {
+    (window as unknown as { __editor?: typeof editor }).__editor = editor;
+  }, [editor]);
 
   const exportHtml = () => {
     const html = documentToHtml(editor.snapshot, { title: "Documento" });
