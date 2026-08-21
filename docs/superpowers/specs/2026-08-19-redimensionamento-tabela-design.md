@@ -67,11 +67,55 @@ A soma permanece 100 por construção.
 O handle da borda DIREITA da tabela não tem vizinha — ele passa a ser o
 controle de largura total (item 3).
 
-### 3. Largura total da tabela
+### 3. Redimensionar a tabela inteira — três alças
 
-Novo atributo `tableWidth?: number` — percentual da largura útil (padrão 100).
-O handle da borda direita ajusta esse valor; as colunas mantêm as proporções
+Decisão do usuário em 21/08: as três, não só a largura.
+
+**Borda direita — largura total.** Novo atributo `tableWidth?: number`,
+percentual da largura útil (padrão 100). As colunas mantêm as proporções
 entre si. Limite: mínimo que caiba o conteúdo, máximo 100.
+
+**Borda de baixo — altura total.** Distribui o delta **igualmente entre as
+linhas**: cada uma recebe `delta / n`. Divisão igual preserva as diferenças
+que o professor já tenha ajustado à mão (linhas `[40, 80, 40]` com `+30`
+viram `[50, 90, 50]`), e é o que o Word faz.
+
+**Canto inferior direito — as duas juntas.** Composição das duas de cima: o
+delta horizontal vai para `tableWidth`, o vertical para as linhas. Sem regra
+nova.
+
+Contagem de alças, para não sobrar nem faltar: `n` colunas dão `n-1` divisas
+internas mais a borda direita; `m` linhas dão `m-1` divisas internas mais a
+borda de baixo; mais uma de canto.
+
+### 3.1. O arrasto da base NÃO pode ser exato — e é o mesmo defeito de novo
+
+Altura de linha é **mínimo**, não valor fixo (ver item 4). Então encolher
+abaixo do que o conteúdo ocupa grava o número mas não muda o desenho:
+
+```
+modelo depois do arrasto   [30, 70, 30]  = 130px
+conteúdo exige             [40, 70, 40]
+renderiza                  [40, 70, 40]  = 150px
+```
+
+Se o próximo `pointermove` partir da altura **renderizada** e gravar no
+modelo, o erro se acumula — que é literalmente o emborrachado do item 1,
+transposto para o eixo vertical. Seria irônico reintroduzir ao consertar.
+
+Duas regras, e as duas são obrigatórias:
+
+1. **O arrasto acumula contra o valor do MODELO no `pointerdown`**, nunca
+   contra o que está na tela. O ponto de partida é lido uma vez e o delta é
+   sempre relativo a ele.
+2. **No `pointerup`, a alça reancora na posição renderizada.** Se a tabela
+   não encolheu o quanto foi arrastado, a alça volta para onde a borda de
+   fato está — em vez de ficar boiando longe dela e sugerindo que o próximo
+   arrasto continua de onde o dedo parou.
+
+Sem a regra 2 o professor arrasta, nada acontece visivelmente, ele arrasta
+de novo, e na terceira vez a tabela salta. Vale para a largura também, que
+tem mínimo de conteúdo pelo mesmo motivo.
 
 ### 4. Altura de linha
 
@@ -103,7 +147,7 @@ Altura é distância física — não sofre o problema de proporção das coluna
 | `packages/core/src/types.ts` | `colWidths` vira proporção; `tableWidth`; `rowHeights` |
 | `packages/core/src/commands.ts` | `setColumnBoundary`, `setTableWidth`, `setRowHeight`; normalização na leitura |
 | `packages/react/src/NodeView.tsx` | `<col style="width:%">`, `<tr style="height">` |
-| `packages/react/src/TableResizeOverlay.tsx` | redistribuição, handle de largura total, handles horizontais |
+| `packages/react/src/TableResizeOverlay.tsx` | redistribuição; alças de borda direita, borda de baixo e canto; alças horizontais entre linhas; reancoragem no `pointerup` |
 | `packages/export-pdf/src/html.ts` | `renderColGroup` em %, altura de linha |
 | `packages/export-docx/src/docx.ts` | proporção → twips contra a largura útil; `w:trHeight` |
 | `packages/import-docx/src/tables.ts` | ler `w:gridCol`/`w:trHeight` para o formato novo |
@@ -116,3 +160,8 @@ Altura é distância física — não sofre o problema de proporção das coluna
   declarada muda a medição. Suíte de paginação tem que continuar verde.
 - **DOCX vai MUDAR de largura** para documentos existentes — para melhor
   (passa a bater com o editor), mas é mudança visível. Vale avisar o usuário.
+- **A alça que não acompanha o dedo.** Encolher tabela abaixo do conteúdo
+  grava o valor sem mudar o desenho. Sem a reancoragem do item 3.1, a alça
+  fica boiando longe da borda e o próximo arrasto salta. É o mesmo defeito
+  que este trabalho existe para consertar, e o jeito mais fácil de
+  reintroduzi-lo.
