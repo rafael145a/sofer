@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from "react";
 import type { FormulaRender } from "@sofereditor/math";
+import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 import { PALETA, applySnippet } from "./formulaSnippet";
@@ -37,6 +38,9 @@ export function FormulaDialog(): JSX.Element | null {
   // O renderer chega por import dinâmico quando o modal abre. Fica em ref, não
   // em state: trocá-lo não precisa re-renderizar, quem re-renderiza é o preview.
   const rendererRef = useRef<((l: string, d: boolean) => FormulaRender) | null>(null);
+  // Construtor do <math-field>. Ref e não state: quem re-renderiza é o campo,
+  // montado imperativamente na Task 2.
+  const mathfieldCtorRef = useRef<typeof MathfieldElement | null>(null);
   const [preview, setPreview] = useState<FormulaRender | null>(null);
   const [carregando, setCarregando] = useState(false);
   // Separado de `preview` de propósito: `preview` é limpo pelo efeito de
@@ -50,10 +54,13 @@ export function FormulaDialog(): JSX.Element | null {
     if (!formulaRequest || rendererRef.current) return;
     setCarregando(true);
     setErroCarregando(null);
-    // Import DINÂMICO: mantém o mathjax-full fora do bundle principal.
-    void import("@sofereditor/math")
-      .then((m) => {
-        rendererRef.current = m.renderLatexToSvg;
+    // Import DINÂMICO dos dois: mantém mathjax-full E mathlive fora do
+    // bundle principal. Ver o teste mathliveLazy.test.ts — trocar por
+    // import estático não dá erro nenhum, só fica lento para todo mundo.
+    void Promise.all([import("@sofereditor/math"), import("mathlive")])
+      .then(([math, mathlive]) => {
+        rendererRef.current = math.renderLatexToSvg;
+        mathfieldCtorRef.current = mathlive.MathfieldElement;
         setCarregando(false);
       })
       .catch(() => {
