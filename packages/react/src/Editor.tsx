@@ -425,20 +425,13 @@ export function Editor({
       if (!sel || !isFormulaEmbed(sel.embed)) return;
       e.preventDefault();
       const { latex, display } = sel.embed.formula;
-      const { blockIndex, cellIndex, offset } = sel;
+      // A restauração da seleção do embed através do round-trip do modal
+      // (bug #6) mora dentro de `insertFormula` (`useEditor.ts`) — ela é
+      // quem tem o `await`, então é a única que consegue segurar a seleção
+      // através do gap assíncrono. Fazer isso aqui de novo seria duplicação
+      // sem efeito (e enganosa: pareceria proteger o gap que só o hook vê).
       void ed.requestFormula(latex, display).then((r) => {
         if (!r) return;
-        // O fechamento do modal devolve o foco ao editor — mesmo bug #6 do
-        // requestLink (ver `LinkRequest.selection` acima): a seleção do
-        // modelo pode colapsar nesse round-trip. `insertFormula` decide o
-        // que apagar pela seleção ATUAL (`ctxRef.current.getSelection()`
-        // dentro de `insertImage`), então restauramos explicitamente a
-        // seleção do embed antes de inserir — sem isto, o antigo sobreviveria
-        // e o novo entraria em outro lugar (ou a fórmula duplicaria).
-        ed.setSelection({
-          anchor: { blockIndex, cellIndex, offset },
-          focus: { blockIndex, cellIndex, offset: offset + 1 },
-        });
         void ed.insertFormula(r.latex, r.display);
       });
     };

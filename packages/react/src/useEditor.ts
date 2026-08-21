@@ -834,6 +834,24 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
 
   const insertFormula = useCallback(
     async (latex: string, display: boolean): Promise<void> => {
+      // Snapshot da seleção ANTES de qualquer `await`. Esta função tem um
+      // `await import(...)` logo abaixo (e outro `await`, no PNG de
+      // fallback) NO MEIO do próprio corpo — um gap assíncrono real, não só
+      // um round-trip de Promise síncrono. Se o `<dialog>` do modal (que já
+      // fechou antes de `insertFormula` ser chamada) devolver o foco ao
+      // editor e a seleção do modelo colapsar durante esse gap (bug #6 —
+      // mesmo motivo de `LinkRequest.selection`, mas aqui SEM jeito de o
+      // chamador segurar a seleção através do `await`, porque ele não vê o
+      // await por dentro), `cmdInsertImage` (mais abaixo) leria uma seleção
+      // colapsada, `insertImage` (`commands.ts`) pularia o `deleteRange`
+      // inteiro (`isCollapsed` verdadeiro) e a fórmula antiga sobreviveria
+      // ao lado da nova — duas fórmulas no documento. Capturar aqui e
+      // restaurar logo antes de `cmdInsertImage` fecha esse gap pra QUALQUER
+      // chamador (toolbar, duplo clique, botão "Editar fórmula") num lugar
+      // só. Não dá pra resolver espelhando `resolveLinkRequest` (restaurar a
+      // seleção ali, no `resolve()`): essa restauração aconteceria ANTES do
+      // `await` desta função, não depois — o gap continuaria aberto.
+      const selectionAtCall = ctxRef.current.getSelection();
       // Import DINÂMICO, pelo mesmo motivo do modal: manter o mathjax-full
       // fora do bundle principal. Como esta função já é async, não custa nada.
       let mathModule: typeof import("@sofereditor/math");
@@ -871,6 +889,12 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
         // vai pular esse embed, contando em `skipped`. Melhor que não inserir.
         svgFallback = undefined;
       }
+      // Restaura a seleção capturada ANTES do primeiro `await` lá em cima —
+      // ver o comentário no topo da função. Sem isto, `cmdInsertImage` lê a
+      // seleção AO VIVO no instante em que roda (`ctx.getSelection()` dentro
+      // de `insertImage`, `commands.ts`), que pode ter colapsado durante o
+      // gap assíncrono.
+      ctxRef.current.setSelection(selectionAtCall);
       cmdInsertImage(ctxRef.current, {
         type: "image",
         src,

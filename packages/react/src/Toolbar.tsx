@@ -519,20 +519,21 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
               onMouseDown={stop}
               onClick={(e) => {
                 e.preventDefault();
+                // NÃO é a mesma checagem "morta" de antes: o narrowing de
+                // `isFormulaEmbed` no ternário (linha acima) não atravessa a
+                // fronteira deste closure — `onClick` é uma função separada,
+                // e dentro dela `selectedEmbed.embed.formula` volta a ser
+                // `FormulaMeta | undefined` pro TS (`tsc --noEmit` reprova
+                // sem este re-check; testado). Revalidar aqui é barato e
+                // idempotente — nada muda entre o render e o clique.
+                if (!isFormulaEmbed(selectedEmbed.embed)) return;
                 const f = selectedEmbed.embed.formula;
-                if (!f) return;
-                const { blockIndex, cellIndex, offset } = selectedEmbed;
+                // A restauração da seleção do embed através do round-trip do
+                // modal (bug #6) mora dentro de `insertFormula`
+                // (`useEditor.ts`) — é a única com o `await` no meio, então é
+                // a única que consegue segurar a seleção através do gap.
                 void editor.requestFormula(f.latex, f.display).then((r) => {
                   if (!r) return;
-                  // Mesma proteção do duplo clique em Editor.tsx: o fechamento
-                  // do modal devolve o foco ao editor e pode colapsar a
-                  // seleção do modelo (bug #6, ver `LinkRequest.selection`).
-                  // `insertFormula` apaga o embed antigo pela seleção ATUAL,
-                  // então restauramos a seleção do embed antes de inserir.
-                  editor.setSelection({
-                    anchor: { blockIndex, cellIndex, offset },
-                    focus: { blockIndex, cellIndex, offset: offset + 1 },
-                  });
                   void editor.insertFormula(r.latex, r.display);
                 });
               }}
