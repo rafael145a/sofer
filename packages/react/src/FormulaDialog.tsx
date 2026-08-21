@@ -18,6 +18,7 @@ export function FormulaDialog(): JSX.Element | null {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [latex, setLatex] = useState("");
   const [display, setDisplay] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState(0);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -25,6 +26,7 @@ export function FormulaDialog(): JSX.Element | null {
     if (formulaRequest) {
       setLatex(formulaRequest.initialLatex);
       setDisplay(formulaRequest.initialDisplay);
+      setAbaAtiva(0);
       if (!dialog.open) dialog.showModal();
       queueMicrotask(() => inputRef.current?.focus());
     } else if (dialog.open) {
@@ -113,8 +115,26 @@ export function FormulaDialog(): JSX.Element | null {
       }}
     >
       <form onSubmit={onSubmit} className="ed-formula-form">
-        <div className="ed-formula-paleta">
-          {PALETA.map((p) => (
+        <div className="ed-formula-abas" role="tablist">
+          {PALETA.map((cat, i) => (
+            <button
+              key={cat.nome}
+              type="button"
+              role="tab"
+              aria-selected={i === abaAtiva}
+              className="ed-formula-aba"
+              onClick={() => setAbaAtiva(i)}
+            >
+              {cat.nome}
+            </button>
+          ))}
+        </div>
+        <div
+          className="ed-formula-paleta"
+          role="tabpanel"
+          style={{ gridTemplateColumns: `repeat(${PALETA[abaAtiva].colunas}, 1fr)` }}
+        >
+          {PALETA[abaAtiva].itens.map((p) => (
             <button
               key={p.label}
               type="button"
