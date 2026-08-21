@@ -191,3 +191,33 @@ export const PALETA: readonly CategoriaPaleta[] = [
 export function paraMathlive(snippet: string): string {
   return snippet.replaceAll("{}", "{#?}");
 }
+
+/**
+ * Traduz o snippet da paleta para o dialeto de PREVIEW do botão (via
+ * `convertLatexToMarkup`) — não confundir com `paraMathlive` acima, que é
+ * para inserção no campo.
+ *
+ * `convertLatexToMarkup` é um renderer estático (sem interatividade de
+ * mathfield): passado o `{}` cru, `^{}` e `_{}` — Expoente e Índice — saem
+ * **completamente vazios**. Não é feio, é NADA: `convertLatexToMarkup("^{}")`
+ * devolve `<span class="ML__msubsup"></span>`, sem glifo, sem linha, sem
+ * caixa — verificado com `node` contra o `mathlive/ssr` real, não deduzido.
+ * O botão de Expoente ficaria com o mesmo problema que esta tarefa existe
+ * pra resolver: sem forma nenhuma, pior que a palavra que troca.
+ *
+ * `\placeholder{}` (o marcador visual do MathLive) NÃO ajuda aqui: também
+ * verificado, `convertLatexToMarkup("\\placeholder{}")` devolve
+ * `<span class="ML__base"> </span>` — um espaço, nada visível. O placeholder
+ * tracejado do Docs é comportamento do mathfield interativo, não deste
+ * renderer estático.
+ *
+ * O que funciona, testado nos mesmos 82 itens (teste abaixo): trocar cada
+ * `{}` por `{□}` (U+25A1 WHITE SQUARE). Mesma regra do `paraMathlive` —
+ * SEMPRE com as chaves, sem caso especial — pelo mesmo motivo: `\vec{}` e
+ * `\overrightarrow{}` são macro de um argumento por posição, e `\vec□` sem
+ * chaves arriscaria o mesmo problema de argumento mal agarrado que motivou
+ * manter as chaves lá.
+ */
+export function paraMarkup(snippet: string): string {
+  return snippet.replaceAll("{}", "{□}");
+}

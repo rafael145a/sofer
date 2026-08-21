@@ -3,7 +3,7 @@ import type { FormulaRender } from "@sofereditor/math";
 import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
-import { PALETA, paraMathlive } from "./formulaSnippet";
+import { PALETA, paraMathlive, paraMarkup } from "./formulaSnippet";
 import { podeInserir, motivoBloqueio } from "./formulaGuarda";
 
 /**
@@ -237,10 +237,12 @@ export function FormulaDialog({
               onClick={() => onPaleta(p.snippet)}
               // Markup vem do `convertLatexToMarkup` do MathLive sobre um
               // snippet ESTÁTICO da nossa PALETA — não é entrada de usuário.
-              // Renderiza o snippet SEM tradução: aqui o consumidor é o
-              // renderer, não o campo, e `#?` não é LaTeX.
+              // `paraMarkup` (não `paraMathlive`, que é para o campo e usa
+              // `#?` — inválido para este renderer) troca `{}` por `{□}`
+              // só para o ícone: `^{}`/`_{}` crus saem VAZIOS deste
+              // renderer (verificado, não deduzido — ver formulaSnippet.ts).
               {...(markup
-                ? { dangerouslySetInnerHTML: { __html: markup(p.snippet) } }
+                ? { dangerouslySetInnerHTML: { __html: markup(paraMarkup(p.snippet)) } }
                 : { children: p.label })}
             />
           ))}
