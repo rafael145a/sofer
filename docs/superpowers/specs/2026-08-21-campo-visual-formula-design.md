@@ -186,9 +186,10 @@ dois, ambos sobre o dado real — todo snippet de estrutura tem pelo menos um
 
 Os botões de estrutura param de mostrar a palavra "Fração" e passam a
 mostrar a fração desenhada, como no Docs. Isso estava descartado no spec da
-paleta por custo — 82 renders de MathJax a cada abertura do modal. Com o
-`convertLatexToMarkup` do MathLive o custo cai: é markup HTML+CSS síncrono,
-sem o pipeline de SVG (medido: ~1 KB de markup para uma fração).
+paleta por custo. O custo é menor do que aquele spec supôs: só a aba ativa
+renderiza (`PALETA[abaAtiva].itens.map`), então são **no máximo 18 por aba**
+(Gregas), não 82 por abertura. E o `convertLatexToMarkup` é markup HTML+CSS
+síncrono, sem o pipeline de SVG — medido: ~1 KB para uma fração.
 
 **Uma via só, não duas.** Todos os 82 botões renderizam pelo mesmo caminho,
 inclusive os de símbolo. Manter "estrutura desenha, símbolo mostra o
