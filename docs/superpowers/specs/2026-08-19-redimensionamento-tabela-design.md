@@ -20,10 +20,25 @@ colunas renderizadas:[140, 179, 140, 140]  = 599px   (escaladas por 600/513)
 
 Consequências:
 
-1. **Arrasto de coluna não cola.** Grava 120, renderiza 140. E como cada
-   `pointermove` parte da largura RENDERIZADA e grava no modelo, o erro se
-   acumula durante o arrasto — é a sensação de emborrachado que o usuário
-   relatou.
+1. **Arrasto de coluna não cola.** Grava 120, renderiza 140. O
+   `TableResizeOverlay` lê a largura **renderizada** no `pointerdown`
+   (`startWidth` de `getBoundingClientRect`) e grava `startWidth + dx` no
+   modelo, que é interpretado na escala do modelo. Calculado sobre a tabela
+   medida acima:
+
+   ```
+     cursor   modelo   soma  escala  renderiza     erro
+        140      140    533  1.1257      157.6    +17.6
+        150      150    543  1.1050      165.7    +15.7
+        160      160    553  1.0850      173.6    +13.6
+        180      180    573  1.0471      188.5     +8.5
+        200      200    593  1.0118      202.4     +2.4
+   ```
+
+   Ou seja: a coluna **salta +17.6 px no instante do clique**, antes de o
+   dedo se mover, e depois o erro vai *diminuindo* conforme arrasta — porque
+   a escala muda junto, já que a soma mudou. Não é erro que acumula: é
+   elástico, e é exatamente a palavra que o usuário usou.
 2. **DOCX sai com largura errada.** `export-docx` converte os px para twips e
    fixa `width: soma(colWidths)` com `layout: FIXED`
    (`packages/export-docx/src/docx.ts:310-330`). A tabela no Word sai com 513px
