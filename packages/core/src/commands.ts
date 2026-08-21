@@ -1187,12 +1187,23 @@ export function insertTableColumn(
     }
     attrs.set("cols", cols + 1);
 
-    // Resize colWidths if present — insert a 100px placeholder for the new col.
+    // A coluna nova entra com a fatia igual `100/(cols+1)`, e as existentes
+    // encolhem por um fator uniforme (`cols/(cols+1)`) para abrir espaço,
+    // preservando a proporção RELATIVA entre elas. Inserir o literal 100,
+    // como era antes, fazia a soma saltar para 200 assim que `colWidths`
+    // virou proporção. Ingenuamente normalizar a soma [existentes + media]
+    // depois de somar também não serve: a média já nasce no tamanho-alvo
+    // final, e reescalar tudo (média incluída) por 100/soma a encolhe de
+    // novo — 4 colunas iguais a 25 ganhando uma 5ª vizinha não dá 5 iguais
+    // a 20, dá 4 a 20.833 e 1 a 16.667.
     const widths = attrs.get("colWidths") as number[] | undefined;
     if (Array.isArray(widths) && widths.length === cols) {
-      const next = widths.slice();
-      next.splice(C, 0, 100);
-      attrs.set("colWidths", next);
+      const base = normalizarLarguras(widths, cols);
+      const media = 100 / (cols + 1);
+      const escala = cols / (cols + 1);
+      const next = base.map((w) => arredonda(w * escala));
+      next.splice(C, 0, media);
+      attrs.set("colWidths", normalizarLarguras(next, cols + 1));
     }
 
     const newCols = cols + 1;
@@ -1285,12 +1296,13 @@ export function deleteTableColumn(ctx: CommandContext, blockIndex: number, col: 
       if (p.colspan > 1) m.set("colspan", p.colspan); else m.delete("colspan");
     }
 
-    // Trim colWidths.
+    // Trim colWidths and renormalize — a soma tem que voltar a 100 depois
+    // que uma fatia sai.
     const widths = attrs.get("colWidths") as number[] | undefined;
     if (Array.isArray(widths) && widths.length === cols) {
       const next = widths.slice();
       next.splice(C, 1);
-      attrs.set("colWidths", next);
+      attrs.set("colWidths", normalizarLarguras(next, cols - 1));
     }
 
     const newCol = Math.min(C, newCols - 1);
@@ -1659,28 +1671,115 @@ export function splitCell(ctx: CommandContext, blockIndex: number, row: number, 
   return true;
 }
 
-// ---------- Column widths (Sub-phase 4.4) ----------
+// ---------- Column widths (Sub-phase 4.4 → proportional resize) ----------
 
-/** Set the width (in CSS px) of a specific column. Auto-initializes `colWidths`. */
-export function setColumnWidth(
+/** Casa a soma com 100 dentro de meio ponto — folga para erro de float. */
+const SOMA_OK = (s: number): boolean => Math.abs(s - 100) < 0.5;
+
+/** Três casas: suficiente para um px numa página A4, e estável no round-trip. */
+const arredonda = (n: number): number => Math.round(n * 1000) / 1000;
+
+/**
+ * Devolve proporções somando 100.
+ *
+ * Documento antigo grava px absoluto. Como a tabela sempre renderiza em
+ * `width: 100%`, esses px já eram interpretados PROPORCIONALMENTE pelo
+ * navegador — então normalizar preserva exatamente o que o professor via.
+ * Não é conversão destrutiva.
+ *
+ * A heurística "a soma já é ~100, então já é proporção" é segura na prática:
+ * para uma tabela em px cair nela, a média por coluna teria que ser 100/n —
+ * 25 px cada em 4 colunas. O código antigo gravava largura renderizada, que
+ * numa A4 dá ~150 px por coluna. É heurística, não prova.
+ */
+export function normalizarLarguras(
+  widths: number[] | undefined,
+  cols: number,
+): number[] {
+  const igual = (): number[] => new Array<number>(cols).fill(100 / cols);
+  if (!Array.isArray(widths) || widths.length !== cols || cols <= 0) {
+    return igual();
+  }
+  if (!widths.every((w) => typeof w === "number" && isFinite(w) && w > 0)) {
+    return igual();
+  }
+  const soma = widths.reduce((a, b) => a + b, 0);
+  if (SOMA_OK(soma)) return widths.slice();
+  return widths.map((w) => arredonda((w / soma) * 100));
+}
+
+/** Mínimo por coluna, em pontos percentuais. Abaixo disso a coluna some. */
+const MIN_COLUNA_PCT = 3;
+
+/**
+ * Move a divisa `boundary` (entre a coluna `boundary` e a `boundary+1`) por
+ * `deltaPct` pontos percentuais: uma cresce, a vizinha encolhe na mesma
+ * medida. A soma permanece 100 **por construção**, não por normalização —
+ * é o que faz o arrasto colar no cursor.
+ *
+ * A divisa da última coluna não tem vizinha: ela é a borda direita da tabela
+ * e é tratada por `setTableWidth`, não aqui.
+ */
+export function setColumnBoundary(
   ctx: CommandContext,
   blockIndex: number,
-  col: number,
-  widthPx: number,
+  boundary: number,
+  deltaPct: number,
+  /**
+   * Proporções do início do arrasto. O overlay lê o modelo UMA vez no
+   * `pointerdown` e passa aqui a cada movimento, para o delta ser sempre
+   * relativo àquele instante. Sem a base, cada `pointermove` aplicaria o
+   * delta sobre o resultado do anterior e o arrasto aceleraria.
+   */
+  base?: number[],
 ): void {
   if (!ctx.doc.isTable(blockIndex)) return;
   const { cols } = ctx.doc.getTableSize(blockIndex);
-  if (col < 0 || col >= cols) return;
-  const w = Math.max(20, Math.round(widthPx));
+  if (boundary < 0 || boundary >= cols - 1) return;
   transact(ctx.doc, () => {
     const attrsMap = ctx.doc.getBlockAttrsMap(blockIndex);
     if (!attrsMap) return;
-    const current = attrsMap.get("colWidths") as number[] | undefined;
-    const next = Array.isArray(current) && current.length === cols
-      ? current.slice()
-      : new Array<number>(cols).fill(120);
-    next[col] = w;
+    const larguras = normalizarLarguras(
+      base ?? (attrsMap.get("colWidths") as number[] | undefined),
+      cols,
+    );
+    const a = larguras[boundary]!;
+    const b = larguras[boundary + 1]!;
+    // Trava o delta nos dois extremos antes de aplicar, para a soma nunca
+    // sair de 100 nem uma coluna virar negativa.
+    //
+    // O piso normal é MIN_COLUNA_PCT para os dois lados. Mas um documento
+    // legado com proporções extremas (ex.: px [500,5,5,500] normaliza para
+    // [49.5, 0.495, 0.495, 49.5]) pode chegar aqui com `a + b` menor que
+    // `2 * MIN_COLUNA_PCT` — as duas colunas já nascem abaixo do piso. Nesse
+    // caso não existe delta que ponha as duas em MIN_COLUNA_PCT ao mesmo
+    // tempo: aplicar o piso de cada lado de forma independente (como antes)
+    // dava um valor negativo do lado que já era pequeno. O piso efetivo vira
+    // `min(MIN_COLUNA_PCT, (a+b)/2)` — quando não há orçamento para o piso
+    // cheio, divide o que existe ao meio em vez de estourar para negativo.
+    const piso = Math.min(MIN_COLUNA_PCT, (a + b) / 2);
+    const d = Math.max(piso - a, Math.min(deltaPct, b - piso));
+    const next = larguras.slice();
+    next[boundary] = arredonda(a + d);
+    next[boundary + 1] = arredonda(b - d);
     attrsMap.set("colWidths", next);
+  });
+}
+
+/** Piso arbitrário e assumido: com `table-layout: fixed` a tabela encolhe
+ *  abaixo do conteúdo sem resistência, então não há "mínimo do conteúdo"
+ *  para ancorar. */
+const MIN_TABELA_PCT = 20;
+
+/**
+ * Define a largura total da tabela como percentual da largura útil da
+ * página. Ausente = 100 (comportamento de hoje).
+ */
+export function setTableWidth(ctx: CommandContext, blockIndex: number, pct: number): void {
+  if (!ctx.doc.isTable(blockIndex)) return;
+  const v = Math.max(MIN_TABELA_PCT, Math.min(100, arredonda(pct)));
+  transact(ctx.doc, () => {
+    ctx.doc.getBlockAttrsMap(blockIndex)?.set("tableWidth", v);
   });
 }
 

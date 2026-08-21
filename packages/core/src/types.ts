@@ -65,11 +65,17 @@ export interface BlockAttrs {
   /** Only meaningful when `type === "table"`. */
   cols?: number;
   /**
-   * Only meaningful when `type === "table"`. Per-column widths in CSS px.
-   * Length should equal `cols` when set; missing or short arrays fall back to
-   * an auto distribution at render time.
+   * Only meaningful when `type === "table"`. Per-column widths in
+   * **proportion**, summing to 100. Old documents have absolute px and are
+   * normalized on read — see `normalizarLarguras`.
    */
   colWidths?: number[];
+  /**
+   * Only meaningful when `type === "table"`. Total table width as a
+   * percentage of the available page width. Missing = 100, so existing
+   * documents don't change appearance.
+   */
+  tableWidth?: number;
   /**
    * Só relevante quando `type === "table"`. Onde as linhas da grade aparecem.
    * Ausente = "all" — documentos existentes não mudam de aparência.

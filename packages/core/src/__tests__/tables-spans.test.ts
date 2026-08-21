@@ -11,7 +11,7 @@ import {
   mergeDown,
   mergeRight,
   moveToNextCell,
-  setColumnWidth,
+  setColumnBoundary,
   splitCell,
   tableLocationOf,
   type CommandContext,
@@ -154,39 +154,65 @@ describe("tables — span-aware row/col deletion", () => {
   });
 });
 
-describe("tables — column widths", () => {
-  it("setColumnWidth populates colWidths and clamps to a minimum", () => {
+describe("tables — column widths (proportion)", () => {
+  // `setColumnWidth` (absolute px) was replaced by `setColumnBoundary`
+  // (moves the divide between two adjacent columns by a delta, in
+  // percentage points — see packages/core/src/commands.ts). These tests
+  // are rewritten for the new function but protect the same guarantees the
+  // old ones did: colWidths gets populated on first use, and there is a
+  // floor a column can't be pushed past.
+  it("setColumnBoundary populates colWidths from equal defaults on first drag", () => {
     const h = harness();
     insertTable(h.ctx, 1, 3);
-    setColumnWidth(h.ctx, 1, 1, 240);
-    const attrs = h.doc.getBlockAttrs(1);
-    expect(attrs.colWidths?.length).toBe(3);
-    expect(attrs.colWidths?.[1]).toBe(240);
-    // Clamping: tiny values get raised to 20.
-    setColumnWidth(h.ctx, 1, 0, 5);
-    expect(h.doc.getBlockAttrs(1).colWidths?.[0]).toBe(20);
+    expect(h.doc.getBlockAttrs(1).colWidths).toBeUndefined();
+    setColumnBoundary(h.ctx, 1, 0, 10);
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+    expect(w).toHaveLength(3);
+    expect(w[0]).toBeCloseTo(43.333, 3);
+    expect(w[1]).toBeCloseTo(23.333, 3);
+    expect(w[2]).toBeCloseTo(33.333, 3);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
   });
 
-  it("insertTableColumn keeps colWidths in sync", () => {
+  it("setColumnBoundary clamps the delta so neither side crosses the minimum (3pp)", () => {
+    const h = harness();
+    insertTable(h.ctx, 1, 3);
+    // Explicit base so the numbers are exact, not compounded across calls.
+    setColumnBoundary(h.ctx, 1, 0, -1000, [50, 25, 25]);
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+    expect(w).toHaveLength(3);
+    expect(w[0]).toBeCloseTo(3, 3); // floored — never goes below the minimum
+    expect(w[1]).toBeCloseTo(72, 3); // 25 + everything col0 gave up (47)
+    expect(w[2]).toBeCloseTo(25, 3); // untouched — not part of this boundary
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
+  });
+
+  it("insertTableColumn keeps colWidths proportional and in sync", () => {
     const h = harness();
     insertTable(h.ctx, 1, 2);
-    setColumnWidth(h.ctx, 1, 0, 100);
-    setColumnWidth(h.ctx, 1, 1, 200);
+    // Start from an uneven 1:2 split (was [100, 200] px in the old test).
+    setColumnBoundary(h.ctx, 1, 0, -100 / 6);
     insertTableColumn(h.ctx, 1, 0, "after");
-    const w = h.doc.getBlockAttrs(1).colWidths;
-    expect(w?.length).toBe(3);
-    expect(w?.[0]).toBe(100);
-    expect(w?.[2]).toBe(200);
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+    expect(w).toHaveLength(3);
+    // Sum stays 100 — the invariant px never had to protect, because px
+    // never summed to anything meaningful.
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
+    // The original two columns (now at indices 0 and 2 — the new column
+    // was inserted between them) keep their 1:2 ratio to each other.
+    expect(w[2] / w[0]).toBeCloseTo(2, 3);
   });
 
-  it("deleteTableColumn trims colWidths", () => {
+  it("deleteTableColumn trims colWidths and renormalizes to 100", () => {
     const h = harness();
     insertTable(h.ctx, 1, 3);
-    setColumnWidth(h.ctx, 1, 0, 50);
-    setColumnWidth(h.ctx, 1, 1, 60);
-    setColumnWidth(h.ctx, 1, 2, 70);
+    setColumnBoundary(h.ctx, 1, 0, 0, [25, 35, 40]);
     deleteTableColumn(h.ctx, 1, 1);
-    const w = h.doc.getBlockAttrs(1).colWidths;
-    expect(w).toEqual([50, 70]);
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+    expect(w).toHaveLength(2);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
+    // Remaining columns (25 and 40) keep their relative ratio — not an
+    // arbitrary split.
+    expect(w[1] / w[0]).toBeCloseTo(40 / 25, 2);
   });
 });
