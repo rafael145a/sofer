@@ -550,3 +550,53 @@ describe("marca-texto (highlight)", () => {
     expect(xml).toContain('w:val="FF0000"');
   });
 });
+
+describe("SVG no DOCX", () => {
+  const SVG_SRC =
+    "data:image/svg+xml;base64," +
+    Buffer.from("<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'/>").toString("base64");
+
+  const docComSvg = (svgFallback?: string): LegacySerializedDocument => [
+    {
+      type: "paragraph",
+      text: "",
+      attrs: {},
+      delta: [
+        {
+          insert: {
+            type: "image",
+            src: SVG_SRC,
+            width: 20,
+            height: 12,
+            ...(svgFallback ? { svgFallback } : {}),
+          },
+        },
+      ],
+    },
+  ];
+
+  it("SVG COM fallback entra no documento", async () => {
+    // Antes desta mudança o export descartava TODO svg silenciosamente —
+    // um defeito que já existia, independente de fórmulas.
+    const { skippedImages } = await documentToDocxBuffer(docComSvg(PNG_1PX));
+    expect(skippedImages).toBe(0);
+  });
+
+  it("SVG SEM fallback continua pulado — não inventamos raster no servidor", async () => {
+    const { skippedImages } = await documentToDocxBuffer(docComSvg());
+    expect(skippedImages).toBe(1);
+  });
+
+  it("PNG comum não mudou de comportamento", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [{ insert: { type: "image", src: PNG_1PX, width: 10, height: 10 } }],
+      },
+    ];
+    const { skippedImages } = await documentToDocxBuffer(doc);
+    expect(skippedImages).toBe(0);
+  });
+});

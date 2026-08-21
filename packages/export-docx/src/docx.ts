@@ -487,6 +487,21 @@ function makeImageRun(
 ): ImageRun | null {
   const resolved = images.get(embed.src);
   if (!resolved) return null;
+  if (resolved.type === "svg") {
+    // resolveAllImages só deixa svg resolvido quando há fallback, então este
+    // decode não falha; o guarda existe porque o tipo é opcional.
+    const fb = embed.svgFallback ? decodeDataUrl(embed.svgFallback) : null;
+    if (!fb) return null;
+    return new ImageRun({
+      type: "svg",
+      data: resolved.data,
+      fallback: { type: fb.kind, data: fb.bytes },
+      transformation: {
+        width: Math.max(1, Math.round(embed.width)),
+        height: Math.max(1, Math.round(embed.height)),
+      },
+    } as ConstructorParameters<typeof ImageRun>[0]);
+  }
   return new ImageRun({
     data: resolved.data,
     type: resolved.type,
@@ -572,8 +587,18 @@ async function resolveAllImages(
   resolve: (src: string) => Promise<ResolvedImage | null>,
 ): Promise<{ images: Map<string, ResolvedImage | null>; skipped: number }> {
   const srcs = new Set<string>();
+  // svgFallback é campo do EMBED e o mapa de resolução é por SRC. Colher no
+  // mesmo passo evita um segundo percurso do documento. Dois embeds com o
+  // mesmo src e fallbacks diferentes é caso que não existe na prática (o src
+  // é o próprio conteúdo em data URL); o primeiro ganha.
+  const fallbacks = new Map<string, string>();
   const collect = (delta: DeltaOp[]) => {
-    for (const op of delta) if (isImageEmbed(op.insert)) srcs.add(op.insert.src);
+    for (const op of delta) {
+      if (!isImageEmbed(op.insert)) continue;
+      srcs.add(op.insert.src);
+      const fb = op.insert.svgFallback;
+      if (fb && !fallbacks.has(op.insert.src)) fallbacks.set(op.insert.src, fb);
+    }
   };
   for (const block of doc.blocks) {
     collect(block.delta);
@@ -590,9 +615,12 @@ async function resolveAllImages(
       }
       // docx's ImageRun requires a `fallback` for type "svg" (RegularImageOptions);
       // without it the constructor throws synchronously inside buildDocument,
-      // which is outside this try/catch and would abort the whole export. Treat
-      // svg as unresolved (skip) until we add fallback support.
-      if (resolved?.type === "svg") resolved = null;
+      // which is outside this try/catch and would abort the whole export. SVG
+      // deixa de ser descartado: o ImageRun aceita `type: "svg"` desde que
+      // receba um `fallback` raster. Quem tem `svgFallback` passa; quem não
+      // tem continua sendo pulado AQUI, para que `skipped` conte certo — não
+      // inventamos um raster no servidor.
+      if (resolved?.type === "svg" && !fallbacks.has(src)) resolved = null;
       images.set(src, resolved);
     }),
   );
