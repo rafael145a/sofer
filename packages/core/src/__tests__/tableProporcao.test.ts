@@ -151,3 +151,43 @@ describe("setColumnBoundary — caso degenerado de documento legado", () => {
     expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
   });
 });
+
+describe("divisa em documento legado deformado", () => {
+  it("curar a vizinha subdimensionada pode mover a divisa CONTRA o arrasto", () => {
+    // Comportamento deliberado, medido e travado aqui para ninguém
+    // "consertar" depois sem saber o que está desfazendo.
+    //
+    // Documento legado com px [500, 5, 5, 500] normaliza para proporções
+    // [49.5, 0.495, 0.495, 49.5] — duas colunas nascem MUITO abaixo do piso
+    // de 3%. Ao arrastar a divisa 0 para a DIREITA, não há de onde tirar: a
+    // vizinha já está abaixo do mínimo. O clamp então força o delta negativo
+    // necessário para trazê-la ao piso, e a divisa anda para a ESQUERDA.
+    //
+    // É cura de documento malformado, acontece uma vez, e o resultado é uma
+    // tabela válida. A alternativa (não fazer nada) deixaria a coluna
+    // invisível para sempre.
+    const h = harness();
+    insertTable(h.ctx, 2, 4);
+    h.doc.getBlockAttrsMap(1)!.set("colWidths", [49.5, 0.495, 0.495, 49.5]);
+
+    setColumnBoundary(h.ctx, 1, 0, +10); // arrasta para a DIREITA
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+
+    expect(w[0]).toBeLessThan(49.5);   // a divisa andou para a esquerda
+    expect(w[1]).toBeCloseTo(3, 3);    // e a vizinha foi curada até o piso
+  });
+
+  it("com as DUAS abaixo do piso, a divisa não se move", () => {
+    // Não há orçamento para curar nenhuma das duas sem roubar da outra.
+    // Ficar parado é melhor que oscilar.
+    const h = harness();
+    insertTable(h.ctx, 2, 4);
+    h.doc.getBlockAttrsMap(1)!.set("colWidths", [0.495, 0.495, 49.5, 49.51]);
+
+    setColumnBoundary(h.ctx, 1, 0, +10);
+    const w = h.doc.getBlockAttrs(1).colWidths as number[];
+
+    expect(w[0]).toBeCloseTo(0.495, 3);
+    expect(w[1]).toBeCloseTo(0.495, 3);
+  });
+});
