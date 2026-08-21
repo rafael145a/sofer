@@ -744,8 +744,15 @@ img[data-embed="image"][data-embed-layout="front"] {
   gap: 4px;
   /* Altura do pior caso (Estruturas: 15 itens em 4 colunas = 4 linhas).
      Sem isto o modal muda de altura ao trocar de aba e os botões
-     Cancelar/Inserir pulam sob o cursor. */
-  min-height: 128px;
+     Cancelar/Inserir pulam sob o cursor.
+
+     MEDIDO no navegador com os botões desenhados, não calculado: as 7 abas
+     dão 196 / 128 / 128 / 128 / 128 / 128 / 128 px. Estruturas cresceu de
+     128 para 196 quando o rótulo virou fórmula renderizada — fração e
+     matriz ocupam altura que a palavra "Fração" não ocupava. Quem mexer
+     nos botões daqui pra frente mede de novo: este número não sai de conta,
+     sai de régua. */
+  min-height: 196px;
   align-content: start;
 }
 .ed-formula-paleta-btn {
@@ -771,6 +778,20 @@ img[data-embed="image"][data-embed-layout="front"] {
   border: 1px solid #e5e7eb;
   border-radius: 4px;
   font-size: 1.1rem;
+}
+
+/* O MathLive desenha dois botões dentro do campo: alternar teclado virtual e
+   um menu de contexto. O teclado virtual foi DESLIGADO por decisão de
+   projeto (`mathVirtualKeyboardPolicy: "manual"`), e essa opção só impede
+   que ele apareça sozinho — o botão que o chama continua ali, oferecendo
+   justamente o que se decidiu não ter. O menu abre opções em inglês, sobre
+   coisas (modo LaTeX, cor, formato de saída) que este editor não expõe.
+
+   `::part()` é a única forma de alcançá-los: moram no shadow DOM do
+   elemento. */
+.ed-formula-field::part(virtual-keyboard-toggle),
+.ed-formula-field::part(menu-toggle) {
+  display: none;
 }
 .ed-formula-display {
   display: flex;
