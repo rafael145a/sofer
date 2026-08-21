@@ -74,8 +74,31 @@ describe("PALETA", () => {
     }
   });
 
-  it("tem 76 itens no total", () => {
-    expect(PALETA.reduce((n, c) => n + c.itens.length, 0)).toBe(76);
+  it("tem 82 itens no total", () => {
+    expect(PALETA.reduce((n, c) => n + c.itens.length, 0)).toBe(82);
+  });
+
+  const CATEGORIAS_DE_SIMBOLO = ["Símbolos", "Relações", "Gregas", "Conjuntos", "Setas"];
+
+  it("todo item das categorias de símbolo tem titulo não vazio e diferente do label", () => {
+    // Sem `titulo`, o `title` do botão vira o próprio glifo (`title="∝"`):
+    // no-op de acessibilidade. `titulo === label` seria o mesmo no-op de volta.
+    for (const c of PALETA.filter((cat) => CATEGORIAS_DE_SIMBOLO.includes(cat.nome))) {
+      for (const item of c.itens) {
+        expect(item.titulo, `${c.nome} / ${item.label}`).toBeTruthy();
+        expect(item.titulo, `${c.nome} / ${item.label}`).not.toBe(item.label);
+      }
+    }
+  });
+
+  it("nenhum titulo, em qualquer categoria, repete o label", () => {
+    for (const c of PALETA) {
+      for (const item of c.itens) {
+        if (item.titulo !== undefined) {
+          expect(item.titulo, `${c.nome} / ${item.label}`).not.toBe(item.label);
+        }
+      }
+    }
   });
 });
 
@@ -105,5 +128,26 @@ describe("applySnippet", () => {
   it("acha o primeiro {} mesmo quando o snippet tem colchetes antes", () => {
     const r = applySnippet("", 0, 0, "\\sqrt[]{}");
     expect(r.cursor).toBe("\\sqrt[]{".length);
+  });
+
+  it("Raiz n-ésima da PALETA põe o cursor no índice, não no radicando", () => {
+    // Quem clicou em "n-ésima" em vez de "Raiz" fez isso por causa do
+    // índice — o snippet real da paleta precisa levar o cursor pra lá.
+    const raizNesima = PALETA[0].itens.find((i) => i.label === "Raiz n-ésima")!;
+    expect(raizNesima.snippet).toBe("\\sqrt[{}]{}");
+    const r = applySnippet("", 0, 0, raizNesima.snippet);
+    expect(r.text.slice(0, r.cursor)).toBe("\\sqrt[{");
+  });
+
+  it("Matriz 2×2 da PALETA põe o cursor dentro da primeira célula", () => {
+    // \begin{pmatrix} & \\ & \end{pmatrix} não tem NENHUM {} vazio — só os
+    // pares de chave de \begin/\end{pmatrix}. Sem os quatro {} das células,
+    // o cursor cai depois de \end{pmatrix}, fora da matriz inteira.
+    const matriz = PALETA[0].itens.find((i) => i.label === "Matriz 2×2")!;
+    expect(matriz.snippet).toBe("\\begin{pmatrix} {} & {} \\\\ {} & {} \\end{pmatrix}");
+    const r = applySnippet("", 0, 0, matriz.snippet);
+    expect(r.text.slice(0, r.cursor)).toBe("\\begin{pmatrix} {");
+    // Confere que as outras três células também têm destino pra quem navegar.
+    expect((matriz.snippet.match(/\{\}/g) ?? []).length).toBe(4);
   });
 });

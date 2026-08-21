@@ -219,8 +219,25 @@ divergiu entre as cópias antes.
 - **CSS em três cópias.** Já divergiu antes neste projeto. As três edições
   precisam sair na mesma leva, e o `diff` entre as duas cópias dos apps tem
   que continuar dando exatamente o hunk conhecido.
-- **`^{}` e `_{}` como itens de paleta.** Inseridos com a seleção vazia, geram
-  LaTeX inválido isolado (`^{}` sozinho não compila). O preview vai acusar
-  erro e o botão Inserir fica desabilitado — comportamento correto, mas pode
-  parecer defeito. Vale confirmar no navegador que a mensagem de erro do
-  MathJax é compreensível nesse caso.
+- **`^{}` e `_{}` como itens de paleta, clicados e deixados vazios.** Isto NÃO
+  gera LaTeX inválido: medido, `renderLatexToSvg("^{}", false)` devolve
+  `ok: true` (0.188ex de largura). O preview renderiza um espaço em branco e o
+  botão Inserir fica **habilitado** — o professor consegue inserir uma
+  fórmula em branco na prova. O mesmo vale para qualquer estrutura da paleta
+  clicada e deixada sem preencher (índice, expoente, fração, raiz, parênteses,
+  vetor).
+
+  Não estou corrigindo isso agora porque um guarda por largura mínima do SVG
+  — a ideia óbvia — não funciona: medi as duas populações e elas se
+  sobrepõem.
+
+  ```
+  estruturas vazias:    vetor 0.036 · expoente 0.188 · índice 0.188 · fração 0.995 · parênteses 1.76 · raiz 1.93
+  símbolos legítimos:   cdot 0.629 · grau 0.988 · pi 1.29 · in 1.509 · pm 1.76 · % 1.885
+  ```
+
+  `\sqrt{}` vazio (1.93ex) é mais largo que `\%` legítimo (1.885ex) — não há
+  limiar de largura que separe as duas populações. Um guarda de verdade
+  precisaria inspecionar a árvore do MathJax por grupos `{}` vazios antes de
+  render, não medir o SVG depois. Fica registrado como limitação conhecida
+  até que valha a pena esse guarda.

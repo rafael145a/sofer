@@ -139,7 +139,7 @@ export function FormulaDialog(): JSX.Element | null {
               key={p.label}
               type="button"
               className="ed-formula-paleta-btn"
-              title={p.label}
+              title={p.titulo ?? p.label}
               onClick={() => onPaleta(p.snippet)}
             >
               {p.label}
