@@ -77,6 +77,13 @@ export interface BlockAttrs {
    */
   tableWidth?: number;
   /**
+   * Only meaningful when `type === "table"`. Per-row height in px, one entry
+   * per row. It's a MINIMUM, not fixed — the row grows past it when content
+   * needs more room (same posture as `w:trHeight hRule="atLeast"` in DOCX).
+   * Missing = rows size to content, exactly like today.
+   */
+  rowHeights?: number[];
+  /**
    * Só relevante quando `type === "table"`. Onde as linhas da grade aparecem.
    * Ausente = "all" — documentos existentes não mudam de aparência.
    */

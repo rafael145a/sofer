@@ -211,8 +211,14 @@ function renderTable(block: SerializedBlock): string {
   const tableWidth = block.attrs.tableWidth;
   const tableStyle =
     typeof tableWidth === "number" ? ` style="width:${tableWidth}%"` : "";
+  const rowHeights = block.attrs.rowHeights as number[] | undefined;
   const trs: string[] = [];
   for (let r = 0; r < rows; r++) {
+    // `height` no <tr> é tratado pelo CSS de tabela como MÍNIMO, não fixo —
+    // conteúdo maior empurra a linha. Sem max-height/overflow aqui, ou texto
+    // some da prova.
+    const trStyle =
+      typeof rowHeights?.[r] === "number" ? ` style="height:${rowHeights[r]}px"` : "";
     const tds: string[] = [];
     for (let c = 0; c < cols; c++) {
       const cell = cells[r * cols + c];
@@ -240,7 +246,7 @@ function renderTable(block: SerializedBlock): string {
         renderCell(cell, cellBorderStyle(preset, at(rowspan, colspan), "print", borderColor)),
       );
     }
-    trs.push(`<tr>${tds.join("")}</tr>`);
+    trs.push(`<tr${trStyle}>${tds.join("")}</tr>`);
   }
   return `<div class="ed-table-wrap"><table class="ed-table"${tableStyle}>${colGroup}<tbody>${trs.join("")}</tbody></table></div>`;
 }

@@ -1043,6 +1043,19 @@ export function insertTableRow(
     }
     cells.insert(P * cols, fresh);
     attrs.set("rows", rows + 1);
+
+    // Mesmo padrão de `colWidths` em insertTableColumn: só mexer em
+    // `rowHeights` quando o atributo já existe, para tabela nunca
+    // redimensionada não passar a carregar o array à toa. A linha nova
+    // nasce no piso — é um MÍNIMO, então ela cresce livremente com o
+    // conteúdo assim como qualquer outra.
+    const heights = attrs.get("rowHeights") as number[] | undefined;
+    if (Array.isArray(heights) && heights.length === rows) {
+      const next = heights.slice();
+      next.splice(P, 0, MIN_LINHA_PX);
+      attrs.set("rowHeights", next);
+    }
+
     // Caret on the first non-covered cell of the new row (falls back to flat-0
     // if every column is covered — pathologically possible only with bad data).
     const firstReal = newRowCovered.findIndex((v) => !v);
@@ -1111,6 +1124,16 @@ export function deleteTableRow(ctx: CommandContext, blockIndex: number, row: num
 
     cells.delete(R * cols, cols);
     attrs.set("rows", rows - 1);
+
+    // Mesmo padrão de `colWidths` em deleteTableColumn: só mexer quando o
+    // atributo já existe. Sem renormalizar — altura é px, não proporção, e
+    // tirar a linha certa é o suficiente.
+    const heights = attrs.get("rowHeights") as number[] | undefined;
+    if (Array.isArray(heights) && heights.length === rows) {
+      const next = heights.slice();
+      next.splice(R, 1);
+      attrs.set("rowHeights", next);
+    }
 
     for (const p of promotions) {
       const m = ctx.doc.getCellAttrsMap(blockIndex, p.flatNew);
@@ -1780,6 +1803,70 @@ export function setTableWidth(ctx: CommandContext, blockIndex: number, pct: numb
   const v = Math.max(MIN_TABELA_PCT, Math.min(100, arredonda(pct)));
   transact(ctx.doc, () => {
     ctx.doc.getBlockAttrsMap(blockIndex)?.set("tableWidth", v);
+  });
+}
+
+/** Piso de altura de linha, em px. Abaixo disso a linha some da tela. */
+export const MIN_LINHA_PX = 16;
+
+/**
+ * Grava a altura de UMA linha, em px. É um MÍNIMO, não fixo — o CSS trata
+ * `height` do `<tr>` como piso, e conteúdo maior empurra a linha para além
+ * do valor gravado (mesma postura de `w:trHeight hRule="atLeast"` no DOCX).
+ *
+ * Só materializa `rowHeights` quando o array já existe ou está sendo
+ * inicializado aqui — uma tabela nunca redimensionada não ganha o atributo
+ * à toa, senão suas linhas parariam de crescer livremente com o conteúdo.
+ */
+export function setRowHeight(
+  ctx: CommandContext,
+  blockIndex: number,
+  row: number,
+  px: number,
+): void {
+  if (!ctx.doc.isTable(blockIndex)) return;
+  const { rows } = ctx.doc.getTableSize(blockIndex);
+  if (row < 0 || row >= rows) return;
+  transact(ctx.doc, () => {
+    const attrsMap = ctx.doc.getBlockAttrsMap(blockIndex);
+    if (!attrsMap) return;
+    const atual = attrsMap.get("rowHeights") as number[] | undefined;
+    const base = Array.isArray(atual) && atual.length === rows
+      ? atual.slice()
+      : new Array<number>(rows).fill(MIN_LINHA_PX);
+    base[row] = Math.max(MIN_LINHA_PX, Math.round(px));
+    attrsMap.set("rowHeights", base);
+  });
+}
+
+/**
+ * Grava o array de alturas INTEIRO numa única transação — para o arrasto da
+ * Task 5 escrever, a cada `pointermove`, o resultado final calculado a
+ * partir da base do `pointerdown` (mesmo padrão de `setColumnBoundary`),
+ * numa chamada só, em vez de N chamadas de `setRowHeight` que teriam que ser
+ * reconciliadas depois. NÃO verificado aqui se isso muda o agrupamento de
+ * undo do `Y.UndoManager` (que já agrupa por `captureTimeout` independente
+ * de quantas transações ocorrem) — só a exportação e a escrita atômica do
+ * array são o que este teste cobre.
+ *
+ * Cada altura passa pelo mesmo piso de `setRowHeight`. O array precisa
+ * cobrir todas as linhas da tabela; tamanho errado é rejeitado (no-op).
+ */
+export function setRowHeights(
+  ctx: CommandContext,
+  blockIndex: number,
+  heights: number[],
+): void {
+  if (!ctx.doc.isTable(blockIndex)) return;
+  const { rows } = ctx.doc.getTableSize(blockIndex);
+  if (heights.length !== rows) return;
+  transact(ctx.doc, () => {
+    const attrsMap = ctx.doc.getBlockAttrsMap(blockIndex);
+    if (!attrsMap) return;
+    attrsMap.set(
+      "rowHeights",
+      heights.map((h) => Math.max(MIN_LINHA_PX, Math.round(h))),
+    );
   });
 }
 

@@ -173,6 +173,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
   const cells = block.cells ?? [];
   const widths = normalizarLarguras(block.attrs.colWidths as number[] | undefined, cols);
   const tableWidth = block.attrs.tableWidth;
+  const rowHeights = block.attrs.rowHeights as number[] | undefined;
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   // Row range to render. Default = full table.
@@ -207,7 +208,18 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
         {Array.from({ length: rowEnd - rowStart }, (_, i) => {
           const r = rowStart + i;
           return (
-          <tr key={r} data-cell-row={r}>
+          <tr
+            key={r}
+            data-cell-row={r}
+            // `height` no <tr> é tratado pelo CSS de tabela como MÍNIMO, não
+            // fixo — conteúdo maior empurra a linha. Não usar max-height nem
+            // overflow: hidden aqui, ou texto some da prova.
+            style={
+              typeof rowHeights?.[r] === "number"
+                ? { height: `${rowHeights[r]}px` }
+                : undefined
+            }
+          >
             {Array.from({ length: cols }, (_, c) => {
               const flat = r * cols + c;
               const cell = cells[flat];

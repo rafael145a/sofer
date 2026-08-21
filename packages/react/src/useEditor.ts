@@ -17,6 +17,8 @@ import {
   setBlockAttrAtIndex as cmdSetBlockAttrAtIndex,
   setColumnBoundary as cmdSetColumnBoundary,
   setImageAttrs as cmdSetImageAttrs,
+  setRowHeight as cmdSetRowHeight,
+  setRowHeights as cmdSetRowHeights,
   splitCell as cmdSplitCell,
   tableRectSelection,
   getMarksInRange,
@@ -233,6 +235,10 @@ export interface UseEditorResult {
   setColumnBoundary: (blockIndex: number, boundary: number, deltaPct: number, base?: number[]) => void;
   /** Define a largura total da tabela como percentual da largura útil da página. */
   setTableWidth: (blockIndex: number, pct: number) => void;
+  /** Grava a altura de UMA linha, em px. É um mínimo, não fixo. */
+  setRowHeight: (blockIndex: number, row: number, px: number) => void;
+  /** Grava o array de alturas inteiro numa única transação. */
+  setRowHeights: (blockIndex: number, heights: number[]) => void;
   /** Returns the table rectangle if the current selection is a multi-cell range, else null. */
   getTableRect: () => TableRect | null;
   /** True when there's a rectangular table-cell selection. */
@@ -674,6 +680,12 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   const setTableWidth = useCallback((blockIndex: number, pct: number) => {
     cmdSetTableWidth(ctxRef.current, blockIndex, pct);
   }, []);
+  const setRowHeight = useCallback((blockIndex: number, row: number, px: number) => {
+    cmdSetRowHeight(ctxRef.current, blockIndex, row, px);
+  }, []);
+  const setRowHeights = useCallback((blockIndex: number, heights: number[]) => {
+    cmdSetRowHeights(ctxRef.current, blockIndex, heights);
+  }, []);
   const getTableRect = useCallback(
     () => tableRectSelection(doc, selectionRef.current),
     [doc],
@@ -1015,6 +1027,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     splitCell,
     setColumnBoundary,
     setTableWidth,
+    setRowHeight,
+    setRowHeights,
     getTableRect,
     hasTableRectSelection,
     mergeSelection,
