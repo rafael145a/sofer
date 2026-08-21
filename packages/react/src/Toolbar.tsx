@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useEditorContext } from "./EditorContext";
-import { ANSWER_LINE_MAX, TABLE_BORDER_COLOR } from "@sofereditor/core";
+import { ANSWER_LINE_MAX, isFormulaEmbed, TABLE_BORDER_COLOR } from "@sofereditor/core";
 import type {
   AlignValue,
   AnswerLineSpacing,
@@ -511,33 +511,63 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
               {opt.label}
             </button>
           ))}
-          <button
-            type="button"
-            className="ed-toolbar-btn"
-            title="Legenda da imagem"
-            aria-pressed={!!selectedEmbed.embed.caption}
-            onMouseDown={stop}
-            onClick={(e) => {
-              e.preventDefault();
-              const initialCaption = selectedEmbed.embed.caption ?? "";
-              const initialAlign = selectedEmbed.embed.captionAlign ?? "center";
-              void editor.requestImageCaption(initialCaption, initialAlign).then((result) => {
-                if (result === null) return; // cancelled
-                const empty = result.caption.length === 0;
-                editor.setImageAttrs(
-                  selectedEmbed.blockIndex,
-                  selectedEmbed.offset,
-                  {
-                    caption: empty ? undefined : result.caption,
-                    captionAlign: empty ? undefined : result.align,
-                  },
-                  selectedEmbed.cellIndex,
-                );
-              });
-            }}
-          >
-            Legenda
-          </button>
+          {isFormulaEmbed(selectedEmbed.embed) ? (
+            <button
+              type="button"
+              className="ed-toolbar-btn"
+              title="Editar fórmula"
+              onMouseDown={stop}
+              onClick={(e) => {
+                e.preventDefault();
+                const f = selectedEmbed.embed.formula;
+                if (!f) return;
+                const { blockIndex, cellIndex, offset } = selectedEmbed;
+                void editor.requestFormula(f.latex, f.display).then((r) => {
+                  if (!r) return;
+                  // Mesma proteção do duplo clique em Editor.tsx: o fechamento
+                  // do modal devolve o foco ao editor e pode colapsar a
+                  // seleção do modelo (bug #6, ver `LinkRequest.selection`).
+                  // `insertFormula` apaga o embed antigo pela seleção ATUAL,
+                  // então restauramos a seleção do embed antes de inserir.
+                  editor.setSelection({
+                    anchor: { blockIndex, cellIndex, offset },
+                    focus: { blockIndex, cellIndex, offset: offset + 1 },
+                  });
+                  void editor.insertFormula(r.latex, r.display);
+                });
+              }}
+            >
+              Editar fórmula
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ed-toolbar-btn"
+              title="Legenda da imagem"
+              aria-pressed={!!selectedEmbed.embed.caption}
+              onMouseDown={stop}
+              onClick={(e) => {
+                e.preventDefault();
+                const initialCaption = selectedEmbed.embed.caption ?? "";
+                const initialAlign = selectedEmbed.embed.captionAlign ?? "center";
+                void editor.requestImageCaption(initialCaption, initialAlign).then((result) => {
+                  if (result === null) return; // cancelled
+                  const empty = result.caption.length === 0;
+                  editor.setImageAttrs(
+                    selectedEmbed.blockIndex,
+                    selectedEmbed.offset,
+                    {
+                      caption: empty ? undefined : result.caption,
+                      captionAlign: empty ? undefined : result.align,
+                    },
+                    selectedEmbed.cellIndex,
+                  );
+                });
+              }}
+            >
+              Legenda
+            </button>
+          )}
         </Group>
       )}
 

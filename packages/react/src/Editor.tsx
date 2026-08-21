@@ -20,6 +20,7 @@ import {
   insertSlice,
   insertText,
   isEmbedAdjacentToCaret,
+  isFormulaEmbed,
   serializeSelection,
   sliceToText,
   SOFER_MIME,
@@ -408,6 +409,41 @@ export function Editor({
     };
     root.addEventListener("pointerdown", onPointerDown);
     return () => root.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  // Duplo clique numa fórmula reabre o modal com o LaTeX guardado. Em imagem
+  // comum não faz nada — `isFormulaEmbed` é o que separa os dois.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onDoubleClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest('img[data-embed="image"]')) return;
+      const ed = editorRef.current;
+      const sel = ed.getSelectedEmbed();
+      if (!sel || !isFormulaEmbed(sel.embed)) return;
+      e.preventDefault();
+      const { latex, display } = sel.embed.formula;
+      const { blockIndex, cellIndex, offset } = sel;
+      void ed.requestFormula(latex, display).then((r) => {
+        if (!r) return;
+        // O fechamento do modal devolve o foco ao editor — mesmo bug #6 do
+        // requestLink (ver `LinkRequest.selection` acima): a seleção do
+        // modelo pode colapsar nesse round-trip. `insertFormula` decide o
+        // que apagar pela seleção ATUAL (`ctxRef.current.getSelection()`
+        // dentro de `insertImage`), então restauramos explicitamente a
+        // seleção do embed antes de inserir — sem isto, o antigo sobreviveria
+        // e o novo entraria em outro lugar (ou a fórmula duplicaria).
+        ed.setSelection({
+          anchor: { blockIndex, cellIndex, offset },
+          focus: { blockIndex, cellIndex, offset: offset + 1 },
+        });
+        void ed.insertFormula(r.latex, r.display);
+      });
+    };
+    root.addEventListener("dblclick", onDoubleClick);
+    return () => root.removeEventListener("dblclick", onDoubleClick);
   }, []);
 
   // Hover detection for `behind` images: they sit at z-index:-1, so the text on
