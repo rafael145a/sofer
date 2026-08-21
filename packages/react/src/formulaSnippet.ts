@@ -163,19 +163,34 @@ export const PALETA: readonly CategoriaPaleta[] = [
 ];
 
 /**
- * Insere `snippet` no lugar da seleção e devolve onde o cursor deve ficar:
- * dentro do primeiro `{}` vazio do snippet, ou no fim do inserido quando não
- * há nenhum. Puro, para poder ser testado sem DOM.
+ * Traduz o snippet da paleta para o dialeto de inserção do MathLive.
+ *
+ * O dado fica em `{}` e não em `#?` porque `#` é `macro parameter character`
+ * no MathJax: guardar `#?` faria o `formulaPaleta.render.test.ts`, que passa
+ * os 82 itens pelo renderer do documento, falhar em toda estrutura.
+ *
+ * Cada `{}` vira `#?`, mas nem sempre solto: quando o `{}` é o argumento
+ * obrigatório que um macro/sub/sobrescrito PEGA por posição (`\frac{}{}`, o
+ * segundo argumento de `\sqrt[{}]{}` depois do `]`, `^{}`, `_{}`...), as
+ * chaves ficam — `\frac#?#?` faria o TeX pegar só o caractere `#` como
+ * primeiro argumento e deixar o `?` solto, quebrando o macro. Quando o `{}`
+ * já está dentro de outro delimitador que não faz esse "grab" de token
+ * único — colchete de índice opcional (`\sqrt[{}]`), `\left(...\right)`,
+ * `\{...\}` literal, ou célula de matriz separada por espaço/`&`/`\\` — o
+ * `#?` solto basta.
+ *
+ * Conferido nos 82 itens (teste abaixo): nenhum tem `{}` que não seja
+ * destino de digitação — `\operatorname{sen}`, `\mathbb{R}` e
+ * `\begin{pmatrix}` têm conteúdo entre as chaves, então não batem com o
+ * padrão vazio.
  */
-export function applySnippet(
-  text: string,
-  selStart: number,
-  selEnd: number,
-  snippet: string,
-): { text: string; cursor: number } {
-  const novo = text.slice(0, selStart) + snippet + text.slice(selEnd);
-  const vazio = snippet.indexOf("{}");
-  const cursor =
-    vazio >= 0 ? selStart + vazio + 1 : selStart + snippet.length;
-  return { text: novo, cursor };
+export function paraMathlive(snippet: string): string {
+  return snippet.replace(/\{\}/g, (_match: string, offset: number, str: string) => {
+    const antes = str[offset - 1];
+    // Chave vazia dentro de um delimitador que já é "container" por si só
+    // (colchete, parêntese de \left, chave literal de \{, ou separador de
+    // célula) não precisa virar grupo — o #? solto já é lido como destino.
+    const jaEstaDelimitado = antes === "[" || antes === "(" || antes === "{" || /\s/.test(antes ?? "");
+    return jaEstaDelimitado ? "#?" : "{#?}";
+  });
 }

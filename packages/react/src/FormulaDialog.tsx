@@ -3,7 +3,7 @@ import type { FormulaRender } from "@sofereditor/math";
 import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
-import { PALETA, applySnippet } from "./formulaSnippet";
+import { PALETA, paraMathlive } from "./formulaSnippet";
 import { podeInserir, motivoBloqueio } from "./formulaGuarda";
 
 /**
@@ -21,7 +21,6 @@ export function FormulaDialog({
 }): JSX.Element | null {
   const { formulaRequest, resolveFormulaRequest } = useEditorContext();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<MathfieldElement | null>(null);
   const [latex, setLatex] = useState("");
@@ -36,7 +35,6 @@ export function FormulaDialog({
       setDisplay(formulaRequest.initialDisplay);
       setAbaAtiva(0);
       if (!dialog.open) dialog.showModal();
-      queueMicrotask(() => inputRef.current?.focus());
     } else if (dialog.open) {
       dialog.close();
     }
@@ -186,22 +184,10 @@ export function FormulaDialog({
   const onCancel = () => resolveFormulaRequest(null);
 
   const onPaleta = (snippet: string) => {
-    const el = inputRef.current;
-    const start = el?.selectionStart ?? latex.length;
-    const end = el?.selectionEnd ?? latex.length;
-    const r = applySnippet(latex, start, end, snippet);
-    setLatex(r.text);
-    // O campo visual não ouve `setLatex` sozinho — ele só lê de volta do
-    // DOM real via `onInput`. Sem este `setValue`, o clique na paleta muda o
-    // estado React mas o `<math-field>` continua mostrando o valor antigo:
-    // o professor clicaria Inserir vendo uma fórmula e o documento receberia
-    // outra. `inputRef`/seleção de texto ficam mortos até a Task 3 trocar
-    // isto por `fieldRef.current.insert(...)`.
-    fieldRef.current?.setValue(r.text);
-    queueMicrotask(() => {
-      el?.focus();
-      el?.setSelectionRange(r.cursor, r.cursor);
-    });
+    const mf = fieldRef.current;
+    if (!mf) return;
+    mf.insert(paraMathlive(snippet), { focus: true });
+    setLatex(mf.getValue("latex"));
   };
 
   return (
