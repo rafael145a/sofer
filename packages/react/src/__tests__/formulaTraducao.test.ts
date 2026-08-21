@@ -4,10 +4,17 @@ import { PALETA } from "../formulaSnippet";
 
 describe("tradução {} → #?", () => {
   it("converte cada destino de digitação", () => {
+    // Os esperados vêm de MEDIÇÃO no navegador, não de dedução: as 19
+    // estruturas da paleta foram inseridas num <math-field> real nas duas
+    // traduções candidatas. Com chaves, 19/19 produzem `\placeholder{}`;
+    // sem chaves, 17/19 — `\vec{}` e `\overrightarrow{}` saem
+    // malformados. Por isso a regra é uniforme e sempre com chaves.
     expect(paraMathlive("\\frac{}{}")).toBe("\\frac{#?}{#?}");
-    expect(paraMathlive("\\sqrt[{}]{}")).toBe("\\sqrt[#?]{#?}");
-    expect(paraMathlive("\\left({}\\right)")).toBe("\\left(#?\\right)");
-    expect(paraMathlive("\\{{}\\}")).toBe("\\{#?\\}");
+    expect(paraMathlive("\\sqrt[{}]{}")).toBe("\\sqrt[{#?}]{#?}");
+    expect(paraMathlive("\\left({}\\right)")).toBe("\\left({#?}\\right)");
+    expect(paraMathlive("\\{{}\\}")).toBe("\\{{#?}\\}");
+    expect(paraMathlive("\\vec{}")).toBe("\\vec{#?}");
+    expect(paraMathlive("\\overrightarrow{}")).toBe("\\overrightarrow{#?}");
   });
 
   it("não toca em chave com conteúdo", () => {
@@ -16,7 +23,7 @@ describe("tradução {} → #?", () => {
     expect(paraMathlive("\\operatorname{sen}")).toBe("\\operatorname{sen}");
     expect(paraMathlive("\\mathbb{R}")).toBe("\\mathbb{R}");
     expect(paraMathlive("\\begin{pmatrix} {} & {} \\\\ {} & {} \\end{pmatrix}"))
-      .toBe("\\begin{pmatrix} #? & #? \\\\ #? & #? \\end{pmatrix}");
+      .toBe("\\begin{pmatrix} {#?} & {#?} \\\\ {#?} & {#?} \\end{pmatrix}");
   });
 
   it("todo {} de todo item da paleta vira um #?, e nenhum sobra", () => {

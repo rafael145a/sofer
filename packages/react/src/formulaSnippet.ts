@@ -169,15 +169,19 @@ export const PALETA: readonly CategoriaPaleta[] = [
  * no MathJax: guardar `#?` faria o `formulaPaleta.render.test.ts`, que passa
  * os 82 itens pelo renderer do documento, falhar em toda estrutura.
  *
- * Cada `{}` vira `#?`, mas nem sempre solto: quando o `{}` é o argumento
- * obrigatório que um macro/sub/sobrescrito PEGA por posição (`\frac{}{}`, o
- * segundo argumento de `\sqrt[{}]{}` depois do `]`, `^{}`, `_{}`...), as
- * chaves ficam — `\frac#?#?` faria o TeX pegar só o caractere `#` como
- * primeiro argumento e deixar o `?` solto, quebrando o macro. Quando o `{}`
- * já está dentro de outro delimitador que não faz esse "grab" de token
- * único — colchete de índice opcional (`\sqrt[{}]`), `\left(...\right)`,
- * `\{...\}` literal, ou célula de matriz separada por espaço/`&`/`\\` — o
- * `#?` solto basta.
+ * Cada `{}` vira `{#?}`, COM as chaves, e uniformemente — não há caso
+ * especial. Isso foi medido no navegador contra as 19 estruturas da paleta
+ * que têm `{}`, e não deduzido:
+ *
+ *   `{}` → `{#?}`   19/19 produzem `\placeholder{}` no `getValue()`
+ *   `{}` → `#?`     17/19 — `\vec{}` e `\overrightarrow{}` saem malformados
+ *                   (`\vec{\placeholder}{}`), porque um macro que pega
+ *                   argumento por posição agarra só o `#` e deixa o `?`
+ *
+ * Se for tentador "simplificar" tirando as chaves porque os atalhos do
+ * próprio MathLive usam `#?` solto (`\sum_{#?}^{#?}` tem, a célula de
+ * `pmatrix` não tem): as duas formas funcionam para a maioria, e a com
+ * chaves funciona para todas.
  *
  * Conferido nos 82 itens (teste abaixo): nenhum tem `{}` que não seja
  * destino de digitação — `\operatorname{sen}`, `\mathbb{R}` e
@@ -185,12 +189,5 @@ export const PALETA: readonly CategoriaPaleta[] = [
  * padrão vazio.
  */
 export function paraMathlive(snippet: string): string {
-  return snippet.replace(/\{\}/g, (_match: string, offset: number, str: string) => {
-    const antes = str[offset - 1];
-    // Chave vazia dentro de um delimitador que já é "container" por si só
-    // (colchete, parêntese de \left, chave literal de \{, ou separador de
-    // célula) não precisa virar grupo — o #? solto já é lido como destino.
-    const jaEstaDelimitado = antes === "[" || antes === "(" || antes === "{" || /\s/.test(antes ?? "");
-    return jaEstaDelimitado ? "#?" : "{#?}";
-  });
+  return snippet.replaceAll("{}", "{#?}");
 }
