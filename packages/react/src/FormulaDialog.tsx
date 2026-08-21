@@ -113,6 +113,26 @@ export function FormulaDialog({
 
     const mf = new Ctor();
     mf.className = "ed-formula-field";
+    const onInput = () => setLatex(mf.getValue("latex"));
+    mf.addEventListener("input", onInput);
+
+    // MONTAR PRIMEIRO, CONFIGURAR DEPOIS — a ordem é o ponto, e custou uma
+    // tela branca para descobrir.
+    //
+    // Boa parte dos acessores do MathfieldElement começa com
+    // `if (!this._mathfield) throw new Error("Mathfield not mounted")`, e o
+    // `_mathfield` só nasce no `connectedCallback`. O `inlineShortcuts` é o
+    // pior deles: tem essa guarda no getter E no setter, então a linha
+    // `{ ...mf.inlineShortcuts }` abaixo lançava duas vezes.
+    //
+    // Como isso roda dentro de um efeito do React, o erro não estraga só o
+    // modal: derruba a árvore inteira. O professor clicava em "Inserir
+    // fórmula" e o editor virava tela branca, com a prova aberta.
+    //
+    // Nenhum teste de unidade pega isto — o jsdom não roda o MathLive. Só
+    // navegador de verdade.
+    host.appendChild(mf);
+
     // Teclado virtual desligado: decisão do usuário. Em desktop rouba altura
     // e duplica a paleta, em inglês e sem sen/tg/cotg.
     mf.mathVirtualKeyboardPolicy = "manual";
@@ -123,6 +143,18 @@ export function FormulaDialog({
       sen: "\\operatorname{sen}",
       tg: "\\operatorname{tg}",
       cotg: "\\operatorname{cotg}",
+      // Vírgula decimal. Em modo matemático a vírgula crua é átomo de
+      // pontuação e ganha espaço DEPOIS de si: digitar "3,14" sai impresso
+      // como "3, 14" (medido: 4.4ex contra 4.023ex do agrupado). A paleta
+      // tem um botão `{,}`, mas ninguém clica num botão para uma tecla que
+      // está no teclado — e decimal aparece em toda prova de matemática,
+      // física e química.
+      //
+      // O `after: "digit"` é o que separa os dois usos da vírgula, e foi
+      // verificado no navegador: "3,14" vira `3{,}14` e "f(x,y)" continua
+      // `f\left(x,y\right)`, com a vírgula de lista intacta — que é o
+      // comportamento certo, ali ela É pontuação.
+      ",": { after: "digit", value: "{,}" },
     };
     mf.setValue(formulaRequest.initialLatex);
     // Sem esta linha, editar uma fórmula existente abre com o campo cheio e o
@@ -131,10 +163,6 @@ export function FormulaDialog({
     // MathLive pode normalizar na entrada, e o estado tem que ser o que o
     // campo realmente tem.
     setLatex(mf.getValue("latex"));
-
-    const onInput = () => setLatex(mf.getValue("latex"));
-    mf.addEventListener("input", onInput);
-    host.appendChild(mf);
     fieldRef.current = mf;
     queueMicrotask(() => mf.focus());
 
