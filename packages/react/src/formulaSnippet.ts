@@ -59,7 +59,7 @@ export const PALETA: readonly CategoriaPaleta[] = [
       { label: "·", snippet: "\\cdot", titulo: "multiplicação (ponto)" },
       { label: "∞", snippet: "\\infty", titulo: "infinito" },
       { label: "°", snippet: "^\\circ", titulo: "grau" },
-      { label: "%", snippet: "\\%", titulo: "porcento" },
+      { label: "%", snippet: "\\%", titulo: "por cento" },
       { label: ",", snippet: "{,}", titulo: "vírgula decimal" },
     ],
   },
@@ -150,7 +150,7 @@ export const PALETA: readonly CategoriaPaleta[] = [
     colunas: 6,
     itens: [
       { label: "→", snippet: "\\to", titulo: "tende a / vai para" },
-      { label: "←", snippet: "\\leftarrow", titulo: "seta para a esquerda" },
+      { label: "←", snippet: "\\leftarrow", titulo: "vem de / sentido inverso" },
       { label: "⇒", snippet: "\\Rightarrow", titulo: "implica em" },
       { label: "⇔", snippet: "\\Leftrightarrow", titulo: "se e somente se" },
       { label: "⇌", snippet: "\\rightleftharpoons", titulo: "equilíbrio químico" },
