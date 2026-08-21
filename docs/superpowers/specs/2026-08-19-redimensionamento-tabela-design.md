@@ -58,6 +58,21 @@ normalizar proporcionalmente (`w / soma * 100`). Não é conversão destrutiva:
 os px atuais já eram interpretados proporcionalmente pelo navegador, então a
 normalização preserva exatamente o que o professor via.
 
+Por que a heurística "soma ≈ 100" é segura na prática: para uma tabela em px
+cair nela, a média por coluna teria que ser 100/n — 25 px cada em 4 colunas,
+50 px em 2. O código atual grava largura renderizada, que numa página A4 dá
+~150 px por coluna. Não existe tabela de prova com coluna de 25 px. É
+heurística, não prova; está registrada como tal.
+
+**Dois comandos que já existem quebram a invariante e precisam mudar junto.**
+`insertTableColumn` insere **`100`** em `colWidths` (`commands.ts:1191`) e
+`deleteTableColumn` apenas corta a entrada (`:1289`). Com px isso funciona.
+Com proporção que soma 100, inserir coluna faria a soma virar **200**, e
+apagar deixaria abaixo de 100 — a tabela inteira encolheria ou explodiria a
+cada linha/coluna mexida. Os dois passam a **renormalizar para 100** depois
+de mexer na lista. É o defeito mais fácil de não enxergar nesta mudança,
+porque não está em nenhum arquivo que o desenho cita.
+
 ### 2. Arrasto de coluna redistribui com a vizinha
 
 `setColumnWidth` vira `setColumnBoundary(blockIndex, boundary, deltaPct)`:
@@ -73,12 +88,22 @@ Decisão do usuário em 21/08: as três, não só a largura.
 
 **Borda direita — largura total.** Novo atributo `tableWidth?: number`,
 percentual da largura útil (padrão 100). As colunas mantêm as proporções
-entre si. Limite: mínimo que caiba o conteúdo, máximo 100.
+entre si.
+
+Limites: **máximo 100** (a tabela não passa da margem) e **mínimo 20**.
+O 20 é um piso arbitrário e assumido: com `table-layout: fixed` a tabela
+encolhe abaixo do conteúdo sem resistência — o texto quebra e transborda em
+vez de empurrar —, então não existe "mínimo que caiba o conteúdo" para
+ancorar. Piso fixo é honesto; "mínimo do conteúdo" seria uma regra que o
+layout não sustenta.
 
 **Borda de baixo — altura total.** Distribui o delta **igualmente entre as
 linhas**: cada uma recebe `delta / n`. Divisão igual preserva as diferenças
-que o professor já tenha ajustado à mão (linhas `[40, 80, 40]` com `+30`
-viram `[50, 90, 50]`), e é o que o Word faz.
+que o professor já tenha ajustado à mão — linhas `[40, 80, 40]` com `+30`
+viram `[50, 90, 50]`, e não `[57, 57, 57]`.
+
+(Não afirmo que é o que o Word faz: não verifiquei. A justificativa é a
+propriedade acima, que dá para conferir lendo, não a autoridade do Word.)
 
 **Canto inferior direito — as duas juntas.** Composição das duas de cima: o
 delta horizontal vai para `tableWidth`, o vertical para as linhas. Sem regra
@@ -87,6 +112,12 @@ nova.
 Contagem de alças, para não sobrar nem faltar: `n` colunas dão `n-1` divisas
 internas mais a borda direita; `m` linhas dão `m-1` divisas internas mais a
 borda de baixo; mais uma de canto.
+
+**O `tableWidth` NÃO exige mexer nas quatro cópias de CSS.** Existe
+`.ed-table { width: 100% }` em três `sofer-editor.css` mais o
+`export-pdf/src/html.ts:530`. O valor vai por **estilo inline** no
+`<table>`, que ganha da classe por especificidade. Quem for implementar:
+não abra os quatro arquivos.
 
 ### 3.1. O arrasto da base NÃO pode ser exato — e é o mesmo defeito de novo
 
@@ -120,6 +151,11 @@ tem mínimo de conteúdo pelo mesmo motivo.
 ### 4. Altura de linha
 
 Novo atributo `rowHeights?: number[]` em px, uma entrada por linha.
+
+`insertTableRow` e `deleteTableRow` precisam manter o array em sincronia com
+o número de linhas, como `insertTableColumn` já faz com `colWidths`. Sem
+isso o overlay cai no `Shape mismatch — bail out` que ele já tem, e as alças
+simplesmente somem sem explicação.
 Altura é distância física — não sofre o problema de proporção das colunas.
 
 - `<tr style="height: Npx">` com `min-height` implícito do conteúdo: o CSS de
