@@ -41,3 +41,54 @@ describe("motivo mostrado ao professor", () => {
     expect(motivoBloqueio("x", { ok: true })).toBe(null);
   });
 });
+
+describe("caixa esvaziada depois de preenchida", () => {
+  // O `\placeholder{}` marca só o que NUNCA foi tocado. Quem preenche e
+  // depois apaga devolve grupo vazio (`\frac{1}{}`) ou, dentro de matriz,
+  // NADA entre dois separadores. As duas formas passavam pelo gate, e o
+  // MathJax renderiza as duas com `ok: true` — `\frac{1}{}` vira um SVG de
+  // 919 bytes com um glifo só, o "1", sem barra e sem denominador.
+  //
+  // O caminho mais provável de todos: clicar em Fração, preencher, e apertar
+  // Backspace uma vez para corrigir o denominador.
+  const REJEITAR = [
+    "\\frac{1}{}",
+    "\\frac{}{2}",
+    "x^{}",
+    "x_{}",
+    "\\sqrt{}",
+    "\\log_{}",
+    "\\left|{}\\right|",
+    "\\begin{pmatrix}1 & 2\\\\ 3 & \\end{pmatrix}",
+    "\\begin{cases}x=1\\\\ \\end{cases}",
+    "\\begin{pmatrix} & \\\\ & \\end{pmatrix}",
+  ];
+  it.each(REJEITAR)("bloqueia %s", (latex) => {
+    expect(podeInserir(latex, { ok: true })).toBe(false);
+    expect(motivoBloqueio(latex, { ok: true })).toBe(
+      "Preencha os campos em branco da fórmula.",
+    );
+  });
+
+  // A outra metade do teste, e a que importa mais: o guarda não pode passar a
+  // recusar fórmula legítima. Matriz e sistema COMPLETOS têm os mesmos `&` e
+  // `\\` das versões quebradas — é só o que está entre eles que muda.
+  const ACEITAR = [
+    "\\frac{1}{2}",
+    "\\operatorname{sen} x",
+    "3{,}14",
+    "\\begin{pmatrix}a & b\\\\ c & d\\end{pmatrix}",
+    "\\begin{cases}x=1\\\\ y=2\\end{cases}",
+    "\\sqrt[3]{8}",
+    "\\left|x\\right|",
+    "9{,}8\\,\\text{m/s}^2",
+    "\\lim_{x \\to 0}",
+    "\\sum_{i=1}^{n} i",
+    "\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}",
+    "\\cos^{2}\\theta",
+  ];
+  it.each(ACEITAR)("aceita %s", (latex) => {
+    expect(podeInserir(latex, { ok: true })).toBe(true);
+    expect(motivoBloqueio(latex, { ok: true })).toBe(null);
+  });
+});

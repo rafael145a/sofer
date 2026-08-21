@@ -82,6 +82,7 @@ describe("FormulaDialog — botão da paleta mantém nome acessível", () => {
       const esperado = itensEstruturas[i].titulo ?? itensEstruturas[i].label;
       expect(btn.getAttribute("aria-label")).toBe(esperado);
       expect((btn.getAttribute("aria-label") ?? "").trim().length).toBeGreaterThan(0);
+
     });
   });
 });

@@ -3,7 +3,7 @@ import type { FormulaRender } from "@sofereditor/math";
 import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
-import { PALETA, paraMathlive, paraMarkup } from "./formulaSnippet";
+import { PALETA, paraMathlive, conteudoDoBotao } from "./formulaSnippet";
 import { podeInserir, motivoBloqueio } from "./formulaGuarda";
 
 /**
@@ -272,9 +272,7 @@ export function FormulaDialog({
               // `#?` — inválido para este renderer) troca `{}` por `{□}`
               // só para o ícone: `^{}`/`_{}` crus saem VAZIOS deste
               // renderer (verificado, não deduzido — ver formulaSnippet.ts).
-              {...(markup
-                ? { dangerouslySetInnerHTML: { __html: markup(paraMarkup(p.snippet)) } }
-                : { children: p.label })}
+              {...conteudoDoBotao(markup, p.snippet, p.label)}
             />
           ))}
         </div>

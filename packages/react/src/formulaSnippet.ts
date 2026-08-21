@@ -221,3 +221,29 @@ export function paraMathlive(snippet: string): string {
 export function paraMarkup(snippet: string): string {
   return snippet.replaceAll("{}", "{□}");
 }
+
+/**
+ * Decide o conteúdo do botão da paleta: markup renderizado quando o renderer
+ * do MathLive já carregou, senão o rótulo em texto.
+ *
+ * Existe como função separada por um motivo concreto, não por estética: no
+ * jsdom o `import("mathlive")` do modal não entrega o `convertLatexToMarkup`
+ * a tempo, então o botão sempre cai no rótulo e **nenhum teste de componente
+ * consegue exercitar o caminho do markup**. Medido: trocar `paraMarkup` por
+ * `paraMathlive` na ligação deixava a suíte inteira verde (648/648) com os
+ * botões de Fração e Expoente renderizando VAZIO — porque
+ * `convertLatexToMarkup("^{#?}")` devolve markup sem glifo nenhum, contra
+ * `"^{□}"` do `paraMarkup`.
+ *
+ * Isolado assim, o teste chama direto e a troca morre.
+ */
+export function conteudoDoBotao(
+  markup: ((latex: string) => string) | null,
+  snippet: string,
+  label: string,
+):
+  | { dangerouslySetInnerHTML: { __html: string } }
+  | { children: string } {
+  if (!markup) return { children: label };
+  return { dangerouslySetInnerHTML: { __html: markup(paraMarkup(snippet)) } };
+}
