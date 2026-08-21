@@ -46,6 +46,10 @@ export function FormulaDialog({
   // Construtor do <math-field>. Ref e não state: quem re-renderiza é o campo,
   // montado imperativamente na Task 2.
   const mathfieldCtorRef = useRef<typeof MathfieldElement | null>(null);
+  // Renderer dos botões da paleta. Ref e não state pelo mesmo motivo do
+  // `mathfieldCtorRef` acima: quem re-renderiza é o `setCarregando(false)`
+  // do mesmo `.then()`.
+  const markupRef = useRef<((latex: string) => string) | null>(null);
   const [preview, setPreview] = useState<FormulaRender | null>(null);
   const [carregando, setCarregando] = useState(false);
   // Separado de `preview` de propósito: `preview` é limpo pelo efeito de
@@ -66,6 +70,7 @@ export function FormulaDialog({
       .then(([math, mathlive]) => {
         rendererRef.current = math.renderLatexToSvg;
         mathfieldCtorRef.current = mathlive.MathfieldElement;
+        markupRef.current = mathlive.convertLatexToMarkup;
         // São 240 KB de sons de tecla no pacote. Editor de prova não apita.
         // `soundsDirectory` e `fontsDirectory` são ESTÁTICOS na classe, não
         // opções por instância — daí ficarem aqui, uma vez por página, em
@@ -173,6 +178,7 @@ export function FormulaDialog({
 
   if (!formulaRequest) return null;
 
+  const markup = markupRef.current;
   const motivo = motivoBloqueio(latex, preview);
   const podeSubmeter = podeInserir(latex, preview);
 
@@ -227,10 +233,16 @@ export function FormulaDialog({
               type="button"
               className="ed-formula-paleta-btn"
               title={p.titulo ?? p.label}
+              aria-label={p.titulo ?? p.label}
               onClick={() => onPaleta(p.snippet)}
-            >
-              {p.label}
-            </button>
+              // Markup vem do `convertLatexToMarkup` do MathLive sobre um
+              // snippet ESTÁTICO da nossa PALETA — não é entrada de usuário.
+              // Renderiza o snippet SEM tradução: aqui o consumidor é o
+              // renderer, não o campo, e `#?` não é LaTeX.
+              {...(markup
+                ? { dangerouslySetInnerHTML: { __html: markup(p.snippet) } }
+                : { children: p.label })}
+            />
           ))}
         </div>
         <div ref={hostRef} className="ed-formula-host" />

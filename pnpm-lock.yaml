@@ -35,6 +35,9 @@ importers:
       '@sofereditor/react':
         specifier: workspace:*
         version: link:../../packages/react
+      mathlive:
+        specifier: ^0.110.0
+        version: 0.110.0
       react:
         specifier: ^18.3.1
         version: 18.3.1

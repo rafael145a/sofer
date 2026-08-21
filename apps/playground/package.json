@@ -15,6 +15,7 @@
     "@sofereditor/import-docx": "workspace:*",
     "@sofereditor/export-pdf": "workspace:*",
     "@sofereditor/react": "workspace:*",
+    "mathlive": "^0.110.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "yjs": "^13.6.20"
