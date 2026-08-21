@@ -19,19 +19,36 @@ interface Props {
 }
 
 /**
+ * O arrasto chega em px de tela; o modelo é proporção. A conversão é contra
+ * a largura RENDERIZADA da tabela, que é justamente o que torna o arrasto
+ * exato: mover o dedo 60 px numa tabela de 600 px é mover a divisa 10 pontos,
+ * e 10 pontos renderizam 60 px. Ida e volta fecham.
+ */
+export function deltaPctDoArrasto(dxPx: number, larguraTabelaPx: number): number {
+  if (!(larguraTabelaPx > 0)) return 0;
+  return (dxPx / larguraTabelaPx) * 100;
+}
+
+/**
  * Renders absolute-positioned drag handles aligned with each column boundary
  * (except the table's left edge). While dragging, converts the pointer delta
- * (px) into percentage points against the table's rendered width and calls
- * `setColumnBoundary` (or, for the last handle — the table's own right edge —
- * `setTableWidth`) so the model — and therefore the `<colgroup>` — updates in
- * real time.
+ * (px) into percentage points against the table's rendered width — using
+ * `deltaPctDoArrasto` — and calls `setColumnBoundary` (or, for the last
+ * handle — the table's own right edge — `setTableWidth`) so the model — and
+ * therefore the `<colgroup>` — updates in real time.
  *
- * NOTE: this is a minimal rewiring onto the proportion-based API landed by
- * Task 1 (`setColumnBoundary`/`setTableWidth` replaced the old absolute-px
- * `setColumnWidth`), just enough to keep dragging working and the package
- * compiling. It still measures/deltas in px, so the "rubber-banding" this
- * whole effort exists to fix is NOT resolved here — that's the real rewrite,
- * scheduled for Task 3.
+ * O delta é sempre calculado contra o estado do MODELO lido uma única vez no
+ * `pointerdown` (`draggingRef.current.base` / `baseTableWidthPct`), nunca
+ * contra a largura renderizada corrente: acumular contra o DOM é o que
+ * produzia o salto elástico que esta tarefa mata (ver `deltaPctDoArrasto`
+ * acima e o brief da Task 3 para a medição do defeito).
+ *
+ * No `pointerup` a alça reancora via `measure()` — necessário porque, se a
+ * coluna bateu no piso (`MIN_COLUNA_PCT`) e parou antes do dedo, a posição
+ * calculada a partir do delta fica à frente de onde a borda realmente está.
+ * `measure()` NÃO é chamado durante o `pointermove`: chamá-lo ali voltaria a
+ * ler a largura renderizada a cada quadro e reintroduziria o defeito por
+ * outro caminho.
  *
  * Lives as a sibling of the `<table>` inside a `position: relative` wrapper.
  * Handles are `contentEditable={false}` so they don't interfere with caret
@@ -46,8 +63,21 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
     /** Handle index — the right edge of column `col`. */
     col: number;
     startX: number;
-    /** Table's rendered width (px) at drag start — the 100% reference for column deltas. */
+    /** Table's rendered width (px) at drag start — the 100% reference for column deltas
+     *  (colgroup `<col>` percentages are relative to the TABLE itself). */
     tableWidthPx: number;
+    /**
+     * `.ed-table-wrap` rendered width (px) at drag start — the 100% reference
+     * for `tableWidth` deltas. `<table style="width:X%">` is a percentage of
+     * its containing block (`.ed-table-wrap`, which has no width of its own
+     * and simply fills the page column), NOT of the table's own current
+     * width. Whenever `baseTableWidthPct !== 100` those two differ, and using
+     * `tableWidthPx` there overshoots by a factor of `100 / baseTableWidthPct`
+     * — invisible on a fresh 100%-wide table, but a second drag of the right
+     * edge after a resize reproduces the exact rubber-banding this task
+     * exists to kill, just on the outer edge instead of an inner boundary.
+     */
+    containerWidthPx: number;
     /** colWidths proportions at drag start, so the delta is always relative to that instant. */
     base: number[];
     /** `tableWidth` attr at drag start (defaults to 100 when absent). */
@@ -110,10 +140,13 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
       const table = tableRef.current;
       if (!table) return;
       const tableWidthPx = table.getBoundingClientRect().width || 1;
+      // `.ed-table-wrap` is always the table's parent (see TableView) and is
+      // the containing block the inline `width:X%` style resolves against.
+      const containerWidthPx = table.parentElement?.getBoundingClientRect().width || tableWidthPx;
       const attrs = editor.doc.getBlockAttrs(blockIndex);
       const base = normalizarLarguras(attrs.colWidths as number[] | undefined, cols);
       const baseTableWidthPct = typeof attrs.tableWidth === "number" ? attrs.tableWidth : 100;
-      draggingRef.current = { col, startX: e.clientX, tableWidthPx, base, baseTableWidthPct };
+      draggingRef.current = { col, startX: e.clientX, tableWidthPx, containerWidthPx, base, baseTableWidthPct };
       setPositions({ x: e.clientX, height: layout?.height ?? 0 });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
     },
@@ -124,28 +157,41 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
     (e: React.PointerEvent<HTMLDivElement>) => {
       const d = draggingRef.current;
       if (!d) return;
+      // Delta SEMPRE relativo ao estado do pointerdown (d.base /
+      // d.baseTableWidthPct), nunca ao que está renderizado agora —
+      // acumular contra o DOM é o defeito que esta tarefa mata.
       const dx = e.clientX - d.startX;
-      const deltaPct = (dx / d.tableWidthPx) * 100;
       if (d.col < cols - 1) {
-        // Real boundary between column `d.col` and `d.col + 1`.
-        editor.setColumnBoundary(blockIndex, d.col, deltaPct, d.base);
+        // Real boundary between column `d.col` and `d.col + 1`. colgroup
+        // percentages are relative to the table itself.
+        editor.setColumnBoundary(blockIndex, d.col, deltaPctDoArrasto(dx, d.tableWidthPx), d.base);
       } else {
-        // Last column's right edge is the table's own outer border.
-        editor.setTableWidth(blockIndex, d.baseTableWidthPct + deltaPct);
+        // Last column's right edge is the table's own outer border —
+        // `tableWidth` is relative to the CONTAINER, not the table's own
+        // current rendered width (see draggingRef docstring).
+        editor.setTableWidth(blockIndex, d.baseTableWidthPct + deltaPctDoArrasto(dx, d.containerWidthPx));
       }
     },
     [blockIndex, cols, editor],
   );
 
-  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = null;
-    setPositions(null);
-    try {
-      (e.currentTarget as Element).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      draggingRef.current = null;
+      setPositions(null);
+      // Remede: se a coluna bateu no mínimo, a divisa parou antes do dedo, e
+      // a alça precisa voltar para onde a borda REALMENTE está. Sem isto ela
+      // fica boiando longe da borda e o arrasto seguinte salta. Chamado só
+      // aqui — nunca durante o pointermove (ver docstring do componente).
+      measure();
+      try {
+        (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [measure],
+  );
 
   if (!layout) return null;
   const handleStyle = (x: number): CSSProperties => ({
@@ -173,7 +219,7 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
           onPointerDown={onPointerDown(c)}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          aria-label={`Redimensionar coluna ${c + 1}`}
+          aria-label={c === cols - 1 ? "Largura da tabela" : `Redimensionar coluna ${c + 1}`}
           role="separator"
         />
       ))}
