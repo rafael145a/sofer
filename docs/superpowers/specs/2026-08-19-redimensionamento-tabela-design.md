@@ -181,9 +181,18 @@ Altura é distância física — não sofre o problema de proporção das coluna
   linha renderiza pelo conteúdo. Sem "some texto".
 - `export-docx`: `w:trHeight` com `hRule="atLeast"`, que é exatamente a mesma
   semântica.
-- **Paginação:** `usePagination` fatia tabela por linhas. Altura declarada entra
-  na medição como qualquer altura de linha — não exige caminho novo. Linha mais
-  alta que a página cai na regra já existente de bloco que não cabe.
+- **Paginação:** o código de fatiar tabela por linhas existe
+  (`usePagination.ts:595-640`) e a altura declarada entraria na medição como
+  qualquer outra — mas **medido em 21/08 no navegador, ele não é alcançado na
+  prática**: uma tabela de 43 linhas e 1506px, numa página com 1121px de
+  conteúdo útil, fica como uma tabela só no DOM e transborda. A paginação em
+  si funciona (121 parágrafos dão 4 páginas); é específico de tabela.
+
+  **Defeito PRÉ-EXISTENTE, não desta mudança** — `git log` de
+  `usePagination.ts` no intervalo desta branch está vazio, e o array de
+  alturas que o fatiador usa vem de `getBoundingClientRect` (`:557`), não do
+  atributo novo. Fica registrado porque a versão anterior deste spec
+  afirmava que funcionava, e essa afirmação era falsa.
 
 ## Fora de escopo
 
