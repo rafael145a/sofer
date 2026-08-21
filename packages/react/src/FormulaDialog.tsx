@@ -4,6 +4,7 @@ import type { MathfieldElement } from "mathlive";
 import { useEditorContext } from "./EditorContext";
 import { DIALOG_CENTER_STYLE } from "./dialogCenterStyle";
 import { PALETA, applySnippet } from "./formulaSnippet";
+import { podeInserir, motivoBloqueio } from "./formulaGuarda";
 
 /**
  * Modal de fórmula. Espelha `ImageCaptionDialog` — dirigido por
@@ -13,10 +14,16 @@ import { PALETA, applySnippet } from "./formulaSnippet";
  * o botão de inserir fica desabilitado: nunca inserir um embed cujo render
  * falhou, senão entra no documento um <img> quebrado.
  */
-export function FormulaDialog(): JSX.Element | null {
+export function FormulaDialog({
+  fontsDirectory,
+}: {
+  fontsDirectory?: string;
+}): JSX.Element | null {
   const { formulaRequest, resolveFormulaRequest } = useEditorContext();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<MathfieldElement | null>(null);
   const [latex, setLatex] = useState("");
   const [display, setDisplay] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState(0);
@@ -61,6 +68,14 @@ export function FormulaDialog(): JSX.Element | null {
       .then(([math, mathlive]) => {
         rendererRef.current = math.renderLatexToSvg;
         mathfieldCtorRef.current = mathlive.MathfieldElement;
+        // São 240 KB de sons de tecla no pacote. Editor de prova não apita.
+        // `soundsDirectory` e `fontsDirectory` são ESTÁTICOS na classe, não
+        // opções por instância — daí ficarem aqui, uma vez por página, em
+        // vez de na montagem imperativa do campo.
+        mathlive.MathfieldElement.soundsDirectory = null;
+        if (fontsDirectory) {
+          mathlive.MathfieldElement.fontsDirectory = fontsDirectory;
+        }
         setCarregando(false);
       })
       .catch(() => {
@@ -87,13 +102,57 @@ export function FormulaDialog(): JSX.Element | null {
     setPreview(render(latex, display));
   }, [latex, display, carregando]);
 
+  // Montagem imperativa do <math-field>, não JSX: o elemento não tem tipo em
+  // `IntrinsicElements`, o React 18 põe atributo (não propriedade) em custom
+  // element, e o construtor só existe depois do import dinâmico resolver —
+  // o JSX teria que renderizar condicionalmente um elemento ainda indefinido.
+  useEffect(() => {
+    const Ctor = mathfieldCtorRef.current;
+    const host = hostRef.current;
+    if (!Ctor || !host || !formulaRequest) return;
+
+    const mf = new Ctor();
+    mf.className = "ed-formula-field";
+    // Teclado virtual desligado: decisão do usuário. Em desktop rouba altura
+    // e duplica a paleta, em inglês e sem sen/tg/cotg.
+    mf.mathVirtualKeyboardPolicy = "manual";
+    // Atalhos de digitação em português. Sem isto o único atalho rápido é o
+    // embutido "sin", que imprime "sin" na prova.
+    mf.inlineShortcuts = {
+      ...mf.inlineShortcuts,
+      sen: "\\operatorname{sen}",
+      tg: "\\operatorname{tg}",
+      cotg: "\\operatorname{cotg}",
+    };
+    mf.setValue(formulaRequest.initialLatex);
+    // Sem esta linha, editar uma fórmula existente abre com o campo cheio e o
+    // botão Inserir DESABILITADO: `latex` continuaria "" e o gate leria campo
+    // vazio. Lê de volta do campo em vez de reusar `initialLatex` porque o
+    // MathLive pode normalizar na entrada, e o estado tem que ser o que o
+    // campo realmente tem.
+    setLatex(mf.getValue("latex"));
+
+    const onInput = () => setLatex(mf.getValue("latex"));
+    mf.addEventListener("input", onInput);
+    host.appendChild(mf);
+    fieldRef.current = mf;
+    queueMicrotask(() => mf.focus());
+
+    return () => {
+      mf.removeEventListener("input", onInput);
+      mf.remove();
+      fieldRef.current = null;
+    };
+  }, [formulaRequest, carregando]);
+
   if (!formulaRequest) return null;
 
-  const podeInserir = preview?.ok === true;
+  const motivo = motivoBloqueio(latex, preview);
+  const podeSubmeter = podeInserir(latex, preview);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!podeInserir) return;
+    if (!podeSubmeter) return;
     resolveFormulaRequest({ latex, display });
   };
   const onCancel = () => resolveFormulaRequest(null);
@@ -104,6 +163,13 @@ export function FormulaDialog(): JSX.Element | null {
     const end = el?.selectionEnd ?? latex.length;
     const r = applySnippet(latex, start, end, snippet);
     setLatex(r.text);
+    // O campo visual não ouve `setLatex` sozinho — ele só lê de volta do
+    // DOM real via `onInput`. Sem este `setValue`, o clique na paleta muda o
+    // estado React mas o `<math-field>` continua mostrando o valor antigo:
+    // o professor clicaria Inserir vendo uma fórmula e o documento receberia
+    // outra. `inputRef`/seleção de texto ficam mortos até a Task 3 trocar
+    // isto por `fieldRef.current.insert(...)`.
+    fieldRef.current?.setValue(r.text);
     queueMicrotask(() => {
       el?.focus();
       el?.setSelectionRange(r.cursor, r.cursor);
@@ -153,15 +219,7 @@ export function FormulaDialog(): JSX.Element | null {
             </button>
           ))}
         </div>
-        <textarea
-          ref={inputRef}
-          className="ed-formula-input"
-          rows={3}
-          value={latex}
-          onChange={(e) => setLatex(e.target.value)}
-          aria-label="Fórmula em LaTeX"
-          placeholder="\frac{1}{2}"
-        />
+        <div ref={hostRef} className="ed-formula-host" />
         <label className="ed-formula-display">
           <input
             type="checkbox"
@@ -172,43 +230,22 @@ export function FormulaDialog(): JSX.Element | null {
         </label>
         <div className="ed-formula-preview" aria-live="polite">
           {carregando ? (
-            <span className="ed-formula-vazio">Carregando o renderizador…</span>
+            <span className="ed-formula-vazio">Carregando o editor…</span>
           ) : erroCarregando ? (
             <span className="ed-formula-erro" role="alert">
               {erroCarregando}
             </span>
-          ) : preview == null ? (
-            <span className="ed-formula-vazio">O preview aparece aqui.</span>
-          ) : preview.ok ? (
-            <span
-              className="ed-formula-preview-svg"
-              // O LaTeX AQUI É entrada do usuário — quem digita é o professor.
-              // `dangerouslySetInnerHTML` é aceitável mesmo assim por dois
-              // motivos, não porque o SVG "não vem de fora":
-              // 1. Superfície só de autor: quem escreve o LaTeX já pode
-              //    editar o documento inteiro, então não há elevação de
-              //    privilégio em conseguir injetar algo aqui.
-              // 2. A config do TeX usada pelo renderer (`packages: ["base",
-              //    "ams"]`, em @sofereditor/math) exclui a extensão `html`
-              //    do MathJax — é essa extensão que produziria `\href` e
-              //    outras tags perigosas no SVG de saída. Sem ela, o
-              //    renderer não emite HTML/links a partir do LaTeX.
-              // Se algum dia trocar para `AllPackages` (ou incluir `html`),
-              // esta análise deixa de valer e o `dangerouslySetInnerHTML`
-              // precisa ser revisto.
-              dangerouslySetInnerHTML={{ __html: preview.svg }}
-            />
-          ) : (
+          ) : motivo ? (
             <span className="ed-formula-erro" role="alert">
-              {preview.error}
+              {motivo}
             </span>
-          )}
+          ) : null}
         </div>
         <div className="ed-formula-acoes">
           <button type="button" onClick={onCancel}>
             Cancelar
           </button>
-          <button type="submit" disabled={!podeInserir}>
+          <button type="submit" disabled={!podeSubmeter}>
             Inserir
           </button>
         </div>

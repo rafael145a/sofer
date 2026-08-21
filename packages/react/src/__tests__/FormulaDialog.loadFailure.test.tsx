@@ -84,7 +84,7 @@ describe("FormulaDialog — import(\"@sofereditor/math\") rejeitando (fix round 
     // Estado imediato: ainda carregando (o import rejeita num microtask, não
     // sincronamente).
     const vazio = () => container.querySelector(".ed-formula-vazio");
-    expect(vazio()?.textContent).toBe("Carregando o renderizador…");
+    expect(vazio()?.textContent).toBe("Carregando o editor…");
 
     // Deixa a promise do import rejeitar e o `.catch` do efeito rodar.
     await act(async () => {
@@ -107,24 +107,18 @@ describe("FormulaDialog — import(\"@sofereditor/math\") rejeitando (fix round 
     expect(inserirBtn).toBeDefined();
     expect(inserirBtn?.disabled).toBe(true);
 
-    // A mensagem de erro sobrevive a digitação — não é limpa pelo efeito de
-    // preview (que roda a cada mudança de `latex`/`display`), então o
-    // professor não perde a explicação assim que tenta digitar algo.
-    //
-    // Setter nativo + evento "input", não `textarea.value = ...` direto: num
-    // input controlado do React, escrever `.value` sem passar pelo setter
-    // nativo do protótipo deixa o `onChange` "engolido" — mesma armadilha já
-    // documentada neste projeto para não confiar em disparo de evento
-    // sintético sobre valor setado direto.
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
-    const nativeSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype,
-      "value",
-    )!.set!;
-    await act(async () => {
-      nativeSetter.call(textarea, "x");
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    // Task 2: não há mais textarea nem `<math-field>` para simular digitação
+    // — quando o import falha, `mathfieldCtorRef.current` nunca é
+    // preenchido, o efeito de montagem do campo (Ctor null) retorna cedo, e
+    // o host fica vazio. Não existe caminho de entrada nenhum neste estado,
+    // então a "sobrevivência a digitação" que este teste cobria virou
+    // impossível de acontecer por outro motivo: não há onde digitar.
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector("math-field")).toBeNull();
+
+    // O que garante que `erroCarregando` não seria apagado por um futuro
+    // efeito de preview é a ordem dos ramos no JSX (`erroCarregando` checado
+    // antes de `motivo`) — não mais um cenário de digitação simulada.
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(
       /Recarregue a página/,
     );

@@ -10,16 +10,26 @@ const EditorContext = createContext<UseEditorResult | null>(null);
 export interface EditorProviderProps {
   editor: UseEditorResult;
   children: ReactNode;
+  /**
+   * De onde servir as 20 fontes .woff2 do MathLive (296 KB). Sem elas o
+   * campo desenha com fonte do sistema — feio e SILENCIOSO. O caminho muda
+   * por app por causa do base path, então é o app que sabe.
+   */
+  mathliveFontsDirectory?: string;
 }
 
-export function EditorProvider({ editor, children }: EditorProviderProps): JSX.Element {
+export function EditorProvider({
+  editor,
+  children,
+  mathliveFontsDirectory,
+}: EditorProviderProps): JSX.Element {
   return (
     <EditorContext.Provider value={editor}>
       {children}
       <LinkDialog />
       <PageConfigDialog />
       <ImageCaptionDialog />
-      <FormulaDialog />
+      <FormulaDialog fontsDirectory={mathliveFontsDirectory} />
     </EditorContext.Provider>
   );
 }
