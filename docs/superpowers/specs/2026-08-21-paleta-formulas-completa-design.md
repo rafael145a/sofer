@@ -19,6 +19,13 @@ existe para evitar.
 1. **Mais símbolos, organizados.** Continua paleta + campo de LaTeX + preview;
    o que muda é a quantidade e a navegação. Foi descartado trocar por um campo
    visual (MathLive) — decisão já tomada quando a feature nasceu.
+
+   > **Superado em 21/08/2026.** Vendo a paleta pronta, o usuário pediu algo
+   > "mais intuitivo igual o Docs". O campo de LaTeX é o que não serve, e a
+   > troca por MathLive foi aprovada — ver
+   > `2026-08-21-campo-visual-formula-design.md`. O conteúdo desta paleta e
+   > os `titulo` continuam valendo inteiros; o que muda é o campo e o
+   > `applySnippet`.
 2. **Escopo completo:** fundamental (6º–9º), médio, pré-vestibular, e física e
    química.
 
@@ -328,7 +335,7 @@ divergiu entre as cópias antes.
 ## Fora de escopo
 
 - **`mhchem` / `\ce{}`** — decisão acima, reversível.
-- **Campo visual (MathLive)** — decisão do usuário na criação da feature.
+- **Campo visual (MathLive)** — era decisão do usuário na criação da feature; **revertida em 21/08/2026**, ver o spec do campo visual.
 - **Busca por nome de símbolo.** Com 7 categorias de até 18 itens, o olho
   acha. Uma caixa de busca vale quando a paleta passar de ~150 itens.
 - **Símbolo mais usados / recentes.** Exige persistir preferência por usuário,
