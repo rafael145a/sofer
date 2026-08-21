@@ -8,6 +8,7 @@ import {
   type JSX,
   type RefObject,
 } from "react";
+import { normalizarLarguras } from "@sofereditor/core";
 import { useEditorContext } from "./EditorContext";
 
 interface Props {
@@ -19,9 +20,18 @@ interface Props {
 
 /**
  * Renders absolute-positioned drag handles aligned with each column boundary
- * (except the table's left edge). While dragging, calls the editor's
- * `setColumnWidth` with the live width so the model — and therefore the
- * `<colgroup>` — updates in real time.
+ * (except the table's left edge). While dragging, converts the pointer delta
+ * (px) into percentage points against the table's rendered width and calls
+ * `setColumnBoundary` (or, for the last handle — the table's own right edge —
+ * `setTableWidth`) so the model — and therefore the `<colgroup>` — updates in
+ * real time.
+ *
+ * NOTE: this is a minimal rewiring onto the proportion-based API landed by
+ * Task 1 (`setColumnBoundary`/`setTableWidth` replaced the old absolute-px
+ * `setColumnWidth`), just enough to keep dragging working and the package
+ * compiling. It still measures/deltas in px, so the "rubber-banding" this
+ * whole effort exists to fix is NOT resolved here — that's the real rewrite,
+ * scheduled for Task 3.
  *
  * Lives as a sibling of the `<table>` inside a `position: relative` wrapper.
  * Handles are `contentEditable={false}` so they don't interfere with caret
@@ -32,7 +42,17 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
   const [positions, setPositions] = useState<{ x: number; height: number } | null>(null);
   // The handle X positions and the table's total height. Recomputed after every layout.
   const [layout, setLayout] = useState<{ rights: number[]; height: number } | null>(null);
-  const draggingRef = useRef<{ col: number; startX: number; startWidth: number } | null>(null);
+  const draggingRef = useRef<{
+    /** Handle index — the right edge of column `col`. */
+    col: number;
+    startX: number;
+    /** Table's rendered width (px) at drag start — the 100% reference for column deltas. */
+    tableWidthPx: number;
+    /** colWidths proportions at drag start, so the delta is always relative to that instant. */
+    base: number[];
+    /** `tableWidth` attr at drag start (defaults to 100 when absent). */
+    baseTableWidthPct: number;
+  } | null>(null);
 
   // Measure column right-edges relative to the table's left edge.
   const measure = useCallback(() => {
@@ -89,13 +109,15 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
       e.stopPropagation();
       const table = tableRef.current;
       if (!table) return;
-      const cgCols = table.querySelectorAll<HTMLTableColElement>("colgroup > col");
-      const startWidth = cgCols[col]?.getBoundingClientRect().width ?? 100;
-      draggingRef.current = { col, startX: e.clientX, startWidth };
+      const tableWidthPx = table.getBoundingClientRect().width || 1;
+      const attrs = editor.doc.getBlockAttrs(blockIndex);
+      const base = normalizarLarguras(attrs.colWidths as number[] | undefined, cols);
+      const baseTableWidthPct = typeof attrs.tableWidth === "number" ? attrs.tableWidth : 100;
+      draggingRef.current = { col, startX: e.clientX, tableWidthPx, base, baseTableWidthPct };
       setPositions({ x: e.clientX, height: layout?.height ?? 0 });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
     },
-    [layout, tableRef],
+    [layout, tableRef, editor, blockIndex, cols],
   );
 
   const onPointerMove = useCallback(
@@ -103,10 +125,16 @@ export function TableResizeOverlay({ tableRef, blockIndex, cols }: Props): JSX.E
       const d = draggingRef.current;
       if (!d) return;
       const dx = e.clientX - d.startX;
-      const next = Math.max(40, d.startWidth + dx);
-      editor.setColumnWidth(blockIndex, d.col, next);
+      const deltaPct = (dx / d.tableWidthPx) * 100;
+      if (d.col < cols - 1) {
+        // Real boundary between column `d.col` and `d.col + 1`.
+        editor.setColumnBoundary(blockIndex, d.col, deltaPct, d.base);
+      } else {
+        // Last column's right edge is the table's own outer border.
+        editor.setTableWidth(blockIndex, d.baseTableWidthPct + deltaPct);
+      }
     },
-    [blockIndex, editor],
+    [blockIndex, cols, editor],
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {

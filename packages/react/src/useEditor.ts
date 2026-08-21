@@ -15,7 +15,7 @@ import {
   mergeSelection as cmdMergeSelection,
   moveEmbedAnchor as cmdMoveEmbedAnchor,
   setBlockAttrAtIndex as cmdSetBlockAttrAtIndex,
-  setColumnWidth as cmdSetColumnWidth,
+  setColumnBoundary as cmdSetColumnBoundary,
   setImageAttrs as cmdSetImageAttrs,
   splitCell as cmdSplitCell,
   tableRectSelection,
@@ -36,6 +36,7 @@ import {
   setCellAttr as cmdSetCellAttr,
   setBlockType as cmdSetBlockType,
   setMark as cmdSetMark,
+  setTableWidth as cmdSetTableWidth,
   splitListItem as cmdSplitListItem,
   tableLocationOf,
   toggleList as cmdToggleList,
@@ -228,7 +229,10 @@ export interface UseEditorResult {
   mergeRight: () => boolean;
   mergeDown: () => boolean;
   splitCell: () => boolean;
-  setColumnWidth: (blockIndex: number, col: number, widthPx: number) => void;
+  /** Move a divisa `boundary` (entre a coluna `boundary` e a `boundary+1`) por `deltaPct` pontos percentuais. */
+  setColumnBoundary: (blockIndex: number, boundary: number, deltaPct: number, base?: number[]) => void;
+  /** Define a largura total da tabela como percentual da largura útil da página. */
+  setTableWidth: (blockIndex: number, pct: number) => void;
   /** Returns the table rectangle if the current selection is a multi-cell range, else null. */
   getTableRect: () => TableRect | null;
   /** True when there's a rectangular table-cell selection. */
@@ -661,12 +665,15 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     if (!loc) return false;
     return cmdSplitCell(ctxRef.current, loc.blockIndex, loc.row, loc.col);
   }, [doc]);
-  const setColumnWidth = useCallback(
-    (blockIndex: number, col: number, widthPx: number) => {
-      cmdSetColumnWidth(ctxRef.current, blockIndex, col, widthPx);
+  const setColumnBoundary = useCallback(
+    (blockIndex: number, boundary: number, deltaPct: number, base?: number[]) => {
+      cmdSetColumnBoundary(ctxRef.current, blockIndex, boundary, deltaPct, base);
     },
     [],
   );
+  const setTableWidth = useCallback((blockIndex: number, pct: number) => {
+    cmdSetTableWidth(ctxRef.current, blockIndex, pct);
+  }, []);
   const getTableRect = useCallback(
     () => tableRectSelection(doc, selectionRef.current),
     [doc],
@@ -1006,7 +1013,8 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
     mergeRight,
     mergeDown,
     splitCell,
-    setColumnWidth,
+    setColumnBoundary,
+    setTableWidth,
     getTableRect,
     hasTableRectSelection,
     mergeSelection,

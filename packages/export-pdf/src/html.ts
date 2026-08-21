@@ -18,6 +18,7 @@ import {
   cellBorderStyle,
   isImageEmbed,
   isLegacySerializedDocument,
+  normalizarLarguras,
   pxToMm,
   splitUnderscoreRuns,
   styleToCssText,
@@ -207,6 +208,9 @@ function renderTable(block: SerializedBlock): string {
   const colGroup = renderColGroup(block.attrs.colWidths, cols);
   const preset = block.attrs.borderPreset;
   const borderColor = block.attrs.borderColor;
+  const tableWidth = block.attrs.tableWidth;
+  const tableStyle =
+    typeof tableWidth === "number" ? ` style="width:${tableWidth}%"` : "";
   const trs: string[] = [];
   for (let r = 0; r < rows; r++) {
     const tds: string[] = [];
@@ -238,16 +242,12 @@ function renderTable(block: SerializedBlock): string {
     }
     trs.push(`<tr>${tds.join("")}</tr>`);
   }
-  return `<div class="ed-table-wrap"><table class="ed-table">${colGroup}<tbody>${trs.join("")}</tbody></table></div>`;
+  return `<div class="ed-table-wrap"><table class="ed-table"${tableStyle}>${colGroup}<tbody>${trs.join("")}</tbody></table></div>`;
 }
 
 function renderColGroup(widths: number[] | undefined, cols: number): string {
-  if (!widths || widths.length === 0) return "";
-  const cells: string[] = [];
-  for (let i = 0; i < cols; i++) {
-    const w = widths[i];
-    cells.push(typeof w === "number" ? `<col style="width:${w}px">` : "<col>");
-  }
+  const pct = normalizarLarguras(widths, cols);
+  const cells = pct.map((w) => `<col style="width:${w}%">`);
   return `<colgroup>${cells.join("")}</colgroup>`;
 }
 

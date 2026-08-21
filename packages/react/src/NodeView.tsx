@@ -2,6 +2,7 @@ import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "r
 import {
   answerLineStyle,
   cellBorderStyle,
+  normalizarLarguras,
   tableRectSelection,
   type BlockAttrs,
   type CellAttrs,
@@ -170,7 +171,8 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
   const rows = clampPositive(block.attrs.rows);
   const cols = clampPositive(block.attrs.cols);
   const cells = block.cells ?? [];
-  const widths = readColWidths(block.attrs.colWidths, cols);
+  const widths = normalizarLarguras(block.attrs.colWidths as number[] | undefined, cols);
+  const tableWidth = block.attrs.tableWidth;
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   // Row range to render. Default = full table.
@@ -194,14 +196,13 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
         data-block-index={index}
         data-block-type="table"
         className="ed-block ed-table"
+        style={typeof tableWidth === "number" ? { width: `${tableWidth}%` } : undefined}
       >
-        {widths && (
-          <colgroup>
-            {widths.map((w, c) => (
-              <col key={c} style={w != null ? { width: `${w}px` } : undefined} />
-            ))}
-          </colgroup>
-        )}
+        <colgroup>
+          {widths.map((w, c) => (
+            <col key={c} style={{ width: `${w}%` }} />
+          ))}
+        </colgroup>
         <tbody>
         {Array.from({ length: rowEnd - rowStart }, (_, i) => {
           const r = rowStart + i;
@@ -256,16 +257,6 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
       )}
     </div>
   );
-}
-
-function readColWidths(raw: unknown, cols: number): (number | null)[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: (number | null)[] = [];
-  for (let i = 0; i < cols; i++) {
-    const v = raw[i];
-    out.push(typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
-  }
-  return out;
 }
 
 function spanAttr(v: unknown): number {
