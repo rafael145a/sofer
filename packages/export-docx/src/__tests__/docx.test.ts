@@ -599,4 +599,101 @@ describe("SVG no DOCX", () => {
     const { skippedImages } = await documentToDocxBuffer(doc);
     expect(skippedImages).toBe(0);
   });
+
+  it("mesmo src em duas ocorrências, só a segunda traz svgFallback — as DUAS entram no documento", async () => {
+    // Cenário real: uma prova salva antes do campo `svgFallback` existir,
+    // depois editada inserindo a mesma fórmula de novo. O `src` é o próprio
+    // conteúdo (data URL), então as duas ocorrências têm o mesmo src — uma
+    // sem fallback (a antiga), outra com (a nova). A decisão de resolver o
+    // SVG é por SRC (resolveAllImages/"primeiro ganha"); a ocorrência sem
+    // svgFallback não pode sumir do documento sem entrar em skippedImages.
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [
+          { insert: { type: "image", src: SVG_SRC, width: 20, height: 12 } },
+          { insert: { type: "image", src: SVG_SRC, width: 20, height: 12, svgFallback: PNG_1PX } },
+        ],
+      },
+    ];
+    const { buffer, skippedImages } = await documentToDocxBuffer(doc);
+    expect(skippedImages).toBe(0);
+    const xml = await documentXml(buffer);
+    const drawingCount = (xml.match(/<w:drawing>/g) ?? []).length;
+    expect(drawingCount).toBe(2);
+  });
+});
+
+describe("SVG no DOCX — contrato OOXML", () => {
+  const SVG_TEXT = "<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'/>";
+  const SVG_SRC = "data:image/svg+xml;base64," + Buffer.from(SVG_TEXT).toString("base64");
+
+  // Assinatura PNG: 0x89 'P' 'N' 'G'. Confirma que o arquivo apontado como
+  // fallback é raster de verdade, não apenas que a extensão do nome bate.
+  function isPngMagic(bytes: Uint8Array): boolean {
+    return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  }
+
+  it("word/media tem os dois arquivos, e o <a:blip> principal resolve para o PNG (não o SVG)", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        attrs: {},
+        delta: [
+          {
+            insert: {
+              type: "image",
+              src: SVG_SRC,
+              width: 20,
+              height: 12,
+              svgFallback: PNG_1PX,
+            },
+          },
+        ],
+      },
+    ];
+    const { buffer, skippedImages } = await documentToDocxBuffer(doc);
+    expect(skippedImages).toBe(0);
+
+    const zip = await JSZip.loadAsync(buffer);
+    const mediaNames = Object.keys(zip.files).filter(
+      (n) => n.startsWith("word/media/") && !n.endsWith("/"),
+    );
+    expect(mediaNames.some((n) => n.endsWith(".png"))).toBe(true);
+    expect(mediaNames.some((n) => n.endsWith(".svg"))).toBe(true);
+
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml).toContain("asvg:svgBlip");
+
+    // O <a:blip> PRINCIPAL (o que o Word renderiza por padrão, inclusive em
+    // versões que não entendem SVG) tem que resolver — via rels — para o
+    // PNG. A extensão asvg:svgBlip (Word 2016+) é quem aponta para o SVG.
+    // Uma inversão dos dois passaria batido se só checássemos "os dois
+    // arquivos existem" — por isso o teste segue a cadeia de relação até o
+    // arquivo e confere o CONTEÚDO (assinatura PNG / texto "<svg"), não só a
+    // extensão do nome.
+    const mainBlip = /<a:blip r:embed="([^"]+)"/.exec(xml);
+    const svgBlip = /<asvg:svgBlip[^>]*r:embed="([^"]+)"/.exec(xml);
+    expect(mainBlip).not.toBeNull();
+    expect(svgBlip).not.toBeNull();
+
+    const relsXml = await zip.file("word/_rels/document.xml.rels")!.async("string");
+    const relsMap = new Map<string, string>();
+    for (const m of relsXml.matchAll(/<Relationship Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
+      relsMap.set(m[1], m[2]);
+    }
+
+    const mainTarget = relsMap.get(mainBlip![1]);
+    const svgTarget = relsMap.get(svgBlip![1]);
+    expect(mainTarget).toMatch(/\.png$/);
+    expect(svgTarget).toMatch(/\.svg$/);
+
+    const mainBytes = await zip.file(`word/${mainTarget}`)!.async("uint8array");
+    const svgBytes = await zip.file(`word/${svgTarget}`)!.async("uint8array");
+    expect(isPngMagic(mainBytes)).toBe(true);
+    expect(new TextDecoder().decode(svgBytes)).toContain("<svg");
+  });
 });

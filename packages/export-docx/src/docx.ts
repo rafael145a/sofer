@@ -46,6 +46,17 @@ const ORDERED_REF = "ed-ordered";
 export interface ResolvedImage {
   data: Uint8Array;
   type: "png" | "jpg" | "gif" | "bmp" | "svg";
+  /**
+   * Só presente quando `type === "svg"`: o fallback raster já decodificado,
+   * exigido pelo `ImageRun` do docx para `type: "svg"`. Preenchido
+   * internamente por `resolveAllImages` a partir do `svgFallback` do embed —
+   * nunca por um `resolveImage` customizado. Fica aqui (no valor resolvido
+   * por `src`, não num mapa paralelo por embed) porque é exatamente isso que
+   * "resolvido" significa para um svg: dois embeds com o mesmo `src` — um
+   * com `svgFallback`, outro sem — compartilham o mesmo `src` e portanto o
+   * mesmo SVG; o fallback de qualquer um dos dois serve para ambos.
+   */
+  svgFallback?: { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp" | "svg" };
 }
 
 export interface DocumentToDocxOptions {
@@ -488,14 +499,21 @@ function makeImageRun(
   const resolved = images.get(embed.src);
   if (!resolved) return null;
   if (resolved.type === "svg") {
-    // resolveAllImages só deixa svg resolvido quando há fallback, então este
-    // decode não falha; o guarda existe porque o tipo é opcional.
-    const fb = embed.svgFallback ? decodeDataUrl(embed.svgFallback) : null;
-    if (!fb) return null;
+    // O fallback vem do `resolved` (por SRC), NÃO de `embed.svgFallback` (por
+    // OCORRÊNCIA). Dois embeds com o mesmo src, um com svgFallback e outro
+    // sem — caso real: uma prova salva antes do campo existir, com a mesma
+    // fórmula inserida de novo depois — têm que resolver para o MESMO
+    // ImageRun. Ler `embed.svgFallback` aqui faria a ocorrência sem fallback
+    // sumir do documento sem entrar em `skippedImages`, porque
+    // `resolveAllImages` já decidiu "não pulado" (o `src` tem fallback em
+    // ALGUMA ocorrência) — o `null` devolvido aqui não seria contado.
+    // `resolveAllImages` só deixa `resolved.type === "svg"` quando já
+    // decodificou um fallback; o guarda existe porque o campo é opcional.
+    if (!resolved.svgFallback) return null;
     return new ImageRun({
       type: "svg",
       data: resolved.data,
-      fallback: { type: fb.kind, data: fb.bytes },
+      fallback: { type: resolved.svgFallback.type, data: resolved.svgFallback.data },
       transformation: {
         width: Math.max(1, Math.round(embed.width)),
         height: Math.max(1, Math.round(embed.height)),
@@ -619,8 +637,17 @@ async function resolveAllImages(
       // deixa de ser descartado: o ImageRun aceita `type: "svg"` desde que
       // receba um `fallback` raster. Quem tem `svgFallback` passa; quem não
       // tem continua sendo pulado AQUI, para que `skipped` conte certo — não
-      // inventamos um raster no servidor.
-      if (resolved?.type === "svg" && !fallbacks.has(src)) resolved = null;
+      // inventamos um raster no servidor. O fallback é decodificado AQUI (uma
+      // vez por src, não por embed) e guardado dentro do próprio
+      // `ResolvedImage` — é isso que faz o "primeiro ganha" valer para toda
+      // ocorrência do mesmo src, mesmo a que não trouxe `svgFallback`.
+      if (resolved?.type === "svg") {
+        const fb = fallbacks.get(src);
+        const decodedFb = fb ? decodeDataUrl(fb) : null;
+        resolved = decodedFb
+          ? { ...resolved, svgFallback: { data: decodedFb.bytes, type: decodedFb.kind } }
+          : null;
+      }
       images.set(src, resolved);
     }),
   );
