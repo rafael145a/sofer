@@ -1222,7 +1222,11 @@ export function insertTableColumn(
     const widths = attrs.get("colWidths") as number[] | undefined;
     if (Array.isArray(widths) && widths.length === cols) {
       const base = normalizarLarguras(widths, cols);
-      const media = 100 / (cols + 1);
+      // `arredonda` aqui não é preciosismo: sem ele a coluna nova nasce com
+      // 16.666666666666668, a soma vira 100.0017 e o valor vaza cru para o
+      // CSS como `width:16.666666666666668%` — violando o contrato de 3 casas
+      // que o resto deste arquivo mantém.
+      const media = arredonda(100 / (cols + 1));
       const escala = cols / (cols + 1);
       const next = base.map((w) => arredonda(w * escala));
       next.splice(C, 0, media);
@@ -1792,7 +1796,19 @@ export function setColumnBoundary(
 /** Piso arbitrário e assumido: com `table-layout: fixed` a tabela encolhe
  *  abaixo do conteúdo sem resistência, então não há "mínimo do conteúdo"
  *  para ancorar. */
-const MIN_TABELA_PCT = 20;
+export const MIN_TABELA_PCT = 20;
+/** Teto: a tabela não passa da margem da página. */
+export const MAX_TABELA_PCT = 100;
+
+/**
+ * Trava `pct` na faixa válida. Exportada porque o import de DOCX precisa da
+ * MESMA faixa que o comando: o Word aceita largura de tabela maior que a
+ * página, e sem esta trava um `w:tblW` de 7500 pct entrava como 150% — a
+ * tabela transbordava a área imprimível e a última coluna sumia do papel.
+ */
+export function travaLarguraTabela(pct: number): number {
+  return Math.max(MIN_TABELA_PCT, Math.min(MAX_TABELA_PCT, pct));
+}
 
 /**
  * Define a largura total da tabela como percentual da largura útil da
@@ -1800,7 +1816,7 @@ const MIN_TABELA_PCT = 20;
  */
 export function setTableWidth(ctx: CommandContext, blockIndex: number, pct: number): void {
   if (!ctx.doc.isTable(blockIndex)) return;
-  const v = Math.max(MIN_TABELA_PCT, Math.min(100, arredonda(pct)));
+  const v = travaLarguraTabela(arredonda(pct));
   transact(ctx.doc, () => {
     ctx.doc.getBlockAttrsMap(blockIndex)?.set("tableWidth", v);
   });

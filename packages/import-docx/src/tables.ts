@@ -6,7 +6,12 @@ import type {
   SerializedCell,
   TableBorderPreset,
 } from "@sofereditor/core";
-import { MIN_LINHA_PX, mmToPx, normalizarLarguras } from "@sofereditor/core";
+import {
+  MIN_LINHA_PX,
+  mmToPx,
+  normalizarLarguras,
+  travaLarguraTabela,
+} from "@sofereditor/core";
 import {
   attr,
   borderSideOn,
@@ -146,6 +151,20 @@ export function tableToBlock(
 }
 
 /**
+ * Lê `w:w`, que no OOXML é `ST_MeasurementOrPercent`: pode vir como número
+ * puro OU com sufixo `%` ("50%"). `Number("50%")` é `NaN`, e sem tratar isso
+ * a largura era descartada em silêncio e a tabela voltava com 100%.
+ */
+function leMedida(bruto: string | undefined): { valor: number; ehPercentSufixo: boolean } | undefined {
+  if (bruto === undefined) return undefined;
+  const t = bruto.trim();
+  const comSufixo = t.endsWith("%");
+  const n = Number(comSufixo ? t.slice(0, -1) : t);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return { valor: n, ehPercentSufixo: comSufixo };
+}
+
+/**
  * `w:tblW` → percentual da largura útil da página (`tableWidth`).
  *
  * Dois tipos possíveis: `dxa` (twips absolutos — divide contra
@@ -159,13 +178,22 @@ function readTableWidth(tbl: OoxmlNode, larguraUtilTwips: number | undefined): n
   const tblPr = findChild(tbl, "w:tblPr");
   const tblW = tblPr ? findChild(tblPr, "w:tblW") : undefined;
   if (!tblW) return undefined;
-  const w = Number(attr(tblW, "w:w") ?? Number.NaN);
-  if (!Number.isFinite(w) || w <= 0) return undefined;
+  const medida = leMedida(attr(tblW, "w:w"));
+  if (!medida) return undefined;
   const type = attr(tblW, "w:type");
-  if (type === "pct") return arredondaPct(w / 50);
+
+  // O Word aceita tabela mais larga que a página; o editor não. `travaLarguraTabela`
+  // é a MESMA faixa que `setTableWidth` usa, importada do core de propósito —
+  // duas travas separadas divergiriam, e foi medido o que acontece sem ela:
+  // `w:tblW` de 7500 pct entrava como 150%, a tabela era cortada pelo
+  // `overflow: hidden` da página e a última coluna sumia da tela E do papel.
+  // Um `9639 dxa` entrava como 113% e invadia 80 dos 96px de margem, parando
+  // a 17px da borda do papel — dentro da faixa que impressora não imprime.
+  if (medida.ehPercentSufixo) return travaLarguraTabela(arredondaPct(medida.valor));
+  if (type === "pct") return travaLarguraTabela(arredondaPct(medida.valor / 50));
   if (type === "dxa" || type === undefined) {
     if (larguraUtilTwips === undefined || larguraUtilTwips <= 0) return undefined;
-    return arredondaPct((w / larguraUtilTwips) * 100);
+    return travaLarguraTabela(arredondaPct((medida.valor / larguraUtilTwips) * 100));
   }
   return undefined;
 }

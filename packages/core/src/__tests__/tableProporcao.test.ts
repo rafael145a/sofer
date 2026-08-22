@@ -191,3 +191,18 @@ describe("divisa em documento legado deformado", () => {
     expect(w[1]).toBeCloseTo(0.495, 3);
   });
 });
+
+describe("nenhum valor vaza cru para o CSS", () => {
+  it("insertTableColumn arredonda a coluna nova", () => {
+    // Sem arredondar, a coluna nova nasce 16.666666666666668, a soma vira
+    // 100.0017 e o <col> sai com `width:16.666666666666668%`. O contrato deste
+    // arquivo é 3 casas.
+    const h = harness();
+    insertTable(h.ctx, 2, 5);
+    setColumnBoundary(h.ctx, 1, 0, 0);
+    insertTableColumn(h.ctx, 1, 1, "after");
+    for (const w of h.doc.getBlockAttrs(1).colWidths as number[]) {
+      expect(w, `${w} tem mais de 3 casas`).toBe(Math.round(w * 1000) / 1000);
+    }
+  });
+});
