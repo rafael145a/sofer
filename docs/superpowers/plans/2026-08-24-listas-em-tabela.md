@@ -479,19 +479,43 @@ function isCellLineBoundary(n: Node): boolean {
 }
 ```
 
-Em `locatePoint`, dentro de `visit`, logo **antes** do bloco `if (isImgEmbed(el) || isPhantomEmbed(el))`:
+**⚠️ CORRIGIDO em 2026-08-24, depois de a execução expor dois defeitos neste
+trecho. A versão anterior deste plano trazia dois one-liners que NÃO funcionam.
+Não os reintroduza.**
 
-```ts
-    if (isCellLineBoundary(el)) remaining -= 1;
-```
+**Em `locatePoint`** não basta `remaining -= 1`. Esse decremento pelado só é
+seguro quando toda linha antes da fronteira tem texto: com linha vazia (que o
+render emite como `<li><br data-empty="true"/></li>`, sem text node) ele produz
+**offset negativo** — `"\na"`@0 vira `{node: "a", offset: -1}` — e colapsa
+posições distintas em `"a\n"`@2 e `"\n"`@1. Medido, não suposto.
 
-Em `textOffsetWithin`, dentro de `visit`, no mesmo ponto relativo (antes do bloco de embed):
+É preciso o precedente **completo** de embed, não metade dele: guarda de entrada
+quando `remaining === 0` e fallback de fronteira ao final do walk, espelhando o
+que o código já faz com `lastImg`.
 
-```ts
-    if (isCellLineBoundary(el)) offset += 1;
-```
+E a guarda tem que resolver **dentro** do `<li>` da linha vazia — `(li[k-1], 0)`
+— e não `(ul, k)`. Um embed é inline, então `(parent, index)` é visualmente o
+mesmo ponto que "fim do texto anterior"; um `<li>` é limite de **bloco**, e
+`(ul, k)` é uma posição *entre* itens, que o navegador pinta na linha errada.
 
-> Os dois são espelhos. Se você mexer em um e não no outro, o cursor sai do lugar — e nenhum teste de render pega isso.
+**Em `textOffsetWithin`** a contagem precisa ficar **acima** do check
+`n === target`, não junto do bloco de embed. Se ficar abaixo, uma âncora cujo
+**nó é** o próprio `<li>` de fronteira não ganha o `+1` — e é exatamente essa a
+forma que o navegador produz ao clicar numa linha vazia, num triple-click, ou
+numa seleção normalizada para elemento.
+
+Isso não é hipotético: `textOffsetWithin` é alimentado por `readDomSelection`, a
+partir do navegador — **não** por `locatePoint`. Com a contagem no lugar errado,
+o professor clica na linha vazia, o modelo grava o offset da linha de cima,
+`selectionsEqual` dá `true`, `applyDomSelection` nunca corrige, e o próximo
+caractere que ele digitar **sai na linha errada**, sem nenhum aviso.
+
+> Os dois são espelhos. Se você mexer em um e não no outro, o cursor sai do
+> lugar — e nenhum teste de render pega isso. Um teste de ida-e-volta também
+> não: a aritmética se cancela. Pine cada lado com asserção **absoluta**
+> (identidade do nó + offset), e acrescente
+> `expect(p!.offset).toBeGreaterThanOrEqual(0)` no helper de ida-e-volta —
+> sozinha, essa asserção já teria pego o `-1`.
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
