@@ -129,6 +129,20 @@ export interface CellAttrs {
   align?: AlignValue;
   /** Cor de fundo da célula (CSS color, ex. `#ffe58f`). Ausente = sem fundo. */
   bgColor?: string;
+  /**
+   * Quando presente, a célula renderiza como lista e cada linha separada por
+   * `\n` vira um item. Ausente = texto normal com quebras visuais.
+   *
+   * Não existe `listLevel` aqui de propósito: `Y.Text` plano não guarda
+   * atributo por linha, então recuo seria um nível para a célula inteira, não
+   * por item. Aninhamento dentro de célula exigiria blocos de verdade dentro
+   * dela — ver o spec de 2026-08-24.
+   */
+  listKind?: ListKind;
+  /** Só relevante com `listKind === "ordered"`. Primeiro número da lista. */
+  listStart?: number;
+  /** Só relevante com `listKind === "ordered"`. Sobrepõe o marcador padrão. */
+  listStyle?: ListStyleType;
 }
 
 export interface Position {

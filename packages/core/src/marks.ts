@@ -192,3 +192,35 @@ function sameMarkValue(a: unknown, b: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * Fatia um delta em uma lista por linha, quebrando nos `\n`.
+ *
+ * Usado pelo render de célula-lista: a célula é um `Y.Text` plano, e quando ela
+ * carrega `listKind` cada linha vira um `<li>`. As marcas de cada trecho são
+ * preservadas; embeds ficam na linha corrente e nunca separam.
+ *
+ * Devolve SEMPRE ao menos uma linha — delta vazio vira `[[]]`, não `[]`.
+ * Linha vazia no meio (`"a\n\nb"`) é preservada como delta vazio, senão o
+ * número de itens da lista não bateria com o número de `\n` do modelo, e o
+ * mapeamento de cursor do `dom-bridge` sairia do lugar.
+ */
+export function splitDeltaByLines(delta: DeltaOp[]): DeltaOp[][] {
+  const lines: DeltaOp[][] = [[]];
+  for (const op of delta) {
+    if (typeof op.insert !== "string") {
+      lines[lines.length - 1].push(op);
+      continue;
+    }
+    const parts = op.insert.split("\n");
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]);
+      const part = parts[i];
+      if (part.length === 0) continue;
+      lines[lines.length - 1].push(
+        op.attributes ? { insert: part, attributes: op.attributes } : { insert: part },
+      );
+    }
+  }
+  return lines;
+}
