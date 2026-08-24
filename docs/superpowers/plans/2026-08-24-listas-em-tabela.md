@@ -493,10 +493,23 @@ posições distintas em `"a\n"`@2 e `"\n"`@1. Medido, não suposto.
 quando `remaining === 0` e fallback de fronteira ao final do walk, espelhando o
 que o código já faz com `lastImg`.
 
-E a guarda tem que resolver **dentro** do `<li>` da linha vazia — `(li[k-1], 0)`
-— e não `(ul, k)`. Um embed é inline, então `(parent, index)` é visualmente o
-mesmo ponto que "fim do texto anterior"; um `<li>` é limite de **bloco**, e
-`(ul, k)` é uma posição *entre* itens, que o navegador pinta na linha errada.
+E a guarda tem que resolver **dentro** do `<li>` anterior, não em `(ul, k)`. Um
+embed é inline, então `(parent, index)` é visualmente o mesmo ponto que "fim do
+texto anterior"; um `<li>` é limite de **bloco**, e `(ul, k)` é uma posição
+*entre* itens, que o navegador pinta na linha errada.
+
+**Mas o ponto tem que vir do estado do walk, não da topologia de irmãos do DOM.**
+Prescrever `(previousElementSibling, 0)` está errado e foi medido: se a linha
+anterior **termina em embed**, o ramo de embed já saiu sem resolver, e apontar
+para o começo da linha anterior joga o caret vários caracteres para trás. Com
+`"ab⟦img⟧\nc"`, o offset 3 ida-e-volta em 0 em vez de 3 — três caracteres para
+trás, em silêncio. Imagem dentro de célula é feature suportada hoje
+(`insertImage` lê `pos.cellIndex`, `commands.ts:2023`).
+
+A guarda precisa triar pelo estado que ela já carrega, do mesmo jeito que o
+fallback de saída faz: se houver um `lastImg`, o ponto é logo **depois** dele
+(`(lastImg.parentNode, indexInParent(lastImg) + 1)`); só quando não houver é que
+a linha anterior é de fato vazia e o ponto é o começo dela.
 
 **Em `textOffsetWithin`** a contagem precisa ficar **acima** do check
 `n === target`, não junto do bloco de embed. Se ficar abaixo, uma âncora cujo
