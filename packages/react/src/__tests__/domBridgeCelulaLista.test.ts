@@ -234,3 +234,129 @@ describe("dom-bridge — invariante linhas === \\n + 1 (casos de borda)", () => 
     verificaIdaEVolta(root, texto);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Guarda de entrada + embed no fim da linha anterior (regressão da rodada 2).
+//
+// A guarda de entrada de `locatePoint` resolve `remaining === 0` ao ENTRAR
+// num `<li>` de fronteira. A rodada 1 inferia o ponto pela TOPOLOGIA de
+// irmãos do DOM (`previousElementSibling`, offset 0) — correto só quando a
+// linha anterior é de fato vazia. Quando a linha anterior termina em
+// `<img data-embed="image">` (ou no phantom span de wrap-float — mesmo
+// ramo, `isImgEmbed(el) || isPhantomEmbed(el)`), o walk já consumiu o embed
+// e chega na fronteira com `remaining === 0` sem a linha anterior estar
+// vazia; a topologia de irmãos não distingue os dois casos. Nenhum teste do
+// repo cruzava `data-embed` com `data-cell-line` antes desta rodada —
+// `insertImage` (`packages/core/src/commands.ts`) lê `pos.cellIndex`
+// explicitamente e a célula renderiza com o mesmo `renderInline` do
+// parágrafo (`NodeView.tsx`), então imagem dentro de célula é alcançável
+// hoje; fica latente só até a Task 4 emitir `data-cell-line`.
+// ---------------------------------------------------------------------------
+describe("dom-bridge — guarda de entrada quando a linha anterior termina em embed", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /**
+   * Monta `.ed-root` com uma tabela de 1 célula cujo `<ul>` é passado pronto.
+   * HTML numa linha só — ver comentário de `montarRoot` no topo do arquivo.
+   */
+  function montarComLista(ulInnerHtml: string): HTMLElement {
+    const root = document.createElement("div");
+    root.className = "ed-root";
+    root.innerHTML =
+      `<table class="ed-block ed-table" data-block-index="0" data-block-type="table">` +
+      `<tbody><tr data-cell-row="0">` +
+      `<td class="ed-cell" data-cell-index="0" data-cell-row="0" data-cell-col="0">` +
+      `<ul class="ed-list ed-list-bullet">${ulInnerHtml}</ul>` +
+      `</td>` +
+      `</tr></tbody>` +
+      `</table>`;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  /** `<li data-cell-line="i">` dentro da célula única da tabela montada. */
+  function pegaLi(root: HTMLElement, i: number): HTMLElement {
+    const cell = getCellElement(root, 0, 0)!;
+    return cell.querySelector<HTMLElement>(`li[data-cell-line="${i}"]`)!;
+  }
+
+  /**
+   * Como `verificaIdaEVolta` do bloco acima, mas por COMPRIMENTO do modelo
+   * em vez de string literal — uma célula com embed não tem uma string cujo
+   * `.length` bata com o tamanho do modelo (o embed conta 1 char sem ter
+   * texto correspondente no DOM).
+   */
+  function verificaIdaEVoltaPorTamanho(root: HTMLElement, tamanhoModelo: number): void {
+    const cell = getCellElement(root, 0, 0)!;
+    for (let o = 0; o <= tamanhoModelo; o++) {
+      const p = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: o });
+      expect(p, `offset ${o} não localizou`).not.toBeNull();
+      expect(p!.offset, `offset ${o}: ponto de DOM com offset negativo`).toBeGreaterThanOrEqual(0);
+      expect(textOffsetWithin(cell, p!.node, p!.offset), `offset ${o}`).toBe(o);
+    }
+  }
+
+  it('"ab⟦img⟧\\nc" — linha anterior termina em texto + imagem', () => {
+    // modelo: 'a','b',img(1 char),'\n'(fronteira, não é char),'c' — tamanho 5
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0">ab<img data-embed="image" /></li>` +
+        `<li class="ed-listitem" data-cell-line="1">c</li>`,
+    );
+    verificaIdaEVoltaPorTamanho(root, 5);
+
+    // Asserção absoluta no offset exato onde a rodada 1 regrediu: offset 3
+    // é "logo depois da imagem, antes do \n". A guarda de entrada dispara
+    // ENTRANDO em li[1] com remaining=0 (o \n só decrementou; não é texto
+    // real). Ponto certo: dentro de li[0], DEPOIS da imagem — não no
+    // começo de li[0] (o bug da rodada 1 devolvia `(li[0], 0)`, que ida-e-
+    // volta em 0, não 3).
+    const cell = getCellElement(root, 0, 0)!;
+    const li0 = pegaLi(root, 0);
+    const p3 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 3 });
+    expect(p3!.node).toBe(li0);
+    expect(p3!.offset).toBe(2); // depois de "ab" (índice 0) e da <img> (índice 1)
+    expect(textOffsetWithin(cell, p3!.node, p3!.offset)).toBe(3);
+  });
+
+  it('"⟦img⟧\\nc" — linha anterior é só uma imagem, sem texto nenhum', () => {
+    // modelo: img(1 char),'\n'(fronteira),'c' — tamanho 2
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0"><img data-embed="image" /></li>` +
+        `<li class="ed-listitem" data-cell-line="1">c</li>`,
+    );
+    verificaIdaEVoltaPorTamanho(root, 2);
+
+    // Sem texto algum antes da imagem, `remaining` chega em 0 dentro do
+    // PRÓPRIO li[0] ao processar a imagem (resolvido pela guarda de embed
+    // já existente, não pela guarda de fronteira) — o offset 1 é quem
+    // exercita a guarda de fronteira, entrando em li[1].
+    const cell = getCellElement(root, 0, 0)!;
+    const li0 = pegaLi(root, 0);
+    const p1 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 1 });
+    expect(p1!.node).toBe(li0);
+    expect(p1!.offset).toBe(1); // depois da única imagem (índice 0)
+    expect(textOffsetWithin(cell, p1!.node, p1!.offset)).toBe(1);
+  });
+
+  it('"a⟦phantom⟧\\nb" — mesmo ramo (isImgEmbed || isPhantomEmbed) via wrap-float phantom', () => {
+    // O phantom span de wrap-float (`data-embed-phantom="true"`) passa pelo
+    // MESMO branch que a imagem normal (`isImgEmbed(el) || isPhantomEmbed(el)`)
+    // e seta o mesmo `lastImg`, então a mesma correção cobre os dois sem
+    // código extra — este teste prova isso, não só assume.
+    // modelo: 'a',phantom(1 char),'\n'(fronteira),'b' — tamanho 3
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0">a<span data-embed-phantom="true"></span></li>` +
+        `<li class="ed-listitem" data-cell-line="1">b</li>`,
+    );
+    verificaIdaEVoltaPorTamanho(root, 3);
+
+    const cell = getCellElement(root, 0, 0)!;
+    const li0 = pegaLi(root, 0);
+    const p2 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 2 });
+    expect(p2!.node).toBe(li0);
+    expect(p2!.offset).toBe(2); // depois de "a" (índice 0) e do phantom (índice 1)
+    expect(textOffsetWithin(cell, p2!.node, p2!.offset)).toBe(2);
+  });
+});

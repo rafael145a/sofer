@@ -387,10 +387,33 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     // text right before it", so pointing there is correct. A `<li>` is a
     // block boundary: `(ul, indexOfThisLi)` is a position BETWEEN list
     // items, which no caret can render inside — the actual point the model
-    // offset addresses is the START of the PREVIOUS (empty) line, i.e.
-    // inside `previousElementSibling`, not between it and this `<li>`.
+    // offset addresses is the START of the PREVIOUS line, IF that line is
+    // truly empty.
+    //
+    // It might not be: `remaining === 0` here also happens when the
+    // previous line's last content was an embed (image or wrap-float
+    // phantom) — the embed branch below already decremented `remaining` to
+    // 0 without resolving (it only resolves inline when it's itself the
+    // target of `remaining`), so the boundary sees the same `remaining ===
+    // 0` a truly-empty previous line would produce. Inferring the point
+    // from DOM sibling topology (`previousElementSibling`, offset 0) can't
+    // tell the two apart — it always picks "start of previous line", wrong
+    // when that line ends in an embed. The walk's own state can: `lastImg`
+    // is set if and only if the last thing consumed before reaching this
+    // boundary was an embed (mutually exclusive with `lastBoundary`/
+    // `lastText`, reset by every other branch), so checking it first routes
+    // to "right after the embed" — the same resolution the embed's own
+    // trailing-fallback below already uses — before falling back to
+    // "start of previous line" for the genuinely-empty case.
     if (isCellLineBoundary(el)) {
       if (remaining === 0) {
+        if (lastImg) {
+          const parent = (lastImg as HTMLElement).parentNode;
+          if (parent) {
+            result = { node: parent, offset: indexInParent(lastImg) + 1 };
+            return;
+          }
+        }
         const prevLine = el.previousElementSibling;
         if (prevLine) {
           result = { node: prevLine, offset: 0 };
