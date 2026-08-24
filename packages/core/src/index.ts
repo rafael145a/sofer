@@ -10,3 +10,4 @@ export * from "./table-borders";
 export * from "./commands";
 export * from "./clipboard";
 export * from "./history";
+export * from "./migrations";
