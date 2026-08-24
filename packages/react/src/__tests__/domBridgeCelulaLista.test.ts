@@ -360,3 +360,137 @@ describe("dom-bridge — guarda de entrada quando a linha anterior termina em em
     expect(textOffsetWithin(cell, p2!.node, p2!.offset)).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Clamp de overflow prefere o marcador de walk mais recente, não `remaining
+// === 0` (regressão pré-existente da rodada 3 — não é regressão desta task,
+// mas o mesmo gate de alcançabilidade do Critical da rodada 2: os dois
+// dependem de `data-cell-line` existir, e é a Task 4 que passa a emiti-lo).
+//
+// O clamp de overflow (cauda de `locatePoint`, quando o walk termina sem
+// resolver `result`) existe para o cenário "modelo transientemente à frente
+// do DOM renderizado" — o usuário digitou, o modelo já mudou, o React ainda
+// não commitou o novo render. Antes desta rodada, os checks de
+// `lastBoundary`/`lastImg` exigiam `remaining === 0` — mas OVERFLOW por
+// definição deixa `remaining > 0` no fim do walk, então esses checks nunca
+// disparavam no cenário overflow, e o clamp caía em `lastText`, que pode
+// estar OBSOLETO (nem o ramo de embed nem o de fronteira zeram `lastText`
+// quando rodam — só o ramo de texto zera os outros dois). O caret pousava
+// no último TEXTO visto, não no último NÓ visto.
+//
+// Importante: nenhum destes casos ida-e-volta no offset literalmente
+// requisitado — isso é matematicamente impossível quando esse offset
+// excede o comprimento total do que está no DOM (nenhum ponto de DOM pode
+// somar mais do que o container realmente contém). O clamp correto pousa
+// no MESMO ponto que o último offset válido (não-overflow) já resolve
+// corretamente — é exatamente assim que o clamp de `lastText` sempre se
+// comportou para texto puro (offset 100 numa célula "hello" sempre voltou
+// 5, nunca 100). O que muda aqui é QUAL ponto: depois do embed/dentro da
+// linha vazia, não antes dele.
+// ---------------------------------------------------------------------------
+describe("dom-bridge — clamp de overflow prefere o walk ao invés de lastText obsoleto", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /**
+   * Monta `.ed-root` com uma tabela de 1 célula cujo `<ul>` é passado pronto.
+   * HTML numa linha só — ver comentário de `montarRoot` no topo do arquivo.
+   */
+  function montarComLista(ulInnerHtml: string): HTMLElement {
+    const root = document.createElement("div");
+    root.className = "ed-root";
+    root.innerHTML =
+      `<table class="ed-block ed-table" data-block-index="0" data-block-type="table">` +
+      `<tbody><tr data-cell-row="0">` +
+      `<td class="ed-cell" data-cell-index="0" data-cell-row="0" data-cell-col="0">` +
+      `<ul class="ed-list ed-list-bullet">${ulInnerHtml}</ul>` +
+      `</td>` +
+      `</tr></tbody>` +
+      `</table>`;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  /** `<li data-cell-line="i">` dentro da célula única da tabela montada. */
+  function pegaLi(root: HTMLElement, i: number): HTMLElement {
+    const cell = getCellElement(root, 0, 0)!;
+    return cell.querySelector<HTMLElement>(`li[data-cell-line="${i}"]`)!;
+  }
+
+  it('"a\\nb⟦img⟧"@5 (overflow além do total 4, última linha termina em imagem) — pousa depois da imagem, não antes', () => {
+    // modelo: 'a','\n'(fronteira),'b',img(1 char) — total 4 (offsets válidos 0..4)
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0">a</li>` +
+        `<li class="ed-listitem" data-cell-line="1">b<img data-embed="image" /></li>`,
+    );
+    const cell = getCellElement(root, 0, 0)!;
+    const li1 = pegaLi(root, 1);
+
+    // offset 4 é o último offset REAL (não-overflow): pousa depois de "b" e
+    // da <img>, dentro de li[1]. offset 5 é overflow por 1 e deve pousar no
+    // MESMO ponto — não em `TEXT("b")@1` (o bug: lastText obsoleto, de
+    // ANTES da imagem).
+    const p4 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 4 });
+    expect(p4!.node).toBe(li1);
+    expect(p4!.offset).toBe(2); // depois de "b" (índice 0) e da <img> (índice 1)
+    expect(textOffsetWithin(cell, p4!.node, p4!.offset)).toBe(4);
+
+    const p5 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 5 });
+    expect(p5!.node).toBe(li1);
+    expect(p5!.offset).toBe(2);
+    expect(textOffsetWithin(cell, p5!.node, p5!.offset)).toBe(4);
+
+    // overflow maior ainda (offset 6) deve clampar no mesmo lugar.
+    const p6 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 6 });
+    expect(p6!.node).toBe(li1);
+    expect(p6!.offset).toBe(2);
+  });
+
+  it('corolário: "a\\n"@3 (overflow além do total 2, última linha vazia) — pousa dentro da linha vazia, não na linha 0', () => {
+    // modelo: 'a','\n'(fronteira) — total 2 (offsets válidos 0..2)
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0">a</li>` +
+        `<li class="ed-listitem" data-cell-line="1"><br data-empty="true" /></li>`,
+    );
+    const cell = getCellElement(root, 0, 0)!;
+    const li1 = pegaLi(root, 1);
+
+    // offset 2 (último offset real) já pousava certo (fallback de saída da
+    // rodada 1). offset 3 é overflow por 1 e deve pousar no MESMO ponto —
+    // não em `TEXT("a")@1` (o bug: lastText obsoleto, da linha 0).
+    const p2 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 2 });
+    expect(p2!.node).toBe(li1);
+    expect(p2!.offset).toBe(0);
+    expect(textOffsetWithin(cell, p2!.node, p2!.offset)).toBe(2);
+
+    const p3 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 3 });
+    expect(p3!.node).toBe(li1);
+    expect(p3!.offset).toBe(0);
+    expect(textOffsetWithin(cell, p3!.node, p3!.offset)).toBe(2);
+  });
+
+  it('corolário: "\\n"@2 (overflow além do total 1, célula com só um \\n) — pousa na linha 1, não no começo da célula (o flash do bug #1)', () => {
+    // modelo: '\n'(fronteira) — total 1 (offsets válidos 0..1)
+    const root = montarComLista(
+      `<li class="ed-listitem" data-cell-line="0"><br data-empty="true" /></li>` +
+        `<li class="ed-listitem" data-cell-line="1"><br data-empty="true" /></li>`,
+    );
+    const cell = getCellElement(root, 0, 0)!;
+    const li1 = pegaLi(root, 1);
+
+    // offset 1 (último offset real) já pousava certo (fallback de saída da
+    // rodada 1). offset 2 é overflow por 1 e deve pousar no MESMO ponto —
+    // não em `(td, 0)`, o começo da célula (literalmente o flash do bug #1
+    // que o comentário do clamp existe para evitar).
+    const p1 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 1 });
+    expect(p1!.node).toBe(li1);
+    expect(p1!.offset).toBe(0);
+    expect(textOffsetWithin(cell, p1!.node, p1!.offset)).toBe(1);
+
+    const p2 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 2 });
+    expect(p2!.node).toBe(li1);
+    expect(p2!.offset).toBe(0);
+    expect(textOffsetWithin(cell, p2!.node, p2!.offset)).toBe(1);
+  });
+});
