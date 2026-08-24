@@ -489,6 +489,16 @@ main {
   outline-offset: -2px;
 }
 
+/* Lista dentro de célula. Margem zerada e recuo menor que o da lista de bloco:
+   célula é apertada, e o padrão de 28px come a largura útil da coluna. */
+.ed-cell .ed-list {
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.ed-cell .ed-listitem {
+  margin: 0;
+}
+
 /* Toolbar table popover. */
 .ed-toolbar-tablemenu {
   position: relative;

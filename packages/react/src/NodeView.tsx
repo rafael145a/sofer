@@ -3,9 +3,11 @@ import {
   answerLineStyle,
   cellBorderStyle,
   normalizarLarguras,
+  splitDeltaByLines,
   tableRectSelection,
   type BlockAttrs,
   type CellAttrs,
+  type DeltaOp,
   type SerializedBlock,
   type StyleRecord,
 } from "@sofereditor/core";
@@ -161,6 +163,40 @@ function clampListLevel(l: BlockAttrs["listLevel"]): number {
   return Math.max(0, Math.min(5, Math.trunc(l)));
 }
 
+/**
+ * Conteúdo de um `<td>`. Sem `listKind`, é o delta cru (o `\n` quebra linha via
+ * `white-space: pre-wrap`). Com `listKind`, cada linha separada por `\n` vira
+ * um item.
+ *
+ * `data-cell-line` em TODO `<li>` é contrato com o `dom-bridge`: ele conta os
+ * de índice maior que zero como um caractere do modelo (o `\n` que sumiu do
+ * texto do DOM). Mexer aqui sem mexer lá desloca o cursor.
+ */
+function renderCellContent(
+  attrs: CellAttrs | undefined,
+  delta: DeltaOp[],
+  keyPrefix: string,
+): ReactNode {
+  const kind = attrs?.listKind;
+  if (!kind) return renderInline(delta, keyPrefix);
+  const linhas = splitDeltaByLines(delta);
+  const Tag = kind === "ordered" ? "ol" : "ul";
+  return (
+    <Tag
+      className={`ed-list ed-list-${kind}`}
+      data-list-kind={kind}
+      start={kind === "ordered" && typeof attrs?.listStart === "number" ? attrs.listStart : undefined}
+      style={attrs?.listStyle ? { listStyleType: attrs.listStyle } : undefined}
+    >
+      {linhas.map((linha, i) => (
+        <li key={i} className="ed-listitem" data-cell-line={i}>
+          {renderInline(linha, `${keyPrefix}-l${i}`)}
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
 interface TableViewProps {
   block: SerializedBlock;
   index: number;
@@ -255,7 +291,7 @@ function TableView({ block, index, tableFragment }: TableViewProps): JSX.Element
                   )}
                   className={inRect ? "ed-cell ed-cell--selected" : "ed-cell"}
                 >
-                  {renderInline(delta, `t${index}-c${flat}`)}
+                  {renderCellContent(cell?.attrs, delta, `t${index}-c${flat}`)}
                 </td>
               );
             })}
