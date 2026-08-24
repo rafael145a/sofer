@@ -433,7 +433,9 @@ function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null
 }
 
 function emptyCell(): TableCell {
-  return new TableCell({ children: [new Paragraph("")] });
+  return new TableCell({
+    children: [new Paragraph({ children: [new TextRun({ text: "", font: VERDANA.font })] })],
+  });
 }
 
 // ---------- inline ----------
@@ -450,7 +452,7 @@ function deltaToRuns(
   defaults: RunDefaults = {},
   images: Map<string, ResolvedImage | null>,
 ): Array<TextRun | ImageRun> {
-  if (delta.length === 0) return [new TextRun("")];
+  if (delta.length === 0) return [new TextRun({ text: "", font: defaults.font })];
   const out: Array<TextRun | ImageRun> = [];
   for (const op of delta) {
     if (typeof op.insert === "string") {
@@ -468,6 +470,7 @@ function deltaToRuns(
         out.push(
           new TextRun({
             text: embed.caption,
+            font: VERDANA.font, // corpo: legenda segue a mesma fonte do texto
             italics: true,
             size: 18, // 9pt — typical caption size
             break: 1,
@@ -476,7 +479,7 @@ function deltaToRuns(
       }
     }
   }
-  if (out.length === 0) out.push(new TextRun(""));
+  if (out.length === 0) out.push(new TextRun({ text: "", font: defaults.font }));
   return out;
 }
 

@@ -733,4 +733,52 @@ describe("fonte padrão", () => {
     expect(xml).not.toContain('w:ascii="Arial"');
     expect(xml).toContain('w:ascii="Consolas"');
   });
+
+  it("legenda de imagem e célula vazia de tabela não caem no default Calibri da biblioteca docx", async () => {
+    // new Document({...}) não declara styles/docDefaults — qualquer TextRun
+    // sem `font` explícito herda o default da lib `docx`, que é Calibri.
+    // Sob Arial isso era invisível (Arial e Liberation Sans convergem);
+    // sob Verdana, que não tem clone métrico, um Calibri escondido muda
+    // largura de texto visível (legenda) e altura de parágrafo vazio
+    // (célula de tabela), o que muda paginação.
+    const doc: LegacySerializedDocument = [
+      {
+        type: "paragraph",
+        text: "",
+        delta: [
+          {
+            insert: {
+              type: "image",
+              src: PNG_1PX,
+              width: 10,
+              height: 10,
+              caption: "legenda",
+            } as any,
+          },
+        ],
+        attrs: {},
+      },
+      {
+        // cols: 2 mas só 1 cell fornecida → a segunda vira emptyCell()
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 2 },
+        cells: [{ text: "t", delta: [{ insert: "t" }], attrs: {} }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+
+    expect(xml).not.toContain('w:ascii="Calibri"');
+
+    // A legenda (texto visível) precisa sair com a fonte do corpo, não com
+    // o default da lib — mede o run específico, não o documento inteiro.
+    const captionIdx = xml.indexOf(">legenda<");
+    expect(captionIdx).toBeGreaterThan(-1);
+    const runStart = xml.lastIndexOf("<w:r>", captionIdx);
+    const runEnd = xml.indexOf("</w:r>", captionIdx) + "</w:r>".length;
+    const captionRunXml = xml.slice(runStart, runEnd);
+    expect(captionRunXml).toContain('w:ascii="Verdana"');
+  });
 });
