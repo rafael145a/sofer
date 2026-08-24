@@ -710,3 +710,27 @@ describe("SVG no DOCX — contrato OOXML", () => {
     expect(new TextDecoder().decode(svgBytes)).toContain("<svg");
   });
 });
+
+describe("fonte padrão", () => {
+  it("emite Verdana em parágrafo, heading, blockquote e célula; code block segue Consolas", async () => {
+    const doc: LegacySerializedDocument = [
+      { type: "paragraph", text: "p", delta: [{ insert: "p" }], attrs: {} },
+      { type: "heading", text: "h", delta: [{ insert: "h" }], attrs: { level: 1 } },
+      { type: "blockquote", text: "q", delta: [{ insert: "q" }], attrs: {} },
+      { type: "codeBlock", text: "c", delta: [{ insert: "c" }], attrs: {} },
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "t", delta: [{ insert: "t" }], attrs: {} }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+
+    expect(xml).toContain('w:ascii="Verdana"');
+    expect(xml).not.toContain('w:ascii="Arial"');
+    expect(xml).toContain('w:ascii="Consolas"');
+  });
+});

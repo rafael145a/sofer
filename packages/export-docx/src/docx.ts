@@ -212,10 +212,14 @@ function blocksToDocxChildren(
 
 // ---------- block builders ----------
 
-// School standard: Arial for all body text. Code blocks override with
-// Consolas (monospace is more legible for code). Italics on blockquote is
-// kept as a stylistic default.
-const ARIAL: RunDefaults = { font: "Arial" };
+// Padrão da escola: Verdana em todo texto de corpo, alinhada com o `.ed-root`
+// do editor e com o `@font-face` que o servidor embute no PDF. Os três
+// caminhos precisam nomear a MESMA fonte — até 08/2026 este arquivo dizia
+// "Arial" enquanto o editor renderizava Liberation Sans, e só não divergia
+// porque as duas são clones métricos. Verdana não tem clone.
+// Code block é a única exceção (Consolas, monospace é mais legível para
+// código). Itálico no blockquote é default estilístico.
+const VERDANA: RunDefaults = { font: "Verdana" };
 
 function makeParagraph(
   block: SerializedBlock,
@@ -225,7 +229,7 @@ function makeParagraph(
     alignment: alignFor(block.attrs.align),
     bidirectional: block.attrs.dir === "rtl" ? true : undefined,
     ...answerLineProps(block.attrs),
-    children: deltaToRuns(block.delta, ARIAL, images),
+    children: deltaToRuns(block.delta, VERDANA, images),
   });
 }
 
@@ -255,7 +259,7 @@ function makeHeading(
   return new Paragraph({
     heading: HEADING_LEVELS[level - 1],
     alignment: alignFor(block.attrs.align),
-    children: deltaToRuns(block.delta, ARIAL, images),
+    children: deltaToRuns(block.delta, VERDANA, images),
   });
 }
 
@@ -269,7 +273,7 @@ function makeBlockquote(
     border: {
       left: { color: "CBD5E1", space: 12, style: BorderStyle.SINGLE, size: 12 },
     },
-    children: deltaToRuns(block.delta, { ...ARIAL, italics: true }, images),
+    children: deltaToRuns(block.delta, { ...VERDANA, italics: true }, images),
   });
 }
 
@@ -294,7 +298,7 @@ function makeListItem(
   return new Paragraph({
     numbering: { reference, level },
     alignment: alignFor(block.attrs.align),
-    children: deltaToRuns(block.delta, ARIAL, images),
+    children: deltaToRuns(block.delta, VERDANA, images),
   });
 }
 
@@ -422,7 +426,7 @@ function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null
     children: [
       new Paragraph({
         alignment: alignFor(cell.attrs?.align),
-        children: deltaToRuns(cell.delta, ARIAL, images),
+        children: deltaToRuns(cell.delta, VERDANA, images),
       }),
     ],
   });
