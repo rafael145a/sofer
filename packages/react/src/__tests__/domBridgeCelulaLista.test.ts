@@ -116,14 +116,28 @@ describe("dom-bridge — invariante linhas === \\n + 1 (casos de borda)", () => 
     return root;
   }
 
-  /** Prova a ida-e-volta de offset para todo offset válido de `texto`. */
+  /**
+   * Prova a ida-e-volta de offset para todo offset válido de `texto`, e que
+   * todo ponto de DOM devolvido é válido (offset não-negativo). A identidade
+   * (`textOffsetWithin(locatePoint(o)) === o`) sozinha é cega a um offset de
+   * DOM inválido quando a aritmética cancela por acidente — foi assim que o
+   * `-1` produzido por um decremento incondicional na fronteira passou
+   * despercebido por essa mesma checagem antes desta rodada de correção.
+   */
   function verificaIdaEVolta(root: HTMLElement, texto: string): void {
     const cell = getCellElement(root, 0, 0)!;
     for (let o = 0; o <= texto.length; o++) {
       const p = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: o });
       expect(p, `offset ${o} não localizou`).not.toBeNull();
+      expect(p!.offset, `offset ${o}: ponto de DOM com offset negativo`).toBeGreaterThanOrEqual(0);
       expect(textOffsetWithin(cell, p!.node, p!.offset), `offset ${o}`).toBe(o);
     }
+  }
+
+  /** `<li data-cell-line="i">` dentro da célula única da tabela montada. */
+  function pegaLi(root: HTMLElement, i: number): HTMLElement {
+    const cell = getCellElement(root, 0, 0)!;
+    return cell.querySelector<HTMLElement>(`li[data-cell-line="${i}"]`)!;
   }
 
   it('"\\na" (\\n no começo) — 2 linhas === 1 \\n + 1', () => {
@@ -138,6 +152,14 @@ describe("dom-bridge — invariante linhas === \\n + 1 (casos de borda)", () => 
         `<li class="ed-listitem" data-cell-line="1">a</li>`,
     );
     verificaIdaEVolta(root, texto);
+
+    // Asserção absoluta (não só ida-e-volta): offset 0 é a guarda de entrada
+    // disparando ao ENTRAR em li[1] com `remaining` já em 0 — resolve dentro
+    // de li[0] (a linha vazia anterior), não em (ul, índice de li[1]).
+    const li0 = pegaLi(root, 0);
+    const p0 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 0 });
+    expect(p0!.node).toBe(li0);
+    expect(p0!.offset).toBe(0);
   });
 
   it('"a\\n" (\\n no fim) — 2 linhas === 1 \\n + 1', () => {
@@ -152,6 +174,15 @@ describe("dom-bridge — invariante linhas === \\n + 1 (casos de borda)", () => 
         `<li class="ed-listitem" data-cell-line="1"><br data-empty="true" /></li>`,
     );
     verificaIdaEVolta(root, texto);
+
+    // Asserção absoluta: offset 2 (fim da célula) é o fallback de SAÍDA —
+    // o walk termina dentro de li[1] (a última linha, vazia) sem nada pra
+    // absorver `remaining`. Resolve dentro do próprio li[1], não em
+    // (ul, índice de li[1] + 1).
+    const li1 = pegaLi(root, 1);
+    const p2 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 2 });
+    expect(p2!.node).toBe(li1);
+    expect(p2!.offset).toBe(0);
   });
 
   it('"\\n" sozinho — 2 linhas === 1 \\n + 1', () => {
@@ -166,6 +197,19 @@ describe("dom-bridge — invariante linhas === \\n + 1 (casos de borda)", () => 
         `<li class="ed-listitem" data-cell-line="1"><br data-empty="true" /></li>`,
     );
     verificaIdaEVolta(root, texto);
+
+    // Asserção absoluta nos dois offsets — exercitam os dois mecanismos:
+    // offset 0 é a guarda de ENTRADA (entra em li[1] com remaining=0,
+    // resolve dentro de li[0]); offset 1 é o fallback de SAÍDA (walk
+    // termina dentro do próprio li[1], resolve nele mesmo).
+    const li0 = pegaLi(root, 0);
+    const li1 = pegaLi(root, 1);
+    const p0 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 0 });
+    expect(p0!.node).toBe(li0);
+    expect(p0!.offset).toBe(0);
+    const p1 = locatePoint(root, { blockIndex: 0, cellIndex: 0, offset: 1 });
+    expect(p1!.node).toBe(li1);
+    expect(p1!.offset).toBe(0);
   });
 
   it('[{insert:"a\\n"},{insert:"b"}] (\\n na fronteira entre duas ops) — 2 linhas === 1 \\n + 1', () => {

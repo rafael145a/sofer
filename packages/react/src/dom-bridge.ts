@@ -211,6 +211,18 @@ export function textOffsetWithin(
 
   function visit(n: Node): void {
     if (done) return;
+    // Fires for EVERY visit of a boundary `<li>`, whether it's the target
+    // itself or just a node the walk passes through on the way to a
+    // descendant target. This must run before the `n === target` check
+    // below: `readDomSelection` feeds real browser selections into this
+    // function, and a click into an empty line's `<li><br data-empty></li>`
+    // (no text node to anchor into) lands the browser's anchor directly ON
+    // that `<li>` — i.e. target CAN BE the boundary element itself, not
+    // just an ancestor passed through. Checking only in the pass-through
+    // branch (below the target check) silently drops the +1 for exactly
+    // that anchor shape — cursor lands one line too early, invisibly, until
+    // the next keystroke inserts the character on the wrong line.
+    if (isCellLineBoundary(n)) offset += 1;
     if (n === target) {
       if (n.nodeType === Node.TEXT_NODE) {
         offset += targetOff;
@@ -236,7 +248,6 @@ export function textOffsetWithin(
     // Float-wrap anchor `<img>` is rendered at the block start as a pure
     // visual; its model position lives in the phantom span downstream.
     if (isImgEmbed(el) && isWrapAnchorImg(el)) return;
-    if (isCellLineBoundary(el)) offset += 1;
     if (isImgEmbed(el) || isPhantomEmbed(el)) {
       offset += 1;
       return;
@@ -365,17 +376,24 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     if (isImgEmbed(el) && isWrapAnchorImg(el)) return;
     // Mirrors the embed guard directly below: a `<li>` boundary consumes one
     // model char that has no DOM text. When `remaining` is already exhausted
-    // right as we reach the boundary (e.g. the line before it was empty), the
-    // point resolves BEFORE the boundary `<li>` — same as landing on an
-    // embed at `remaining === 0` — instead of a naked decrement running
-    // `remaining` negative, which is unreachable when every line before the
-    // last is non-empty (the brief's arithmetic table) but real for an empty
-    // leading/only line, e.g. `"\na"` or `"\n"`.
+    // right as we reach the boundary (e.g. the line before it was empty), a
+    // naked decrement would run `remaining` negative — unreachable when
+    // every line before the last is non-empty (the brief's arithmetic
+    // table) but real for an empty leading/only line, e.g. `"\na"` or
+    // `"\n"`.
+    //
+    // UNLIKE the embed case, the resolved point is NOT `(parent, index)`.
+    // An embed is inline — `(parent, indexOfImg)` visually IS "end of the
+    // text right before it", so pointing there is correct. A `<li>` is a
+    // block boundary: `(ul, indexOfThisLi)` is a position BETWEEN list
+    // items, which no caret can render inside — the actual point the model
+    // offset addresses is the START of the PREVIOUS (empty) line, i.e.
+    // inside `previousElementSibling`, not between it and this `<li>`.
     if (isCellLineBoundary(el)) {
       if (remaining === 0) {
-        const parent = el.parentNode;
-        if (parent) {
-          result = { node: parent, offset: indexInParent(el) };
+        const prevLine = el.previousElementSibling;
+        if (prevLine) {
+          result = { node: prevLine, offset: 0 };
           return;
         }
       }
@@ -406,14 +424,19 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   if (result) return result;
 
   // Walked the whole container without consuming `remaining` — caret lands
-  // just AFTER a trailing boundary/embed if it was the last node visited.
-  // Boundary checked first: `lastImg`/`lastBoundary` are kept mutually
-  // exclusive above (each setter nulls the other), so at most one of the two
-  // blocks below can fire; the order between them doesn't change behavior,
-  // only which comment reads first.
+  // inside a trailing empty line if the last node visited was a boundary
+  // `<li>` whose own content had nothing to absorb `remaining` (e.g. the
+  // cell ends in "\n"). By construction this only fires when `lastBoundary`
+  // itself was empty (any real text inside it would already have resolved
+  // via the text-node branch above, before the walk could finish) — so the
+  // point lives INSIDE `lastBoundary`, at its own offset 0, same reasoning
+  // as the entry guard above but for the CURRENT boundary instead of the
+  // previous one. `lastImg`/`lastBoundary` are kept mutually exclusive
+  // above (each setter nulls the other), so at most one of the two blocks
+  // below can fire; the order between them doesn't change behavior, only
+  // which comment reads first.
   if (lastBoundary && remaining === 0) {
-    const parent = (lastBoundary as HTMLElement).parentNode;
-    if (parent) return { node: parent, offset: indexInParent(lastBoundary) + 1 };
+    return { node: lastBoundary, offset: 0 };
   }
   if (lastImg && remaining === 0) {
     const parent = (lastImg as HTMLElement).parentNode;
