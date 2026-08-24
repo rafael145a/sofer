@@ -171,8 +171,8 @@ inlinam o CSS real do app):
 
 - `packages/export-pdf/src/html.ts:498` (`baseStylesheet`) — `"Arial"` → stack
   da Verdana.
-- `apps/playground/src/styles.css:171` + `@font-face` das 4 faces no playground,
-  para dar para testar clicando.
+- `apps/playground/src/styles.css:171` — `"Verdana", sans-serif`, **sem
+  `@font-face`**. Ver a restrição de licença abaixo.
 - Comentários desatualizados: `import-docx/src/runs.ts:133`,
   `react/src/htmlToSlice.ts:37` e `:764`, `react/src/Toolbar.tsx:23`.
 
@@ -194,6 +194,22 @@ máquina do professor**, que pode ser uma versão diferente da do kit MyFonts qu
 o editor e o PDF usam. Divergência esperada é pequena (as duas são a Verdana da
 Microsoft) e menor que a de hoje, mas o DOCX segue sendo o caminho de menor
 garantia dos três — ele nunca embute a fonte, só a nomeia.
+
+**Restrição de licença: os arquivos da Verdana NÃO entram neste repositório.**
+`editor-monorepo` é o `github.com/rafael145a/sofer`, e ele é **público**.
+Commitar os `.woff2` licenciados ali é redistribuição — o próprio aviso do kit
+diz que "all other parties are explicitly restricted from using the Licensed
+Webfont(s)". Os outros três repos (`portal2-next`, `portal-professores`,
+`api-portal`) são GitLab privado; lá os binários podem entrar.
+
+Consequência prática: o playground usa a **Verdana instalada no sistema**
+(presente por padrão em macOS e Windows, que são as máquinas de dev) via
+`font-family: "Verdana", sans-serif`, sem `@font-face`. Isso é suficiente para
+testar comportamento — digitar, negrito, tabela, quebra de página — mas o
+playground **deixa de ser referência de fidelidade métrica**, porque a Verdana
+do sistema pode ser de versão diferente da do kit. Registrar isso em comentário
+no `styles.css`. Verificação de fidelidade acontece no `portal2-next`, que serve
+os bytes do kit.
 
 **Não mexer:** `renderInline.tsx:310` continua emitindo `font-family` quando a
 marca existe, e `renderInline.test.tsx:52` continua passando — testa o
@@ -272,9 +288,16 @@ guarda de tamanho).
 
 Duas travas, ambas baratas:
 
-1. **`dryRun` primeiro.** O helper entra em produção com a contagem antes da
-   escrita. Rodar `dryRun` contra provas reais e conferir os números **antes** de
-   ligar a escrita na abertura. Não ligar as duas coisas no mesmo deploy.
+1. **`dryRun` no ambiente de teste, não em produção.** Verificar a contagem
+   contra provas reais no `ubuntu-server` (`/data/projects/saa`, código por
+   rsync — **nunca** com `--delete`) antes de ligar a escrita.
+
+   Isto **não** vira dois deploys de produção, e a razão importa: o CSS da
+   Verdana e a limpeza das marcas têm que chegar **juntos** em produção. Se o
+   CSS for antes, toda prova importada renderiza fonte misturada — trechos
+   importados em Liberation Sans inline sobre um `.ed-root` Verdana — pelo tempo
+   que durar a janela. A separação segura é teste↔produção, não deploy 1↔deploy
+   2 em produção.
 2. **Idempotência observável.** `stripFontFamilyMarks` retorna a contagem e o app
    loga quando `> 0`. Documento já limpo não abre transação, então não gera
    update, não dispara autosave e não regrava snapshot. É isso que garante que
@@ -321,6 +344,9 @@ conferir a cláusula no contrato da MyFonts. Não é bloqueio técnico.
 
 - **Unitário, `core`:** `stripFontFamilyMarks` limpa delta de bloco e de célula;
   é idempotente; não abre transação quando não há marca.
+- **Unitário, `export-docx`:** `docx.test.ts` — os runs saem com `font: "Verdana"`
+  em parágrafo, heading, blockquote e célula de tabela; code block continua
+  Consolas.
 - **Regressão, `api-portal`:** `pdf-export.service.spec.ts` — snapshot em formato
   legado continua resolvendo Liberation Sans; snapshot novo resolve Verdana;
   `getFontFaceCSS()` emite as duas famílias.
@@ -348,4 +374,6 @@ conferir a cláusula no contrato da MyFonts. Não é bloqueio técnico.
 - `docs/ONBOARDING.md:78-79` — diz Arial; produção é Liberation Sans desde junho
   e passa a ser Verdana. Registrar **por que** a fonte agora é só CSS: essa é a
   lição durável do fóssil do `forceArialOnImport`.
-- Memória `feedback_arial_only.md` — mesma correção.
+- Memória `feedback_arial_only.md` — **já corrigida em 24/08/2026**, antes da
+  implementação, porque estava ativamente errada e enganaria a próxima sessão do
+  mesmo jeito que o ONBOARDING enganou esta.
