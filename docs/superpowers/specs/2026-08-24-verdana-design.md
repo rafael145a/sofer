@@ -123,19 +123,46 @@ modelo. Três consequências que estruturam o resto:
 `FONT_FAMILIES`. `FONT_FAMILIES` é local do módulo, não exportada: não é quebra
 de API pública.
 
-**`packages/core`** — novo helper exportado:
+O comentário em `:23` diz que o dropdown foi **mantido de propósito** para
+"manter o UI de tamanho/cor balanceado". Remover continua certo, mas o motivo do
+autor original não evapora: conferir visualmente como a barra fica sem aquele
+`<select>` e, se desbalancear, decidir entre um rótulo estático ou aceitar o
+reflow. Decisão a tomar olhando, não no papel.
+
+**`packages/core`** — novo helper exportado. A assinatura sai da representação
+real, verificada: o delta **não** é array de ops no Y.js, é `Y.Text` com
+atributos de formatação. Bloco é `Y.Map` com `"text"` → `Y.Text`
+(`document.ts:130`); tabela tem `"cells"` → `Y.Array<Y.Map>`, cada célula com seu
+`Y.Text` (`document.ts:169,181`). Remoção de marca já tem padrão no repo:
+`yText.format(inicio, len, { [nome]: null })` (`commands.ts:329`).
 
 ```ts
-/** Remove toda marca `fontFamily` do documento. A fonte é do CSS (`.ed-root`),
- *  nunca do modelo. Idempotente: não abre transação se não houver o que limpar.
- *  Retorna quantas ops foram limpas. */
-export function stripFontFamilyMarks(doc: Y.Doc): number
+/** Remove toda marca `fontFamily` do documento. A fonte vem do CSS (`.ed-root`),
+ *  nunca do modelo.
+ *
+ *  Varre cada `Y.Text` (bloco e célula de tabela), lê `toDelta()`, e para cada
+ *  run que carregue `fontFamily` chama `format(i, len, { fontFamily: null })`.
+ *
+ *  Idempotente: conta primeiro e só abre transação se houver o que limpar.
+ *  Retorna o número de runs limpos — 0 significa nenhuma escrita no Y.Doc.
+ *
+ *  `dryRun: true` conta sem escrever. */
+export function stripFontFamilyMarks(
+  doc: EditorDocument,
+  opts?: { dryRun?: boolean },
+): number
 ```
 
+Recebe `EditorDocument`, não `Y.Doc` cru — é o que expõe `blockCount()`,
+`getBlockText()`, `getCells()`, `getCellText()`.
+
+A transação usa origin próprio (`"migration"`), seguindo a convenção de
+`"pageSettings"` e `"import"` (`document.ts:106`): origens que o `UndoManager`
+**não** rastreia. Sem isso, o primeiro Ctrl+Z do professor desfaz a migração em
+vez da edição dele.
+
 Remove **todas** as marcas `fontFamily`, não só as de valor conhecido: com o
-dropdown fora, nenhuma marca legítima pode existir. Precisa cobrir `delta` de
-bloco e `delta` de célula de tabela — foi assim que `forceArialOnImport`
-carimbou (`index.tsx:85-96`).
+dropdown fora, nenhuma marca legítima pode existir.
 
 **Coerência, sem efeito em produção** (verificado: `documentToHtml` só é chamado
 por `apps/playground/src/App.tsx:50`; produção usa apenas
@@ -203,7 +230,9 @@ backend-only.
 ### 3. `portal2-next` e `frequencia-ocorrencia` — idênticos
 
 **`public/assets/fonts/`** — adicionar `Verdana-{Regular,Bold,Italic,BoldItalic}`
-em WOFF2, com WOFF como fallback. **Manter** os arquivos da Liberation Sans.
+em WOFF2, com WOFF como fallback. **Manter** os arquivos da Liberation Sans: são
+inertes depois que o CSS deixa de referenciá-los, e apagá-los não ganha nada que
+justifique o risco de algum caminho não mapeado ainda pedi-los.
 
 **`sofer-editor.css`** — os 4 `@font-face` reescritos numa **única família
 `"Verdana"`** com descritores `font-weight`/`font-style`:
@@ -230,8 +259,26 @@ sans-serif`. Caminhos das URLs diferem entre os apps: `/portal2/assets/fonts/`
 no portal2-next, `/assets/fonts/` no frequencia-ocorrencia.
 
 **`index.tsx`** — deletar `ARIAL_FONT` (`:78`), `forceArialOnImport` (`:84-98`) e
-a chamada (`:763`). Chamar `stripFontFamilyMarks(ydoc)` uma vez, depois de
+a chamada (`:763`). Chamar `stripFontFamilyMarks(editorDoc)` uma vez, depois de
 `synced` e antes de armar o autosave.
+
+### Contenção da migração — ela é destrutiva
+
+A migração roda **na abertura do documento**, muta o `Y.Doc` e o Hocuspocus
+persiste. Sem contenção, um bug aqui não é falha visual: é conteúdo de prova
+corrompido que sincroniza antes de alguém perceber. O repo já trata operações
+destrutivas de Y.js como classe à parte (o `clear+push` do import tem lock e
+guarda de tamanho).
+
+Duas travas, ambas baratas:
+
+1. **`dryRun` primeiro.** O helper entra em produção com a contagem antes da
+   escrita. Rodar `dryRun` contra provas reais e conferir os números **antes** de
+   ligar a escrita na abertura. Não ligar as duas coisas no mesmo deploy.
+2. **Idempotência observável.** `stripFontFamilyMarks` retorna a contagem e o app
+   loga quando `> 0`. Documento já limpo não abre transação, então não gera
+   update, não dispara autosave e não regrava snapshot. É isso que garante que
+   reabrir uma prova pela segunda vez não faça nada.
 
 ## Ordem de implantação
 
@@ -248,6 +295,12 @@ a regra do "PDF do servidor sem fallback" existe para impedir.
 
 Lembrete de release: a lista de pacotes é fixa dentro do `publish.yml` e ele pula
 quem já tem a versão no npm.
+
+**`frequencia-ocorrencia` não tem gate de tipo nenhum no CI.** Esta mudança toca
+o `index.tsx` dele duas vezes — remove `forceArialOnImport` e adiciona import
+novo de `@sofereditor/core`. Erro de tipo lá só aparece em runtime, na frente do
+professor. Rodar `tsc --noEmit` **localmente** nesse app é passo obrigatório da
+implantação, não opcional.
 
 ## Consequências que o usuário precisa aceitar
 
