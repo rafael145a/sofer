@@ -150,6 +150,20 @@ function isPhantomEmbed(n: Node): boolean {
   );
 }
 
+/**
+ * `true` for a `<li>` of célula-lista that is NOT the first item of the list.
+ *
+ * The cell is a plain `Y.Text`: `"um\ndois"` becomes two `<li>`, and the `\n`
+ * disappears from the DOM's text. Every `<li>` from the second on therefore
+ * consumes one character of the model that has no corresponding DOM text —
+ * the same situation as embeds, handled the same way in both directions.
+ */
+function isCellLineBoundary(n: Node): boolean {
+  if (n.nodeType !== Node.ELEMENT_NODE) return false;
+  const line = (n as HTMLElement).dataset.cellLine;
+  return line != null && Number(line) > 0;
+}
+
 /** Index of `n` within its parent's `childNodes`. */
 function indexInParent(n: Node): number {
   const parent = n.parentNode;
@@ -222,6 +236,7 @@ export function textOffsetWithin(
     // Float-wrap anchor `<img>` is rendered at the block start as a pure
     // visual; its model position lives in the phantom span downstream.
     if (isImgEmbed(el) && isWrapAnchorImg(el)) return;
+    if (isCellLineBoundary(el)) offset += 1;
     if (isImgEmbed(el) || isPhantomEmbed(el)) {
       offset += 1;
       return;
@@ -326,6 +341,7 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   let remaining = Math.max(0, pos.offset - containerStart);
   let result: DomPoint | null = null;
   let lastImg: HTMLElement | null = null;
+  let lastBoundary: HTMLElement | null = null;
   let lastText: Text | null = null;
 
   function visit(n: Node): void {
@@ -338,6 +354,7 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
       }
       remaining -= len;
       lastImg = null;
+      lastBoundary = null;
       lastText = n as Text;
       return;
     }
@@ -346,6 +363,26 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     if (isRejectedSubtree(el, container!)) return;
     // Skip the float-wrap anchor — its slot in the model lives on the phantom.
     if (isImgEmbed(el) && isWrapAnchorImg(el)) return;
+    // Mirrors the embed guard directly below: a `<li>` boundary consumes one
+    // model char that has no DOM text. When `remaining` is already exhausted
+    // right as we reach the boundary (e.g. the line before it was empty), the
+    // point resolves BEFORE the boundary `<li>` — same as landing on an
+    // embed at `remaining === 0` — instead of a naked decrement running
+    // `remaining` negative, which is unreachable when every line before the
+    // last is non-empty (the brief's arithmetic table) but real for an empty
+    // leading/only line, e.g. `"\na"` or `"\n"`.
+    if (isCellLineBoundary(el)) {
+      if (remaining === 0) {
+        const parent = el.parentNode;
+        if (parent) {
+          result = { node: parent, offset: indexInParent(el) };
+          return;
+        }
+      }
+      remaining -= 1;
+      lastBoundary = el;
+      lastImg = null;
+    }
     if (isImgEmbed(el) || isPhantomEmbed(el)) {
       if (remaining === 0) {
         const parent = el.parentNode;
@@ -356,6 +393,7 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
       }
       remaining -= 1;
       lastImg = el;
+      lastBoundary = null;
       return;
     }
     for (const child of Array.from(el.childNodes)) {
@@ -368,7 +406,15 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   if (result) return result;
 
   // Walked the whole container without consuming `remaining` — caret lands
-  // just AFTER the last embed if it was the last visited node.
+  // just AFTER a trailing boundary/embed if it was the last node visited.
+  // Boundary checked first: `lastImg`/`lastBoundary` are kept mutually
+  // exclusive above (each setter nulls the other), so at most one of the two
+  // blocks below can fire; the order between them doesn't change behavior,
+  // only which comment reads first.
+  if (lastBoundary && remaining === 0) {
+    const parent = (lastBoundary as HTMLElement).parentNode;
+    if (parent) return { node: parent, offset: indexInParent(lastBoundary) + 1 };
+  }
   if (lastImg && remaining === 0) {
     const parent = (lastImg as HTMLElement).parentNode;
     if (parent) return { node: parent, offset: indexInParent(lastImg) + 1 };
