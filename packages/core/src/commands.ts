@@ -733,7 +733,22 @@ function mergeWithPrevious(ctx: CommandContext, blockIndex: number): void {
 export function toggleList(ctx: CommandContext, kind: ListKind): void {
   transact(ctx.doc, () => {
     const sel = ctx.getSelection();
-    if (sel.anchor.cellIndex != null || sel.focus.cellIndex != null) return;
+    // Dentro de tabela a lista é um atributo da CÉLULA, não um tipo de bloco:
+    // a célula é um Y.Text plano e cada linha separada por `\n` vira um item.
+    // `setCellAttr` já cuida de seleção retangular e de pular célula coberta.
+    if (sel.anchor.cellIndex != null || sel.focus.cellIndex != null) {
+      // Lê pelo owner real: se o foco cair numa célula coberta por span, ela
+      // não guarda `listKind` (só `covered: true`), então ler direto sempre
+      // dá "sem lista" e o toggle nunca desliga. `setCellAttr` já escreve no
+      // owner via `realCellIndex`; a leitura precisa do mesmo redirecionamento.
+      const real =
+        sel.focus.cellIndex != null
+          ? ctx.doc.realCellIndex(sel.focus.blockIndex, sel.focus.cellIndex)
+          : undefined;
+      const atual = real != null ? ctx.doc.getCellAttrs(sel.focus.blockIndex, real).listKind : undefined;
+      setCellAttr(ctx, "listKind", atual === kind ? null : kind);
+      return;
+    }
     const indices = selectedBlockIndices(sel, ctx.doc.blockCount());
     const allMatching = indices.every((i) => {
       const block = ctx.doc.getBlock(i);
@@ -760,6 +775,9 @@ export function toggleList(ctx: CommandContext, kind: ListKind): void {
 export function indentList(ctx: CommandContext): void {
   transact(ctx.doc, () => {
     const sel = ctx.getSelection();
+    // Recuo não existe dentro de célula: `Y.Text` plano não guarda atributo por
+    // linha, então o nível seria da célula inteira e não do item. Aninhamento em
+    // célula exigiria blocos de verdade dentro dela — ver o spec de 2026-08-24.
     if (sel.anchor.cellIndex != null || sel.focus.cellIndex != null) return;
     const indices = selectedBlockIndices(sel, ctx.doc.blockCount());
     for (const i of indices) {
@@ -781,6 +799,9 @@ export function indentList(ctx: CommandContext): void {
 export function dedentList(ctx: CommandContext): void {
   transact(ctx.doc, () => {
     const sel = ctx.getSelection();
+    // Recuo não existe dentro de célula: `Y.Text` plano não guarda atributo por
+    // linha, então o nível seria da célula inteira e não do item. Aninhamento em
+    // célula exigiria blocos de verdade dentro dela — ver o spec de 2026-08-24.
     if (sel.anchor.cellIndex != null || sel.focus.cellIndex != null) return;
     const indices = selectedBlockIndices(sel, ctx.doc.blockCount());
     for (const i of indices) {
