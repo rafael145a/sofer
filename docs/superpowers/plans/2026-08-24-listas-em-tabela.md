@@ -508,8 +508,19 @@ trás, em silêncio. Imagem dentro de célula é feature suportada hoje
 
 A guarda precisa triar pelo estado que ela já carrega, do mesmo jeito que o
 fallback de saída faz: se houver um `lastImg`, o ponto é logo **depois** dele
-(`(lastImg.parentNode, indexInParent(lastImg) + 1)`); só quando não houver é que
-a linha anterior é de fato vazia e o ponto é o começo dela.
+(`(lastImg.parentNode, indexInParent(lastImg) + 1)`); senão, o ponto é o começo
+da linha anterior, que o walk já registrou em `lastBoundary`.
+
+**Prefira `lastBoundary` a `el.previousElementSibling`.** As duas concordam em
+todo DOM que o render emite hoje, mas irmão-do-DOM é a topologia, e `lastBoundary`
+é o estado do walk. Este trecho já produziu dois bugs de cursor seguidos, os dois
+por inferir posição do modelo a partir de como o DOM está montado em vez do que o
+walker já sabe. A forma que não reensina o vício é `lastBoundary ?? el.previousElementSibling`.
+
+Pela mesma razão, o clamp de overflow na cauda de `locatePoint` deve preferir o
+marcador de walk mais recente (`lastImg`/`lastBoundary`) a `lastText`
+**independentemente de `remaining`** — um gate `remaining === 0` ali descarta um
+`lastImg` válido e pousa o caret antes da imagem.
 
 **Em `textOffsetWithin`** a contagem precisa ficar **acima** do check
 `n === target`, não junto do bloco de embed. Se ficar abaixo, uma âncora cujo
