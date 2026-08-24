@@ -173,8 +173,10 @@ main {
      Windows já trazem Verdana instalada, o que basta para testar comportamento
      (digitar, negrito, tabela, quebra de página).
      ATENÇÃO: por isso o playground NÃO é referência de fidelidade métrica — a
-     Verdana do sistema pode ser de versão diferente da do kit. Verificação de
-     fidelidade acontece no portal2-next, que serve os bytes do kit. */
+     Verdana do sistema pode ser de versão diferente da do kit. Fidelidade
+     métrica não se verifica aqui — quem tiver que validar isso deve olhar
+     para os apps consumidores, que são o lugar certo para servir a fonte
+     licenciada do kit via @font-face. */
   font-family: "Verdana", sans-serif;
   font-size: 11pt;
   line-height: 1.5;
