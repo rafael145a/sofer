@@ -84,6 +84,25 @@ jobs:
           set -euo pipefail
           unset NODE_AUTH_TOKEN || true
           : > /tmp/sofer-published-tags
+          # ATENÇÃO ao acrescentar um nome NOVO nesta lista.
+          #
+          # O Trusted Publisher do npm é configurado POR PACOTE, na página de
+          # settings daquele pacote. Um nome que nunca foi publicado não tem
+          # essa configuração, então o OIDC não tem contra o que casar e o
+          # publish falha com ENEEDAUTH — e como este loop é sequencial, ele
+          # PARA A FILA ali, deixando a release pela metade.
+          #
+          # Aconteceu em 24/08/2026 com `math`: `core` publicou por OIDC na
+          # mesma execução e `math` derrubou o job, deixando `core@0.9.0` no
+          # registry sozinho enquanto os outros cinco ficaram em 0.7.0.
+          #
+          # Receita para nome novo:
+          #   1. `pnpm pack` no pacote (npm pack NÃO aplica publishConfig)
+          #   2. publicar uma vez à mão, com token do tipo Automation — token
+          #      "Publish" e granular batem em EOTP, porque o npm restringiu o
+          #      bypass de 2FA para publicação direta
+          #   3. cadastrar o Trusted Publisher do pacote recém-criado
+          #   4. só então acrescentar aqui
           PKGS="core math react collab import-docx export-docx export-pdf"
           for pkg in $PKGS; do
             cd "packages/$pkg"
