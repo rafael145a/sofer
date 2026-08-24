@@ -734,13 +734,21 @@ describe("fonte padrão", () => {
     expect(xml).toContain('w:ascii="Consolas"');
   });
 
-  it("legenda de imagem e célula vazia de tabela não caem no default Calibri da biblioteca docx", async () => {
+  it("legenda de imagem, célula vazia de tabela e parágrafo com delta vazio não caem no default Calibri da biblioteca docx", async () => {
     // new Document({...}) não declara styles/docDefaults — qualquer TextRun
     // sem `font` explícito herda o default da lib `docx`, que é Calibri.
     // Sob Arial isso era invisível (Arial e Liberation Sans convergem);
     // sob Verdana, que não tem clone métrico, um Calibri escondido muda
     // largura de texto visível (legenda) e altura de parágrafo vazio
-    // (célula de tabela), o que muda paginação.
+    // (célula de tabela, parágrafo com delta: []), o que muda paginação.
+    //
+    // IMPORTANTE: "Calibri" nunca aparece escrito no XML — é o fallback
+    // IMPLÍCITO do Word quando `<w:r>` não tem `<w:rPr><w:rFonts .../>`.
+    // Por isso `expect(xml).not.toContain('w:ascii="Calibri"')` é uma
+    // asserção vazia por construção: ela passaria mesmo com o bug presente
+    // (confirmado empiricamente — ver task-3-report.md, rodada 2). A prova
+    // real do invariante é: todo `<w:r>` de texto no documento declara
+    // `<w:rFonts>` explicitamente. Um run sem `w:rFonts` É o próprio bug.
     const doc: LegacySerializedDocument = [
       {
         type: "paragraph",
@@ -759,6 +767,14 @@ describe("fonte padrão", () => {
         attrs: {},
       },
       {
+        // delta vazio → cai no fallback `new TextRun({ text: "", font: defaults.font })`
+        // de deltaToRuns (o primeiro `if (delta.length === 0) return [...]`).
+        type: "paragraph",
+        text: "",
+        delta: [],
+        attrs: {},
+      },
+      {
         // cols: 2 mas só 1 cell fornecida → a segunda vira emptyCell()
         type: "table",
         text: "",
@@ -770,10 +786,23 @@ describe("fonte padrão", () => {
     const { buffer } = await documentToDocxBuffer(doc);
     const xml = await documentXml(buffer);
 
-    expect(xml).not.toContain('w:ascii="Calibri"');
+    // Todo <w:r>...</w:r> do documento — w:r nunca aninha outro w:r, então
+    // um regex não-guloso captura cada run isolado corretamente.
+    const runs = xml.match(/<w:r>[\s\S]*?<\/w:r>/g) ?? [];
+    expect(runs.length).toBeGreaterThan(0);
 
-    // A legenda (texto visível) precisa sair com a fonte do corpo, não com
-    // o default da lib — mede o run específico, não o documento inteiro.
+    for (const run of runs) {
+      // Único tipo de run legítimo sem w:rFonts: o run de imagem
+      // (<w:drawing>). Uma figura não renderiza glifo nenhum — não há
+      // "fonte da imagem" — então ImageRun da lib docx não emite w:rPr.
+      // Todo outro run carrega texto (mesmo que vazio, "" ou espaço) e
+      // precisa de w:rFonts explícito, senão o Word usa Calibri.
+      if (run.includes("<w:drawing>")) continue;
+      expect(run).toContain("<w:rFonts");
+    }
+
+    // A legenda (texto visível) precisa sair com a fonte do corpo
+    // especificamente — mede o run certo, não o documento inteiro.
     const captionIdx = xml.indexOf(">legenda<");
     expect(captionIdx).toBeGreaterThan(-1);
     const runStart = xml.lastIndexOf("<w:r>", captionIdx);
