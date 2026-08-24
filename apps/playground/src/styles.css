@@ -168,7 +168,14 @@ main {
 
 .ed-root {
   outline: none;
-  font-family: "Arial", "Helvetica", sans-serif;
+  /* Verdana do SISTEMA, sem @font-face de propósito: este repo é público e os
+     arquivos licenciados do kit MyFonts não podem ser commitados aqui. macOS e
+     Windows já trazem Verdana instalada, o que basta para testar comportamento
+     (digitar, negrito, tabela, quebra de página).
+     ATENÇÃO: por isso o playground NÃO é referência de fidelidade métrica — a
+     Verdana do sistema pode ser de versão diferente da do kit. Verificação de
+     fidelidade acontece no portal2-next, que serve os bytes do kit. */
+  font-family: "Verdana", sans-serif;
   font-size: 11pt;
   line-height: 1.5;
   color: var(--ink);

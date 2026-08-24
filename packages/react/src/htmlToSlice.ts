@@ -34,10 +34,11 @@ import { MAX_INSERT_WIDTH } from "./imageConstraints";
  *    com o marcador (número/símbolo) como texto literal dentro de um span
  *    `mso-list:Ignore`. `parseWordListLevel` + a exclusão desse span tratam isso.
  *
- * fontFamily é deliberadamente NUNCA emitida: a escola padroniza Arial e cada
- * documento tem sua própria tipografia (mesma decisão de `import-docx`, que
- * descarta `w:rFonts`). fontSize É preservado (ver `parseFontSizePt`): o
- * modelo já suporta a mark, a barra já tem controle de tamanho, e descartar o
+ * fontFamily é deliberadamente NUNCA emitida: a escola padroniza uma fonte só,
+ * definida no CSS (`.ed-root`) e cada documento tem sua própria tipografia
+ * (mesma decisão de `import-docx`, que descarta `w:rFonts`). fontSize É
+ * preservado (ver `parseFontSizePt`): o modelo já suporta a mark, a barra já
+ * tem controle de tamanho, e descartar o
  * tamanho perdia informação real (título de 37.5pt colado do Google Docs saía
  * do tamanho do corpo). Unidades que dependem do contexto de herança do
  * documento de origem (em/rem/%/larger/smaller/medium) não são resolvíveis
@@ -761,7 +762,8 @@ function parseStyle(styleAttr: string | null): Record<string, string> {
  * weight:normal">` do Google Docs de deixar o documento inteiro em negrito.
  *
  * `fontFamily` é intencionalmente NUNCA lida daqui — descartada sempre, junto
- * com `w:rFonts` no import-docx, pelo mesmo motivo (Arial-only). `fontSize` É
+ * com `w:rFonts` no import-docx, pelo mesmo motivo (a escola padroniza uma
+ * fonte só, definida no CSS (`.ed-root`)). `fontSize` É
  * lida e normalizada para `pt` via `parseFontSizePt` — ver o comentário no
  * topo do arquivo.
  */

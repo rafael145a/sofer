@@ -130,9 +130,10 @@ function runMarks(rPr: OoxmlNode | undefined): MarkAttrs {
         if (css) m.highlight = css;
         break;
       }
-      // w:rFonts intentionally ignored: school standard is Arial for all
-      // exams. Any font declared in the .docx is dropped on import so the
-      // imported doc inherits Arial from `.ed-root` / PDF base stylesheet.
+      // w:rFonts intentionally ignored: a escola padroniza UMA fonte para todas
+      // as provas (Verdana desde 08/2026; antes Liberation Sans, antes Arial) e
+      // ela mora no CSS, nunca no modelo. Qualquer fonte declarada no .docx é
+      // descartada; o conteúdo herda do `.ed-root`.
       case "w:sz": {
         const halfPts = Number.parseFloat(attr(child, "w:val") ?? "");
         const css = halfPointsToCssPt(halfPts);

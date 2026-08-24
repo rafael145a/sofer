@@ -495,7 +495,7 @@ html, body { margin: 0; padding: 0; background: white; color: #1a1a1f; }
    bgColor da tabela de pontuação saíam brancas no PDF. */
 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 body {
-  font-family: "Arial", "Helvetica", sans-serif;
+  font-family: "Verdana", sans-serif;
   font-size: 11pt;
   line-height: 1.5;
 }
