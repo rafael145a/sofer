@@ -207,12 +207,20 @@ A medição de linha da tabela já lê o DOM real (`usePagination.ts:557`,
 `tr.getBoundingClientRect().height`), então se ajusta sozinha — mas provas
 existentes com tabela alta podem repaginar. Verificar antes de fechar.
 
-**Colisão de significado do `\n`.** Fora da tabela, `Shift+Enter` insere `\n`
-como quebra suave **dentro** de um item (`Editor.tsx:573-580`). Dentro de uma
-célula-lista, `\n` passa a significar **novo item**. Os dois sentidos coexistem
-no mesmo caractere. Consequência prática: dentro de célula-lista não há como
-fazer quebra suave dentro de um item. Aceito na v1; registrar em comentário no
-`NodeView` para o próximo leitor não achar que é bug.
+**Significado do `\n` — menor do que parece.** Fora da tabela, `Shift+Enter`
+insere `\n` como quebra suave **dentro** de um item (`Editor.tsx:573-580`),
+enquanto `Enter` divide o bloco. **Dentro de célula, os dois já fazem a mesma
+coisa hoje** — verificado clicando: `Enter` e `Shift+Enter` inserem `\n` e não
+dividem nada.
+
+Duas consequências, ambas boas:
+
+1. **A feature não precisa de comando novo.** O professor já consegue criar as
+   linhas que virarão itens, com a tecla que ele já usa.
+2. **Nada se perde.** Dentro de célula nunca houve distinção entre quebra suave
+   e novo item, então célula-lista não tira nada de ninguém. A colisão é só
+   conceitual, entre o `\n` de célula-lista e o de lista de bloco — vale um
+   comentário no `NodeView`, não uma ressalva de produto.
 
 ## Fora de escopo
 
@@ -243,7 +251,8 @@ fazer quebra suave dentro de um item. Aceito na v1; registrar em comentário no
   e fim de item, e travessia de fronteira. Simetria entre `locatePoint` e
   `textOffsetWithin` verificada nos dois sentidos.
 - **Manual, clicando de verdade** (não disparar evento por script — pula o
-  caminho que quebra): inserir tabela, digitar várias linhas numa célula,
+  caminho que quebra): inserir tabela, digitar várias linhas numa célula com
+  `Enter` (e conferir que `Enter` segue inserindo `\n` sem dividir a célula),
   clicar lista, conferir marcadores; posicionar o cursor no meio de um item e
   digitar; importar o .docx de teste; Baixar PDF; exportar DOCX e abrir no Word.
 - **Comparar os três caminhos** — editor, PDF e DOCX — antes de declarar pronto.
