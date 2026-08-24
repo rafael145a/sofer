@@ -20,10 +20,6 @@ import type {
   MarkName,
 } from "@sofereditor/core";
 
-// School standard: Arial only. The dropdown is kept (instead of removed) so
-// that the surrounding font-size / color UI stays balanced and future font
-// additions are a one-liner.
-const FONT_FAMILIES = ["Arial"];
 const FONT_SIZES = ["8pt", "10pt", "11pt", "12pt", "14pt", "16pt", "18pt", "24pt", "32pt", "48pt"];
 
 interface BlockOption {
@@ -137,12 +133,6 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
     setMark("highlight", e.target.value);
   };
 
-  const onFontFamilyChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const v = e.target.value;
-    if (v === "") removeMark("fontFamily");
-    else setMark("fontFamily", v);
-  };
-
   const onFontSizeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value;
     if (v === "") removeMark("fontSize");
@@ -216,7 +206,6 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
   const colorValue = typeof active.color === "string" ? active.color : "#000000";
   // Amarelo clássico de marca-texto como padrão do picker quando nada está marcado.
   const highlightValue = typeof active.highlight === "string" ? active.highlight : "#fff176";
-  const fontFamilyValue = typeof active.fontFamily === "string" ? active.fontFamily : "";
   const fontSizeValue = typeof active.fontSize === "string" ? active.fontSize : "";
   const blockValue = blockSelectValue(blockType, blockLevel);
 
@@ -328,18 +317,6 @@ export function Toolbar({ className }: ToolbarProps): JSX.Element {
       </Group>
 
       <Group>
-        <select
-          className="ed-toolbar-select"
-          value={fontFamilyValue}
-          onChange={onFontFamilyChange}
-          onMouseDown={stop}
-          aria-label="Família da fonte"
-        >
-          <option value="">Fonte…</option>
-          {FONT_FAMILIES.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
         <select
           className="ed-toolbar-select"
           value={fontSizeValue}
