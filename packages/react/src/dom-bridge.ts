@@ -374,67 +374,20 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     if (isRejectedSubtree(el, container!)) return;
     // Skip the float-wrap anchor — its slot in the model lives on the phantom.
     if (isImgEmbed(el) && isWrapAnchorImg(el)) return;
-    // Mirrors the embed guard directly below: a `<li>` boundary consumes one
-    // model char that has no DOM text. When `remaining` is already exhausted
-    // right as we reach the boundary (e.g. the line before it was empty), a
-    // naked decrement would run `remaining` negative — unreachable when
-    // every line before the last is non-empty (the brief's arithmetic
-    // table) but real for an empty leading/only line, e.g. `"\na"` or
-    // `"\n"`.
+    // A `<li>` boundary (`data-cell-line > 0`) consumes one model char with
+    // no DOM text. `remaining === 0` entering it resolves now:
+    //  - previous line ended in an embed: resolve right after it, via
+    //    `lastImg`.
+    //  - previous line was empty: resolve at its start, via `lastBoundary`,
+    //    falling back to `previousElementSibling` when `lastBoundary` is
+    //    null.
+    // See domBridgeCelulaLista.test.ts for the covered cases ("\na", "\n",
+    // "a\n", and the lines ending in an embed).
     //
-    // UNLIKE the embed case, the resolved point is NOT `(parent, index)`.
-    // An embed is inline — `(parent, indexOfImg)` visually IS "end of the
-    // text right before it", so pointing there is correct. A `<li>` is a
-    // block boundary: `(ul, indexOfThisLi)` is a position BETWEEN list
-    // items, which no caret can render inside — the actual point the model
-    // offset addresses is the START of the PREVIOUS line, IF that line is
-    // truly empty.
-    //
-    // It might not be: `remaining === 0` here also happens when the
-    // previous line's last content was an embed (image or wrap-float
-    // phantom) — the embed branch below already decremented `remaining` to
-    // 0 without resolving (it only resolves inline when it's itself the
-    // target of `remaining`), so the boundary sees the same `remaining ===
-    // 0` a truly-empty previous line would produce. Inferring the point
-    // from DOM sibling topology (`previousElementSibling`, offset 0) can't
-    // tell the two apart — it always picks "start of previous line", wrong
-    // when that line ends in an embed. The walk's own state can: `lastImg`
-    // is non-null when an embed was the most recent thing the walk
-    // consumed without something after it resetting it — the embed branch
-    // below nulls `lastBoundary` whenever it sets `lastImg`, and this
-    // branch nulls `lastImg` whenever it sets `lastBoundary`, so the two
-    // ARE mutually exclusive with EACH OTHER. (Not a strict "iff": a
-    // zero-length text node also nulls `lastImg` on the way through,
-    // despite "consuming" nothing — benign here since it still correctly
-    // means "an embed wasn't the most recent thing", just not as tight a
-    // guarantee as the wording might suggest. `lastText` is a separate
-    // story — see the tail fallback far below for why it can't be trusted
-    // here.) Checking `lastImg` first routes to "right after the embed" —
-    // the same resolution the embed's own trailing-fallback below already
-    // uses — before falling back to "start of previous line" for the
-    // genuinely-empty case.
-    //
-    // That fallback should ALSO come from walk state over DOM topology
-    // when it can: `lastBoundary` is what the PREVIOUS boundary's own
-    // `remaining -= 1` actually recorded — the fact this guard is trying
-    // to recover — so prefer it over re-deriving the same fact from
-    // `previousElementSibling`. But walk state doesn't always have an
-    // answer: `lastBoundary` is `null` both when the previous LINE is
-    // `<li data-cell-line="0">` (never itself a "boundary", so it never
-    // sets `lastBoundary`) AND when the previous boundary line lives in a
-    // DIFFERENT sibling list element than this one (e.g. two adjacent
-    // `<ul>`/`<ol>` per cell instead of one) — the walk exits that
-    // sibling's subtree without `lastBoundary` surviving into this one.
-    // `previousElementSibling` covers the first case (a real DOM sibling)
-    // but NOT the second (no DOM sibling relationship across separate
-    // lists) — there, neither source has an answer, `prevLine` is falsy,
-    // and the guard falls through to the naked `remaining -= 1` below,
-    // which CAN go negative and resolve to an invalid point. Confirmed
-    // with two sibling `<ul>`/`<ol>` per cell and model `"\nb"`, offset 0:
-    // resolves to `(text "b", -1)`. This is a known, bounded gap, not
-    // silently "covered" — it stays closed only as long as each cell
-    // renders its lines inside a single `<ul>` (the Task 4 contract);
-    // it would need to be reopened if that ever changes.
+    // Known gap: with multiple sibling `<ul>`/`<ol>` in one cell, neither
+    // `lastBoundary` nor `previousElementSibling` has an answer and the
+    // resolved offset is invalid. Inert while each cell renders its lines
+    // in a single `<ul>` (the Task 4 contract).
     if (isCellLineBoundary(el)) {
       if (remaining === 0) {
         if (lastImg) {
@@ -476,35 +429,11 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   visit(container);
   if (result) return result;
 
-  // Walked the whole container without `visit()` ever resolving `result`.
-  // Two situations land here, and both want the SAME answer — the caret
-  // belongs at the END of whatever the DOM actually has:
-  //
-  //  - `remaining` hit exactly 0 on a trailing boundary whose own content
-  //    had nothing left to absorb it (e.g. the cell ends in "\n") — a
-  //    real, in-range offset that the walk simply never had a text node
-  //    to resolve against. Not an embed: an embed that lands on
-  //    `remaining === 0` resolves INLINE in its own branch above and
-  //    returns immediately, so it never reaches this fallback at all — if
-  //    `lastImg` is set down here, `remaining` is always `> 0`.
-  //  - `remaining` is still > 0: the requested offset overflows what the
-  //    DOM has (the model is transiently AHEAD of the render — e.g.
-  //    insertText commits the new selection one React commit before the
-  //    new text/embed/line lands). Also wants the true end of the DOM.
-  //    This is the ONLY way `lastImg` reaches this fallback.
-  //
-  // Both are answered by whichever walk marker was set MOST RECENTLY —
-  // NOT by whether `remaining` happens to be exactly 0. Gating these two
-  // checks on `remaining === 0` used to exclude exactly the overflow case
-  // this fallback exists for: a correctly-set `lastImg`/`lastBoundary`
-  // (describing precisely where the walk ended) got skipped in favor of
-  // `lastText`, which can be STALE. `lastImg`/`lastBoundary` ARE mutually
-  // exclusive with EACH OTHER (each setter nulls the other, see above and
-  // below) — but neither of their branches nulls `lastText`, only the
-  // text branch nulls THEM. So e.g. after `<li>ab<img></li>`,
-  // `lastText="ab"` AND `lastImg=img` are BOTH non-null at once —
-  // `lastText` is trustworthy as "most recent" only when neither of the
-  // other two is set, which is exactly what checking them first encodes.
+  // Walk finished without resolving `result` — clamp to the end of what
+  // the DOM has, preferring `lastBoundary` (inside it, offset 0), then
+  // `lastImg` (right after it), then `lastText` (end of it). See
+  // domBridgeCelulaLista.test.ts ("clamp de overflow...") for the covered
+  // cases: trailing embed, trailing empty line, plain text overflow.
   if (lastBoundary) {
     return { node: lastBoundary, offset: 0 };
   }
@@ -512,13 +441,12 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     const parent = (lastImg as HTMLElement).parentNode;
     if (parent) return { node: parent, offset: indexInParent(lastImg) + 1 };
   }
-  // Neither a boundary nor an embed was the most recent thing consumed —
-  // the last thing really was plain text, so `lastText` is trustworthy
-  // here. Offset overflowed the container's content; clamp to the END of
-  // that text node so the caret stays at the end of the line. Collapsing
-  // to the container's start instead would paint the caret at the start
-  // of the line for one frame before the next commit corrects it (bug #1
-  // flash).
+  // Offset overflowed the container's content (the model selection is
+  // transiently AHEAD of the rendered DOM — insertText commits the new
+  // selection one React commit before the new text). Clamp to the END of the
+  // last text node so the caret stays at the end of the line. Collapsing to
+  // the container's start instead would paint the caret at the start of the
+  // line for one frame before the next commit corrects it (bug #1 flash).
   if (lastText) {
     const t = lastText as Text;
     return { node: t, offset: (t.textContent ?? "").length };
