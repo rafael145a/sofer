@@ -399,27 +399,42 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
     // from DOM sibling topology (`previousElementSibling`, offset 0) can't
     // tell the two apart — it always picks "start of previous line", wrong
     // when that line ends in an embed. The walk's own state can: `lastImg`
-    // is non-null if and only if an embed was the last thing consumed
-    // before reaching this boundary — the embed branch below nulls
-    // `lastBoundary` whenever it sets `lastImg`, and this branch nulls
-    // `lastImg` whenever it sets `lastBoundary`, so the two ARE mutually
-    // exclusive with EACH OTHER. (`lastText` is not part of that pact —
-    // see the tail fallback far below for why it can't be trusted here.)
-    // Checking `lastImg` first routes to "right after the embed" — the
-    // same resolution the embed's own trailing-fallback below already
+    // is non-null when an embed was the most recent thing the walk
+    // consumed without something after it resetting it — the embed branch
+    // below nulls `lastBoundary` whenever it sets `lastImg`, and this
+    // branch nulls `lastImg` whenever it sets `lastBoundary`, so the two
+    // ARE mutually exclusive with EACH OTHER. (Not a strict "iff": a
+    // zero-length text node also nulls `lastImg` on the way through,
+    // despite "consuming" nothing — benign here since it still correctly
+    // means "an embed wasn't the most recent thing", just not as tight a
+    // guarantee as the wording might suggest. `lastText` is a separate
+    // story — see the tail fallback far below for why it can't be trusted
+    // here.) Checking `lastImg` first routes to "right after the embed" —
+    // the same resolution the embed's own trailing-fallback below already
     // uses — before falling back to "start of previous line" for the
     // genuinely-empty case.
     //
-    // That fallback must ALSO come from walk state, not DOM topology:
-    // `previousElementSibling` happens to agree with `lastBoundary` in
-    // every shape the renderer emits today, but that's agreement by
-    // coincidence (single `<ul>` per cell), not by construction.
-    // `lastBoundary` is what the PREVIOUS boundary's own `remaining -= 1`
-    // actually recorded — the fact this guard is trying to recover — so
-    // prefer it. It's `null` only when the previous LINE is `<li
-    // data-cell-line="0">` (never itself a "boundary" — line 0 doesn't
-    // count as one), which is the one case walk state has nothing to say
-    // and the DOM-topology guess is the only source left.
+    // That fallback should ALSO come from walk state over DOM topology
+    // when it can: `lastBoundary` is what the PREVIOUS boundary's own
+    // `remaining -= 1` actually recorded — the fact this guard is trying
+    // to recover — so prefer it over re-deriving the same fact from
+    // `previousElementSibling`. But walk state doesn't always have an
+    // answer: `lastBoundary` is `null` both when the previous LINE is
+    // `<li data-cell-line="0">` (never itself a "boundary", so it never
+    // sets `lastBoundary`) AND when the previous boundary line lives in a
+    // DIFFERENT sibling list element than this one (e.g. two adjacent
+    // `<ul>`/`<ol>` per cell instead of one) — the walk exits that
+    // sibling's subtree without `lastBoundary` surviving into this one.
+    // `previousElementSibling` covers the first case (a real DOM sibling)
+    // but NOT the second (no DOM sibling relationship across separate
+    // lists) — there, neither source has an answer, `prevLine` is falsy,
+    // and the guard falls through to the naked `remaining -= 1` below,
+    // which CAN go negative and resolve to an invalid point. Confirmed
+    // with two sibling `<ul>`/`<ol>` per cell and model `"\nb"`, offset 0:
+    // resolves to `(text "b", -1)`. This is a known, bounded gap, not
+    // silently "covered" — it stays closed only as long as each cell
+    // renders its lines inside a single `<ul>` (the Task 4 contract);
+    // it would need to be reopened if that ever changes.
     if (isCellLineBoundary(el)) {
       if (remaining === 0) {
         if (lastImg) {
@@ -465,15 +480,18 @@ export function locatePoint(root: HTMLElement, pos: Position): DomPoint | null {
   // Two situations land here, and both want the SAME answer — the caret
   // belongs at the END of whatever the DOM actually has:
   //
-  //  - `remaining` hit exactly 0 on a trailing boundary/embed whose own
-  //    content had nothing left to absorb it (e.g. the cell ends in "\n",
-  //    or ends in an embed with nothing after it) — a real, in-range
-  //    offset that the walk simply never had a text node to resolve
-  //    against.
+  //  - `remaining` hit exactly 0 on a trailing boundary whose own content
+  //    had nothing left to absorb it (e.g. the cell ends in "\n") — a
+  //    real, in-range offset that the walk simply never had a text node
+  //    to resolve against. Not an embed: an embed that lands on
+  //    `remaining === 0` resolves INLINE in its own branch above and
+  //    returns immediately, so it never reaches this fallback at all — if
+  //    `lastImg` is set down here, `remaining` is always `> 0`.
   //  - `remaining` is still > 0: the requested offset overflows what the
   //    DOM has (the model is transiently AHEAD of the render — e.g.
   //    insertText commits the new selection one React commit before the
   //    new text/embed/line lands). Also wants the true end of the DOM.
+  //    This is the ONLY way `lastImg` reaches this fallback.
   //
   // Both are answered by whichever walk marker was set MOST RECENTLY —
   // NOT by whether `remaining` happens to be exactly 0. Gating these two
