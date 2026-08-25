@@ -580,6 +580,12 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
   const isListActive = useCallback(
     (kind: ListKind): boolean => {
       const sel = selectionRef.current;
+      // Célula de tabela: o "bloco" ali é sempre "table" (a célula é um
+      // Y.Text plano), então o estado de lista mora em CellAttrs.listKind,
+      // não em BlockAttrs — mesmo padrão de leitura de getAlign/getCellBackground.
+      if (sel.focus.cellIndex != null && doc.isTable(sel.focus.blockIndex)) {
+        return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).listKind === kind;
+      }
       const { start, end } = orderedRange(sel);
       for (let i = start.blockIndex; i <= end.blockIndex; i++) {
         if (doc.getBlockType(i) !== "listItem") return false;
