@@ -202,4 +202,37 @@ describe("export → import round-trip", () => {
     expect(embed.width).toBeGreaterThan(0);
     expect(embed.height).toBeGreaterThan(0);
   });
+
+  // Conserto 3 (revisão final de feat/listas-em-tabela): a branch fez lista
+  // funcionar dentro de célula de tabela (célula é um Y.Text plano com
+  // CellAttrs.listKind; cada linha separada por "\n" vira um <li> na
+  // exportação/importação). Este harness cobre export→import, mas não tinha
+  // nenhum caso de célula-lista — a revisão final confirmou manualmente que
+  // ordered volta ordered, bullet volta bullet, e multilinha SEM lista
+  // preserva "\n" (antes desta branch, "\n" virava espaço na volta).
+  it("célula de tabela com lista: ordered/bullet sobrevivem ao round-trip; multilinha sem lista preserva \\n", async () => {
+    const input: LegacySerializedDocument = [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 3 },
+        cells: [
+          { text: "um\ndois", delta: [{ insert: "um\ndois" }], attrs: { listKind: "ordered" } },
+          { text: "a\nb", delta: [{ insert: "a\nb" }], attrs: { listKind: "bullet" } },
+          { text: "um\ndois", delta: [{ insert: "um\ndois" }], attrs: {} },
+        ],
+      },
+    ];
+    const out = await roundTrip(input);
+    expect(out[0].type).toBe("table");
+    const cells = out[0].cells!;
+    expect(cells[0].attrs.listKind).toBe("ordered");
+    expect(cells[0].text).toBe("um\ndois");
+    expect(cells[1].attrs.listKind).toBe("bullet");
+    expect(cells[1].text).toBe("a\nb");
+    // Sem listKind: multilinha preserva o "\n" — não regride pra "um dois".
+    expect(cells[2].attrs.listKind).toBeUndefined();
+    expect(cells[2].text).toBe("um\ndois");
+  });
 });
