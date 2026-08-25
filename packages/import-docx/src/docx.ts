@@ -44,7 +44,7 @@ export async function docxBlobToDocument(
     if (tag === "w:p") {
       blocks.push(paragraphToBlock(child, ctx, numbering));
     } else if (tag === "w:tbl") {
-      blocks.push(tableToBlock(child, ctx, larguraUtilTwips));
+      blocks.push(tableToBlock(child, ctx, larguraUtilTwips, numbering));
     }
     // w:sectPr already read above; other body-level metadata ignored.
   }

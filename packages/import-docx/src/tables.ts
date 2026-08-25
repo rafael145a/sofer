@@ -2,6 +2,7 @@ import type {
   BlockAttrs,
   CellAttrs,
   DeltaOp,
+  ListKind,
   SerializedBlock,
   SerializedCell,
   TableBorderPreset,
@@ -21,6 +22,7 @@ import {
   tagOf,
   type OoxmlNode,
 } from "./parse-xml";
+import type { NumberingResolver } from "./numbering";
 import { paragraphChildrenToDelta, type RunContext } from "./runs";
 import { docxHexToCssColor, parseIntAttr, twipToMillimeters } from "./units";
 
@@ -39,7 +41,8 @@ import { docxHexToCssColor, parseIntAttr, twipToMillimeters } from "./units";
 export function tableToBlock(
   tbl: OoxmlNode,
   ctx: RunContext,
-  larguraUtilTwips?: number,
+  larguraUtilTwips: number | undefined,
+  numbering: NumberingResolver,
 ): SerializedBlock {
   const tblGrid = findChild(tbl, "w:tblGrid");
   const gridCols = tblGrid ? findChildren(tblGrid, "w:gridCol") : [];
@@ -97,9 +100,10 @@ export function tableToBlock(
       }
 
       // Real cell: build its delta + attrs.
-      const delta = cellChildrenToDelta(tc, ctx);
+      const { delta, listKind } = cellChildrenToDelta(tc, ctx, numbering);
       const text = textOfDelta(delta);
       const cellAttrs: CellAttrs = {};
+      if (listKind) cellAttrs.listKind = listKind;
       if (gridSpan > 1) cellAttrs.colspan = gridSpan;
       // rowspan starts at 1 — vMerge continuations bump it.
 
@@ -301,19 +305,43 @@ function gridSpanOf(tc: OoxmlNode): number {
   return Math.max(1, n);
 }
 
-function cellChildrenToDelta(tc: OoxmlNode, ctx: RunContext): DeltaOp[] {
-  // A cell can contain multiple paragraphs; we concat their deltas with a
-  // newline between adjacent ones to preserve visual separation. The cell
-  // model in @sofereditor/core is a single Y.Text, so we flatten.
+/**
+ * Delta da célula + o tipo de lista, se os parágrafos dela vierem numerados.
+ *
+ * A célula no modelo é um único `Y.Text`, então achatamos os `<w:p>` com `\n`
+ * entre eles. Quando ALGUM parágrafo traz `<w:numPr>`, a célula inteira vira
+ * lista: cada linha passa a ser um item. Célula mista (alguns com marcador,
+ * outros sem) vira lista inteira — é o menos surpreendente, e prova real não
+ * mistura.
+ *
+ * O `listLevel` do Word é descartado de propósito: `CellAttrs` não tem nível
+ * (`Y.Text` plano não guarda atributo por linha). Aninhamento dentro de célula
+ * exigiria blocos de verdade — ver o spec de 2026-08-24.
+ *
+ * `numbering.resolve()` MUTA o contador de ordinais para listas ordenadas
+ * (`numbering.ts:113-116`). Chamamos mesmo assim, e de propósito: o Word também
+ * conta os parágrafos numerados de dentro da tabela, então não chamar
+ * dessincronizaria a numeração dos itens que vêm depois dela.
+ */
+function cellChildrenToDelta(
+  tc: OoxmlNode,
+  ctx: RunContext,
+  numbering: NumberingResolver,
+): { delta: DeltaOp[]; listKind?: ListKind } {
   const out: DeltaOp[] = [];
+  let listKind: ListKind | undefined;
   let first = true;
   for (const child of childrenOf(tc)) {
     if (tagOf(child) !== "w:p") continue;
     if (!first) out.push({ insert: "\n" });
     first = false;
+    const pPr = findChild(child, "w:pPr");
+    const numPr = pPr ? findChild(pPr, "w:numPr") : undefined;
+    const resolvido = numbering.resolve(numPr);
+    if (resolvido && !listKind) listKind = resolvido.listKind;
     out.push(...paragraphChildrenToDelta(childrenOf(child), ctx));
   }
-  return out;
+  return { delta: out, listKind };
 }
 
 function textOfDelta(delta: DeltaOp[]): string {
