@@ -1,6 +1,6 @@
 {
   "name": "@sofereditor/react",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "@sofereditor/react — React renderer + useEditor hook + <Editor>/<Toolbar> components with built-in A4 pagination for the Sofer editor.",
   "license": "AGPL-3.0-or-later",
   "author": "Rafael Marreca",
