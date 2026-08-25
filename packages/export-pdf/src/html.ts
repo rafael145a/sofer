@@ -20,6 +20,7 @@ import {
   isLegacySerializedDocument,
   normalizarLarguras,
   pxToMm,
+  splitDeltaByLines,
   splitUnderscoreRuns,
   styleToCssText,
   type CellBorderPos,
@@ -271,7 +272,31 @@ function renderCell(cell: SerializedCell, border: StyleRecord): string {
   if (align) styles.push(`text-align:${align}`);
   if (cell.attrs?.bgColor) styles.push(`background-color:${cssValue(cell.attrs.bgColor)}`);
   const style = styles.length > 0 ? ` style="${styles.join(";")}"` : "";
-  return `<td class="ed-cell"${rs}${cs}${style}>${renderInline(cell.delta)}</td>`;
+  return `<td class="ed-cell"${rs}${cs}${style}>${renderCellContent(cell)}</td>`;
+}
+
+/**
+ * Conteúdo de um `<td>`. Espelha `renderCellContent` de
+ * `packages/react/src/NodeView.tsx`: sem `listKind`, delta cru (igual antes);
+ * com `listKind`, um único `<ul>`/`<ol>` com um `<li data-cell-line>` por
+ * linha de `splitDeltaByLines`. Reaproveita `renderInline` — a mesma função
+ * que serializa o resto do documento — para não abrir uma segunda rota de
+ * delta-para-HTML que diverge da primeira com o tempo.
+ */
+function renderCellContent(cell: SerializedCell): string {
+  const attrs = cell.attrs;
+  const kind = attrs?.listKind;
+  if (!kind) return renderInline(cell.delta);
+  const Tag = kind === "ordered" ? "ol" : "ul";
+  const startAttr =
+    kind === "ordered" && typeof attrs?.listStart === "number"
+      ? ` start="${attrs.listStart}"`
+      : "";
+  const styleAttr = attrs?.listStyle ? ` style="list-style-type:${cssValue(attrs.listStyle)}"` : "";
+  const items = splitDeltaByLines(cell.delta)
+    .map((linha, i) => `<li class="ed-listitem" data-cell-line="${i}">${renderInline(linha)}</li>`)
+    .join("");
+  return `<${Tag} class="ed-list ed-list-${kind}" data-list-kind="${kind}"${startAttr}${styleAttr}>${items}</${Tag}>`;
 }
 
 // ---------- inline ----------
@@ -532,6 +557,8 @@ body {
 .ed-list-ordered .ed-list-ordered { list-style-type: lower-alpha; }
 .ed-list-ordered .ed-list-ordered .ed-list-ordered { list-style-type: lower-roman; }
 .ed-listitem { margin: 0; min-height: 1.5em; }
+.ed-cell .ed-list { margin: 0; padding-inline-start: 20px; }
+.ed-cell .ed-listitem { margin: 0; }
 .ed-table-wrap { margin: 0 0 0.5em; position: relative; }
 .ed-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .ed-cell {
