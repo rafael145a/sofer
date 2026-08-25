@@ -230,3 +230,32 @@ describe("renderInline — empties & unknown embeds", () => {
     expect(out).not.toContain("<figure");
   });
 });
+
+// Conserto 1 (revisão final de feat/listas-em-tabela): renderInline numera
+// data-embed-offset a partir de 0 no delta que RECEBE. Quando quem chama já
+// fatiou o delta (uma linha de célula-lista via splitDeltaByLines), o offset
+// emitido fica LOCAL À LINHA em vez de à célula. baseOffset é o jeito de
+// corrigir isso sem mudar o caminho que já recebe o delta inteiro (baseOffset
+// default 0 == comportamento antigo).
+describe("renderInline — baseOffset (offset em coordenadas do container, não do delta recebido)", () => {
+  const htmlAt = (d: DeltaOp[], base: number): string =>
+    renderToStaticMarkup(createElement(Fragment, null, renderInline(d, "k", base)));
+
+  it("baseOffset omitido (2 args) numera a partir de 0, igual antes", () => {
+    const out = html([{ insert: "ab" }, imageOp()]);
+    expect(out).toContain('data-embed-offset="2"');
+  });
+
+  it("baseOffset desloca o offset emitido pela quantidade pedida", () => {
+    // Simula a linha 1 de "um\n[img]x": o embed é o 1º caractere DESSA linha
+    // (offset local 0), mas a linha começa em 3 dentro da célula ("um\n").
+    const out = htmlAt([imageOp(), { insert: "x" }], 3);
+    expect(out).toContain('data-embed-offset="3"');
+  });
+
+  it("baseOffset soma com o offset LOCAL do embed dentro do delta recebido (embed no meio de texto)", () => {
+    const out = htmlAt([{ insert: "ab" }, imageOp(), { insert: "cd" }], 6);
+    // local seria 2 (depois de "ab"); com base 6, emitido deve ser 8.
+    expect(out).toContain('data-embed-offset="8"');
+  });
+});

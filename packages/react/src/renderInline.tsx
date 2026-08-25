@@ -17,8 +17,19 @@ import { hasOpenModifier } from "./platform";
  *
  * Keys are stable on `${blockIndex}-${runningOffset}` so React reconciliation
  * survives split/merge of runs under collaboration.
+ *
+ * `baseOffset` shifts every emitted `data-embed-offset` (and key) by a fixed
+ * amount. Needed when `delta` is only a SLICE of a larger model range — e.g.
+ * one line of a célula-lista, where each `<li>` gets its own line-local delta
+ * but `data-embed-offset` must stay in CELL coordinates (contract with
+ * `Editor.tsx`'s embed-selection and `ImageResizeOverlay`'s DOM query).
+ * Defaults to 0, which reproduces the old line-local numbering exactly.
  */
-export function renderInline(delta: DeltaOp[], keyPrefix: number | string): ReactNode {
+export function renderInline(
+  delta: DeltaOp[],
+  keyPrefix: number | string,
+  baseOffset = 0,
+): ReactNode {
   if (
     delta.length === 0 ||
     (delta.length === 1 &&
@@ -27,7 +38,7 @@ export function renderInline(delta: DeltaOp[], keyPrefix: number | string): Reac
   ) {
     return <br data-empty="true" />;
   }
-  let offset = 0;
+  let offset = baseOffset;
   // Float-wrap images (wrap-left / wrap-right) are emitted as the FIRST DOM
   // children of the block so CSS float can flow the whole paragraph around
   // them — float only wraps siblings that come after it in DOM order. A

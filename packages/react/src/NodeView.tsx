@@ -2,6 +2,7 @@ import { useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from "r
 import {
   answerLineStyle,
   cellBorderStyle,
+  deltaLength,
   normalizarLarguras,
   splitDeltaByLines,
   tableRectSelection,
@@ -171,6 +172,14 @@ function clampListLevel(l: BlockAttrs["listLevel"]): number {
  * `data-cell-line` em TODO `<li>` é contrato com o `dom-bridge`: ele conta os
  * de índice maior que zero como um caractere do modelo (o `\n` que sumiu do
  * texto do DOM). Mexer aqui sem mexer lá desloca o cursor.
+ *
+ * Cada linha vira um delta PRÓPRIO (`splitDeltaByLines`), então `renderInline`
+ * por padrão numeraria `data-embed-offset` a partir de 0 dentro da linha. A
+ * célula inteira é um único `Y.Text`, e é nesse espaço que `Editor.tsx` e o
+ * `ImageResizeOverlay` interpretam o offset — por isso cada linha recebe um
+ * `baseOffset` igual à soma dos comprimentos (em caracteres do modelo) das
+ * linhas anteriores mais um `\n` por linha anterior (o separador comido pelo
+ * split).
  */
 function renderCellContent(
   attrs: CellAttrs | undefined,
@@ -181,6 +190,7 @@ function renderCellContent(
   if (!kind) return renderInline(delta, keyPrefix);
   const linhas = splitDeltaByLines(delta);
   const Tag = kind === "ordered" ? "ol" : "ul";
+  let baseOffset = 0;
   return (
     <Tag
       className={`ed-list ed-list-${kind}`}
@@ -188,11 +198,15 @@ function renderCellContent(
       start={kind === "ordered" && typeof attrs?.listStart === "number" ? attrs.listStart : undefined}
       style={attrs?.listStyle ? { listStyleType: attrs.listStyle } : undefined}
     >
-      {linhas.map((linha, i) => (
-        <li key={i} className="ed-listitem" data-cell-line={i}>
-          {renderInline(linha, `${keyPrefix}-l${i}`)}
-        </li>
-      ))}
+      {linhas.map((linha, i) => {
+        const li = (
+          <li key={i} className="ed-listitem" data-cell-line={i}>
+            {renderInline(linha, `${keyPrefix}-l${i}`, baseOffset)}
+          </li>
+        );
+        baseOffset += deltaLength(linha) + 1;
+        return li;
+      })}
     </Tag>
   );
 }
