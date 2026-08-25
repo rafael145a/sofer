@@ -41,6 +41,27 @@ function doc(): SerializedDocument {
   } as SerializedDocument;
 }
 
+// Célula 1 é coberta por um colspan=2 na célula 0: não guarda `listKind`
+// próprio, só `covered: true` — a leitura tem que redirecionar pro owner
+// real (índice 0), mesmo redirecionamento que `toggleList` já faz na
+// escrita/leitura (`commands.ts`).
+function docComColunaMesclada(): SerializedDocument {
+  return {
+    blocks: [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 2 },
+        cells: [
+          { text: "um", delta: [{ insert: "um" }], attrs: { colspan: 2 } },
+          { text: "", delta: [], attrs: { covered: true } },
+        ],
+      },
+    ],
+  } as SerializedDocument;
+}
+
 function Host({
   editorRef,
   editorDoc,
@@ -67,14 +88,14 @@ afterEach(() => {
   }
 });
 
-function mount(): UseEditorResult {
+function mount(build: () => SerializedDocument = doc): UseEditorResult {
   // `document` PRECISA ser a mesma referência entre renders: `useEditor`
   // faz `useMemo(() => opts.document ?? ..., [opts.document])`, então criar
   // um `EditorDocument.fromJSON(...)` novo a cada render do Host trocaria o
   // Y.Doc inteiro debaixo do editor a cada re-render (setSelection dispara
   // um). Construir UMA VEZ fora do componente, como os demais harnesses
   // deste pacote (`celulaListaRender.test.tsx`).
-  const editorDoc = EditorDocument.fromJSON(doc());
+  const editorDoc = EditorDocument.fromJSON(build());
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -135,5 +156,20 @@ describe("isListActive dentro de célula de tabela (conserto 2)", () => {
     });
     expect(api.doc.getBlockType(1)).toBe("listItem");
     expect(api.isListActive("bullet")).toBe(true);
+  });
+
+  it("foco numa célula coberta por colspan → isListActive redireciona pro owner real", () => {
+    const api = mount(docComColunaMesclada);
+    act(() => {
+      // foco na célula 1 (coberta), que é a que o cursor visualmente ocupa
+      // dentro da mesclagem — só a célula 0 (owner) guarda `listKind`.
+      api.setSelection(collapsedSelection({ blockIndex: 0, cellIndex: 1, offset: 0 }));
+      api.toggleList("ordered");
+    });
+    expect(api.doc.getCellAttrs(0, 0).listKind).toBe("ordered");
+    act(() => {
+      api.setSelection(collapsedSelection({ blockIndex: 0, cellIndex: 1, offset: 0 }));
+    });
+    expect(api.isListActive("ordered")).toBe(true);
   });
 });

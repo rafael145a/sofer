@@ -583,8 +583,13 @@ export function useEditor(opts: UseEditorOptions = {}): UseEditorResult {
       // Célula de tabela: o "bloco" ali é sempre "table" (a célula é um
       // Y.Text plano), então o estado de lista mora em CellAttrs.listKind,
       // não em BlockAttrs — mesmo padrão de leitura de getAlign/getCellBackground.
+      // Foco pode pousar numa célula coberta por span (colspan/rowspan), que
+      // não guarda `listKind` (só `covered: true`) — precisa redirecionar
+      // pro owner real, mesmo redirecionamento que `toggleList` já faz na
+      // leitura (commands.ts) pra não achar sempre "sem lista" ali.
       if (sel.focus.cellIndex != null && doc.isTable(sel.focus.blockIndex)) {
-        return doc.getCellAttrs(sel.focus.blockIndex, sel.focus.cellIndex).listKind === kind;
+        const real = doc.realCellIndex(sel.focus.blockIndex, sel.focus.cellIndex);
+        return real != null && doc.getCellAttrs(sel.focus.blockIndex, real).listKind === kind;
       }
       const { start, end } = orderedRange(sel);
       for (let i = start.blockIndex; i <= end.blockIndex; i++) {
