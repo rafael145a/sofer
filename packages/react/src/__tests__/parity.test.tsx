@@ -1,10 +1,20 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, afterEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Fragment, createElement } from "react";
+import { Fragment, createElement, act, type MutableRefObject } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { documentToHtmlFragment } from "@sofereditor/export-pdf";
-import { cellBorderStyle, styleToCssText, type DeltaOp } from "@sofereditor/core";
+import {
+  cellBorderStyle,
+  styleToCssText,
+  EditorDocument,
+  type DeltaOp,
+  type SerializedDocument,
+} from "@sofereditor/core";
 import { renderInline } from "../renderInline";
-import { commonBlockProps } from "../NodeView";
+import { commonBlockProps, NodeView } from "../NodeView";
+import { EditorProvider } from "../EditorContext";
+import { useEditor, type UseEditorResult } from "../useEditor";
 
 /**
  * A renderização inline existe DUAS vezes no monorepo: aqui
@@ -216,5 +226,149 @@ describe("fórmula inline", () => {
     // Verifica que o servidor emite float:right com as margens corretas
     expect(server).toContain("float:right");
     expect(server).toContain("margin-left:");
+  });
+});
+
+/**
+ * Task 7 (célula-lista no PDF) — este arquivo existe pra impedir
+ * `renderInline.tsx` divergir de `html.ts` em silêncio, mas as coberturas
+ * acima só chamam `renderInline(...)` isolado; nenhuma monta `TableView` de
+ * verdade (precisa de `EditorProvider`/`useEditor`, não de um delta solto).
+ * Resultado: nada aqui travava `NodeView.renderCellContent` (a moldura
+ * `<ul>`/`<ol>` de célula com `listKind`, adicionada em
+ * `packages/export-pdf/src/__tests__/celulaLista.test.ts`) ficar fora de
+ * sincronia com `renderCellContent` de `packages/export-pdf/src/html.ts` — o
+ * `celulaLista.test.ts` só compara contra strings escritas à mão, não contra
+ * o que o React realmente monta. Fecha essa lacuna montando os dois lados de
+ * verdade (DOM real via `createRoot`, e o HTML de `documentToHtmlFragment`
+ * parseado com `DOMParser`) e comparando a estrutura que importa pra
+ * fidelidade: tag da lista, classes, `data-list-kind`, `data-cell-line` de
+ * cada `<li>` e o texto de cada um.
+ */
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// jsdom não implementa `ResizeObserver` (usado por `TableResizeOverlay`, que
+// `TableView` sempre monta). Mesmo polyfill local de
+// `celulaListaRender.test.tsx` — não mexe em código de produção.
+if (typeof (globalThis as { ResizeObserver?: unknown }).ResizeObserver === "undefined") {
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
+function celulaListaDoc(texto: string, attrs: Record<string, unknown>): SerializedDocument {
+  return {
+    blocks: [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 1 },
+        cells: [{ text: texto, delta: [{ insert: texto }], attrs }],
+      },
+    ],
+  } as SerializedDocument;
+}
+
+let celulaContainer: HTMLDivElement | null = null;
+let celulaRoot: Root | null = null;
+
+afterEach(() => {
+  if (celulaRoot) {
+    act(() => celulaRoot!.unmount());
+    celulaRoot = null;
+  }
+  if (celulaContainer) {
+    celulaContainer.remove();
+    celulaContainer = null;
+  }
+});
+
+/** Monta a célula de verdade via `NodeView` (mesmo padrão de `celulaListaRender.test.tsx`). */
+function montarCelulaDom(doc: SerializedDocument): HTMLElement {
+  const editorDoc = EditorDocument.fromJSON(doc);
+  function Harness({ apiRef }: { apiRef: MutableRefObject<UseEditorResult | null> }) {
+    const editor = useEditor({ document: editorDoc });
+    apiRef.current = editor;
+    return (
+      <EditorProvider editor={editor}>
+        <NodeView block={editor.snapshot.blocks[0]!} index={0} />
+      </EditorProvider>
+    );
+  }
+  const apiRef: MutableRefObject<UseEditorResult | null> = { current: null };
+  celulaContainer = document.createElement("div");
+  document.body.appendChild(celulaContainer);
+  celulaRoot = createRoot(celulaContainer);
+  act(() => {
+    celulaRoot!.render(createElement(Harness, { apiRef }));
+  });
+  return celulaContainer;
+}
+
+interface ListaStructure {
+  tag: string | null;
+  className: string | null;
+  dataListKind: string | null;
+  start: string | null;
+  itens: Array<{ dataCellLine: string | null; texto: string | null }>;
+}
+
+/** Extrai só o que importa pra fidelidade — não o HTML inteiro (que diverge
+ * em detalhes irrelevantes pro PDF, como `data-empty` de linha vazia). */
+function extrairListaStructure(root: ParentNode): ListaStructure | null {
+  const lista = root.querySelector("ul.ed-list, ol.ed-list");
+  if (!lista) return null;
+  return {
+    tag: lista.tagName,
+    className: lista.getAttribute("class"),
+    dataListKind: lista.getAttribute("data-list-kind"),
+    start: lista.getAttribute("start"),
+    itens: [...lista.querySelectorAll("li")].map((li) => ({
+      dataCellLine: li.getAttribute("data-cell-line"),
+      texto: li.textContent,
+    })),
+  };
+}
+
+function servidorListaStructure(doc: SerializedDocument): ListaStructure | null {
+  const html = documentToHtmlFragment(doc);
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return extrairListaStructure(parsed);
+}
+
+describe("paridade real de DOM: célula-lista (tabela)", () => {
+  it("bullet de 3 linhas: mesma tag, classes, data-list-kind e um <li> por linha", () => {
+    const doc = celulaListaDoc("um\ndois\ntres", { listKind: "bullet" });
+    const editor = extrairListaStructure(montarCelulaDom(doc));
+    const servidor = servidorListaStructure(doc);
+    expect(editor).not.toBeNull();
+    expect(editor).toEqual(servidor);
+    expect(editor!.itens).toHaveLength(3);
+    expect(editor!.itens.map((i) => i.texto)).toEqual(["um", "dois", "tres"]);
+  });
+
+  it("ordered com listStart: mesmo <ol start> e mesmos data-cell-line", () => {
+    const doc = celulaListaDoc("primeiro\nsegundo", {
+      listKind: "ordered",
+      listStart: 7,
+    });
+    const editor = extrairListaStructure(montarCelulaDom(doc));
+    const servidor = servidorListaStructure(doc);
+    expect(editor).not.toBeNull();
+    expect(editor).toEqual(servidor);
+    expect(editor!.start).toBe("7");
+    expect(editor!.itens.map((i) => i.dataCellLine)).toEqual(["0", "1"]);
+  });
+
+  it("linha vazia no meio ('a\\n\\nb'): mesma contagem de <li> e mesmo texto (vazio no meio)", () => {
+    const doc = celulaListaDoc("a\n\nb", { listKind: "bullet" });
+    const editor = extrairListaStructure(montarCelulaDom(doc));
+    const servidor = servidorListaStructure(doc);
+    expect(editor).not.toBeNull();
+    expect(editor).toEqual(servidor);
+    expect(editor!.itens.map((i) => i.texto)).toEqual(["a", "", "b"]);
   });
 });
