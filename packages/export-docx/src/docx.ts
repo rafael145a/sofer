@@ -16,6 +16,7 @@ import {
   isLegacySerializedDocument,
   normalizarLarguras,
   pxToMm,
+  splitDeltaByLines,
   type PageSettings,
 } from "@sofereditor/core";
 import {
@@ -418,17 +419,26 @@ function makeCell(cell: SerializedCell, images: Map<string, ResolvedImage | null
   const span = cell.attrs?.colspan && cell.attrs.colspan > 1 ? cell.attrs.colspan : 1;
   const rowSpan = cell.attrs?.rowspan && cell.attrs.rowspan > 1 ? cell.attrs.rowspan : 1;
   const fill = cssColorToDocxHex(cell.attrs?.bgColor);
+  const kind = cell.attrs?.listKind;
+  // Uma célula é um Y.Text plano com `\n`. O Word renderiza `\n` dentro de
+  // <w:t> como espaço (ver deltaToRuns), então uma célula multilinha virava
+  // UMA linha. Um <w:p> por linha resolve — e é o que a lista precisa também.
+  const linhas = splitDeltaByLines(cell.delta);
   return new TableCell({
     columnSpan: span,
     rowSpan,
     verticalAlign: VerticalAlign.TOP,
     shading: fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined,
-    children: [
-      new Paragraph({
-        alignment: alignFor(cell.attrs?.align),
-        children: deltaToRuns(cell.delta, VERDANA, images),
-      }),
-    ],
+    children: linhas.map(
+      (linha) =>
+        new Paragraph({
+          alignment: alignFor(cell.attrs?.align),
+          numbering: kind
+            ? { reference: kind === "ordered" ? ORDERED_REF : BULLET_REF, level: 0 }
+            : undefined,
+          children: deltaToRuns(linha, VERDANA, images),
+        }),
+    ),
   });
 }
 

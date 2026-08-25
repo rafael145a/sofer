@@ -811,3 +811,62 @@ describe("fonte padrão", () => {
     expect(captionRunXml).toContain('w:ascii="Verdana"');
   });
 });
+
+describe("célula multilinha e célula-lista", () => {
+  const celula = (attrs: Record<string, unknown>): LegacySerializedDocument => [
+    {
+      type: "table",
+      text: "",
+      delta: [],
+      attrs: { rows: 1, cols: 1 },
+      cells: [{ text: "um\ndois\ntres", delta: [{ insert: "um\ndois\ntres" }], attrs }],
+    },
+  ];
+
+  it("célula multilinha SEM lista emite um <w:p> por linha (hoje vira uma linha só)", async () => {
+    const { buffer } = await documentToDocxBuffer(celula({}));
+    const xml = await documentXml(buffer);
+    const tc = /<w:tc>[\s\S]*?<\/w:tc>/.exec(xml)![0];
+    expect((tc.match(/<w:p[ >]/g) ?? []).length).toBe(3);
+    expect(tc).not.toContain("um dois tres");
+    expect(tc).toContain(">um<");
+    expect(tc).toContain(">dois<");
+    expect(tc).toContain(">tres<");
+  });
+
+  it("célula com listKind emite numeração em cada parágrafo", async () => {
+    const { buffer } = await documentToDocxBuffer(celula({ listKind: "ordered" }));
+    const xml = await documentXml(buffer);
+    const tc = /<w:tc>[\s\S]*?<\/w:tc>/.exec(xml)![0];
+    expect((tc.match(/<w:numPr>/g) ?? []).length).toBe(3);
+  });
+
+  it("célula sem lista não emite numeração", async () => {
+    const { buffer } = await documentToDocxBuffer(celula({}));
+    const xml = await documentXml(buffer);
+    const tc = /<w:tc>[\s\S]*?<\/w:tc>/.exec(xml)![0];
+    expect(tc).not.toContain("<w:numPr>");
+  });
+
+  it("linha vazia no meio vira <w:p> vazio e ainda carimba a fonte", async () => {
+    const doc: LegacySerializedDocument = [
+      {
+        type: "table",
+        text: "",
+        delta: [],
+        attrs: { rows: 1, cols: 1 },
+        cells: [{ text: "a\n\nb", delta: [{ insert: "a\n\nb" }], attrs: {} }],
+      },
+    ];
+    const { buffer } = await documentToDocxBuffer(doc);
+    const xml = await documentXml(buffer);
+    const tc = /<w:tc>[\s\S]*?<\/w:tc>/.exec(xml)![0];
+    expect((tc.match(/<w:p[ >]/g) ?? []).length).toBe(3);
+    // o <w:p> do meio tem delta vazio — se o fallback não carimbar a fonte,
+    // volta o Calibri silencioso (o mesmo bug que o teste de "fonte padrão" guarda).
+    for (const run of xml.match(/<w:r>[\s\S]*?<\/w:r>/g) ?? []) {
+      if (run.includes("<w:drawing>")) continue;
+      expect(run).toContain("<w:rFonts");
+    }
+  });
+});
